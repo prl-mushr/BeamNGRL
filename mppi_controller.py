@@ -7,7 +7,7 @@ import time
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 1):
+	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 5):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -16,12 +16,12 @@ class control_system:
 		self.costmap_resolution_inv = 1/self.costmap_resolution
 		self.track_width = track_width
 		self.create_costmap(trajectory, costmap_resolution = self.costmap_resolution, track_width = self.track_width)
-		print("got costmap")
+		# print("got costmap")
 		self.max_speed = max_speed
 		self.wheelbase = torch.tensor(2.6)
 		self.steering_max = torch.tensor(0.5)
 		self.noise_sigma = torch.zeros((2,2), device=d, dtype=dtype)
-		self.noise_sigma[0,0] = 0.05
+		self.noise_sigma[0,0] = 0.1
 		self.noise_sigma[1,1] = 0.2
 		self.dt = 0.05
 		self.now = time.time()
@@ -47,18 +47,9 @@ class control_system:
 		self.img_X = np.array(x*self.costmap_resolution_inv + self.shift_X, dtype=np.int32)
 		self.img_Y = np.array(y*self.costmap_resolution_inv + self.shift_Y, dtype=np.int32)
 		state = data
-		# if(self.train_data_iter > 0):
-		# 	# note that xyz positions don't matter for dynamics prediction.
-		# 	self.train_data.append( np.hstack( (data, self.last_U.cpu().numpy() ) ) )
-		# 	self.train_data_iter -= 1
-		# else:
-		# 	self.train_data = np.array(self.train_data)
-		# 	np.save("train_data.npy", self.train_data)
-		# 	print("done")
-		# 	exit()
-		self.noise_sigma[0,0] = 0.1/max(1,abs(data[6]/5) )
-		self.noise_sigma[1,1] = 0.4/max(1,abs(data[6]/5) )
-		self.mppi.update_noise_sigma(self.noise_sigma)
+		# self.noise_sigma[0,0] = 0.1/max(1,abs(data[6]/5) )
+		# self.noise_sigma[1,1] = 0.4/max(1,abs(data[6]/5) )
+		# self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
 		self.show_location_on_map(state)
 		action = self.mppi.command(state)
@@ -67,13 +58,13 @@ class control_system:
 		# print("dt: ", dt*1000)
 		action = torch.clamp(action, -1, 1)
 
-		action[0] = action[0]*0.5 + self.last_U[0]*0.5
-		action[1] = action[1]*0.1 + self.last_U[1]*0.9
-		phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
-		phi_real = data[14]
-		feedback = (phi_ref - phi_real)
-		action[0] += 0.1*feedback		
-		self.last_U = action
+		# action[0] = action[0]*0.5 + self.last_U[0]*0.5
+		# action[1] = action[1]*0.1 + self.last_U[1]*0.9
+		# phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
+		# phi_real = data[14]
+		# feedback = (phi_ref - phi_real)
+		# action[0] += 0.1*feedback		
+		# self.last_U = action
 		return action
 
 	def show_location_on_map(self, state):
@@ -109,7 +100,7 @@ class control_system:
 
 		width = int(3*(max_x - min_x))
 		height = int(3*(max_y - min_y))
-		print(width, height)
+		# print(width, height)
 		# conversion = x,y -> x * self.costmap_resolution_inv + (width*0.5 - min_x), y * self.costmap_resolution_inv + (height*0.5 - min_y)
 		costmap = np.ones((height,width), np.float32)
 		self.shift_X = (width*0.33 - min_x)
@@ -120,7 +111,7 @@ class control_system:
 			cv2.circle(costmap, (X,Y), int(track_width * self.costmap_resolution_inv), 0, -1)
 		k = int(2*track_width * self.costmap_resolution_inv)
 		costmap = cv2.blur(costmap, (k, k))
-
+		costmap = self.add_obstacles(costmap)
 		self.costmap_full = torch.from_numpy(costmap) 
 
 	def dynamics(self, state, perturbed_action):
@@ -158,6 +149,43 @@ class control_system:
 		state = torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz), dim=1)
 		return state
 
+	def dynamics_single(self, state, perturbed_action):
+		x = state[ 0]
+		y = state[ 1]
+		z = state[ 2]
+		roll = state[ 3]
+		pitch = state[ 4]
+		yaw = state[ 5]
+		vx = state[6]
+		vy = state[7]
+		vz = state[8]
+		ax = state[9]
+		ay = state[10]
+		az = state[11]
+		gx = state[12]
+		gy = state[13]
+		gz = state[14]
+
+		u = perturbed_action
+		u = torch.clamp(u, -1, 1)
+		v = torch.sqrt(vx**2 + vy**2)
+		accel = u[1]
+		if(accel > 0):
+			accel = torch.clamp(accel*25/v,0,5)
+		else:
+			accel *= 5
+		ax = accel
+		v = v + 5*accel*self.dt  # acceleration
+		omega = v * torch.tan(u[0]*self.steering_max) / self.wheelbase
+		ay = v*omega
+
+		x += self.dt*(vx*torch.cos(yaw))# - vy*torch.sin(yaw))
+		y += self.dt*(vx*torch.sin(yaw))# + vy*torch.cos(yaw))
+		yaw += self.dt*omega
+		vx = v
+		state = torch.hstack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz))
+		return state.numpy()
+
 	def running_cost(self, state, action):
 		x = state[:, 0]
 		y = state[:, 1]
@@ -189,3 +217,46 @@ class control_system:
 		accel_cost[np.where(accel < 0.9)] = 0
 
 		return 2*vel_cost + state_cost + 0.2*accel_cost
+
+	def running_cost_single(self, state, action):
+		x = state[ 0]
+		y = state[ 1]
+		z = state[ 2]
+		roll = state[ 3]
+		pitch = state[ 4]
+		yaw = state[ 5]
+		vx = state[6]
+		vy = state[7]
+		vz = state[8]
+		ax = state[9]
+		ay = state[10]
+		az = state[11]
+		gx = state[12]
+		gy = state[13]
+		gz = state[14]
+
+		K = torch.tan(action[0]*self.steering_max) / self.wheelbase
+		## get the location within the truncated costmap
+		img_X = torch.tensor((x - self.x + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
+		img_Y = torch.tensor((y - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
+		state_cost = self.costmap[img_Y, img_X]
+		state_cost *= state_cost
+		if(state_cost > 0.9):
+			state_cost = 1000
+		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
+		vel_cost = torch.sqrt(vel_cost)
+		accel = (ax**2 + ay**2)*0.01
+		accel_cost = accel
+		if(accel < 0.9):
+			accel_cost = 0
+
+		return (2*vel_cost + state_cost + 0.2*accel_cost).numpy()
+
+	def add_obstacles(self, costmap):
+		max_shape = np.max(costmap.shape)
+		points = np.random.randint(0,max_shape, size=(2500,2))
+		for i in range(len(points)):
+			X = points[i,0]
+			Y = points[i,1]
+			cv2.circle(costmap, (X,Y), int(0.5 * self.costmap_resolution_inv), 1, -1)
+		return costmap

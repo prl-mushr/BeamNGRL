@@ -9,6 +9,7 @@ import numpy as np
 from Bezier import *
 import traceback
 from mppi_controller import *
+from tqdm import tqdm
 
 def convert_beamng_to_REP103(rot):
     rot = Quaternion(rot[2], -rot[0], -rot[1], -rot[3])
@@ -90,7 +91,7 @@ def get_WP(filename):
         V_prev = target_WP[i] - target_WP[i-1]
         V_next = target_WP[i+1] - target_WP[i]
         target_Vhat[i] = (V_next + V_prev)/np.linalg.norm(V_next + V_prev)
-    N = 200
+    N = 100
     wp_list = np.zeros((N*len(target_WP),6)) # x,y,z, x^, y^, z^
     for i in range(len(target_WP)-1):
         P0 = target_WP[i]
@@ -201,7 +202,49 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
             print(traceback.format_exc())
     # bng.close()
 
+def main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=4):
+    start = time.time()
+    attempt = 0
+    last_A = 0
+    episode = []
 
+    WP_file = "WP_file.npy"
+    wp_list = get_WP(WP_file)
+
+    # hypothesis 1: CEM over time and CEM in single optimization have the same overall cost in optimization.
+    # hypothesis 2: CEM+MPPI outperforms standard MPPI.
+    avg_cost = []
+    for j in range(num_episodes):
+        print("episode:", j)
+        controller = control_system(trajectory = wp_list)
+        st = 0
+        th = 1
+
+        pos = start_point
+        rpy = np.array([0,0,np.pi/2])
+        vel = np.zeros(3)
+        A = np.zeros(3)
+        G = np.zeros(3)
+        
+        data = np.hstack((pos, rpy, vel, A, G)) #, t, dt, raw_A, start_turning, wheeldownforce, wheelhorizontalforce, wheelslip, wheelsideslip, wheelspeed, steering))
+        now = time.time()
+        bench_cost = 0
+        timesteps = 1000
+        for i in tqdm(range(timesteps)):
+            try:
+                dt = time.time() - now 
+                now = time.time()
+                # print("dt: ",dt*1000)
+                action = controller.update(data)
+                data = controller.dynamics_single(torch.from_numpy(data), action)
+                cost = controller.running_cost_single(torch.from_numpy(data), action)
+                bench_cost += cost
+            except Exception:
+                print(traceback.format_exc())
+        avg_cost.append(bench_cost/timesteps)
+    avg_cost = np.array(avg_cost)
+    print(np.mean(avg_cost), np.var(avg_cost))
+        
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
@@ -217,22 +260,22 @@ if __name__ == '__main__':
     # # position of the vehicle for untripped_flat on smallgrid:
 
     # start_point = np.array([-86.52589376, 321.26751955, 0.0])
-    # start_point = np.array([0,0, 0.0])
-    # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
-    # # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    # turn_point = np.array([0, 50.0 ,0])
-    # folder_name = "controller_test"
-    # map_name = "smallgrid"
-    # speed_target = 18.0
-    # episode_time = 10.0
-    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+    start_point = np.array([0,0, 0.0])
+    start_quat = np.array([0.0, 0.0, 0.0, 1.0])
+    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
+    turn_point = np.array([0, 50.0 ,0])
+    folder_name = "controller_test"
+    map_name = "smallgrid"
+    speed_target = 18.0
+    episode_time = 10.0
+    main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
     # time.sleep(2)
     # position of the vehicle for mixed_offroad on small_island:
-    start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
-    start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    turn_point = np.array([-101.02775679,  291.77741613,   37.28218909])
-    folder_name = "mixed_offroad_with_correction"
-    map_name = "small_island"
-    speed_target = 12.0
-    episode_time = 15.0
-    main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+    # start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
+    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
+    # turn_point = np.array([-101.02775679,  291.77741613,   37.28218909])
+    # folder_name = "mixed_offroad_with_correction"
+    # map_name = "small_island"
+    # speed_target = 12.0
+    # episode_time = 15.0
+    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
