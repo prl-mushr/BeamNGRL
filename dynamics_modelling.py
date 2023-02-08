@@ -4,12 +4,10 @@ from pytorch_mppi import mppi
 import torch
 import cv2
 import time
-import pandas as pd
-import os
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 1):
+	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=50, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 2):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -28,7 +26,7 @@ class control_system:
 		self.dt = 0.05
 		self.now = time.time()
 		self.map_size = 40  # half map size
-		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = 1)
+		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = 2)
 		self.train_data = []
 		self.train_data_iter = int(60/self.dt)
 		self.last_U = torch.zeros(2, device=d, dtype=dtype)
@@ -39,13 +37,6 @@ class control_system:
 		for param in self.network.parameters():
 			param.requires_grad = False
 		self.error = None
-		self.dyn_csts = pd.read_json(os.path.join('ilqc/envs/bicycle_model.json'), typ='series')
-		self.Br, self.Cr, self.Dr, self.Bf, self.Cf, self.Df,\
-		self.m, self.Iz, self.lf, self.lr = [self.dyn_csts[key] for key in ['Br', 'Cr', 'Dr', 'Bf', 'Cf', 'Df',
-														'm', 'Iz', 'lf', 'lr']]
-		self.Iz /= self.m
-		self.Df *= 9.8
-		self.Dr *= 9.8
 
 	def update(self, data):
 		x = data[0]
@@ -64,23 +55,19 @@ class control_system:
 		# 	np.save("train_data.npy", self.train_data)
 		# 	print("done")
 		# 	exit()
-		self.noise_sigma[0,0] = 0.1/max(1,abs(data[6]/5) )
-		self.noise_sigma[1,1] = 1.0/max(1,abs(data[6]/5) )
-		self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
 		self.show_location_on_map(state)
-		action = self.mppi.command(state)
-		# self.dt = time.time() - self.now
+		self.costmap = self.costmap.to(device=self.device)
+		self.dt = torch.tensor( (time.time() - self.now), device=self.device, dtype=torch.float)
 		self.now = time.time()
+		action = self.mppi.command(state)
+
+		print(self.error.mean())
 		# print("dt: ", dt*1000)
 		action = torch.clamp(action, -1, 1)
-
-		# action[0] = action[0]*0.5 + self.last_U[0]*0.5
-		action[1] = action[1]*0.5 + self.last_U[1]*0.5
-		# phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
-		# phi_real = data[14]
-		# feedback = (phi_ref - phi_real)
-		# action[0] += 0.1*feedback		
+		action[0] = action[0]*0.9 + self.last_U[0]*0.1
+		action[1] = action[1]*0.1 + self.last_U[1]*0.9
+		
 		self.last_U = action
 		return action
 
@@ -131,52 +118,55 @@ class control_system:
 
 		self.costmap_full = torch.from_numpy(costmap) 
 
+	# @torch.jit.export
 	def dynamics(self, state, perturbed_action):
-		x = state[:, 0].view(-1, 1)
-		y = state[:, 1].view(-1, 1)
-		z = state[:, 2].view(-1, 1)
-		roll = state[:, 3].view(-1, 1)
-		pitch = state[:, 4].view(-1, 1)
-		yaw = state[:, 5].view(-1, 1)
-		vx = state[:,6].view(-1, 1)
-		vy = state[:,7].view(-1, 1)
-		vz = state[:,8].view(-1, 1)
-		ax = state[:,9].view(-1, 1)
-		ay = state[:,10].view(-1, 1)
-		az = state[:,11].view(-1, 1)
-		gx = state[:,12].view(-1, 1)
-		gy = state[:,13].view(-1, 1)
-		gz = state[:,14].view(-1, 1)
+		x = state[:, 0].view(-1, 1).to(device=self.device)
+		y = state[:, 1].view(-1, 1).to(device=self.device)
+		z = state[:, 2].view(-1, 1).to(device=self.device)
+		roll = state[:, 3].view(-1, 1).to(device=self.device)
+		pitch = state[:, 4].view(-1, 1).to(device=self.device)
+		yaw = state[:, 5].view(-1, 1).to(device=self.device)
+		vx = state[:,6].view(-1, 1).to(device=self.device)
+		vy = state[:,7].view(-1, 1).to(device=self.device)
+		vz = state[:,8].view(-1, 1).to(device=self.device)
+		ax = state[:,9].view(-1, 1).to(device=self.device)
+		ay = state[:,10].view(-1, 1).to(device=self.device)
+		az = state[:,11].view(-1, 1).to(device=self.device)
+		gx = state[:,12].view(-1, 1).to(device=self.device)
+		gy = state[:,13].view(-1, 1).to(device=self.device)
+		gz = state[:,14].view(-1, 1).to(device=self.device)
 
 		u = perturbed_action
-		u = torch.clamp(u, -1, 1)
-		v = torch.sqrt(vx**2 + vy**2)
-		accel = u[:,1].view(-1, 1)
-		pos_index = torch.where(accel>0)
-		accel[pos_index] = torch.clamp(accel[pos_index]*25/v[pos_index],0,5)
-		# ax = accel
-		# v = v + 5*accel*self.dt  # acceleration
-		# omega = v * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
-		# ay = v*omega
-		delta = u[:,0].view(-1, 1)*self.steering_max
-		alphaf = delta - torch.atan2(gz*self.lf + vy, vx) 
-		alphar = torch.atan2(gz*self.lr - vy, vx)
-		Fry = self.Dr*torch.sin(self.Cr*torch.atan(self.Br*alphar))
-		Ffy = self.Df*torch.sin(self.Cf*torch.atan(self.Bf*alphaf))
-		Frx = accel
-		ax = (Frx - Ffy*torch.sin(delta) + vy*gz)
-		ay = (Fry + Ffy*torch.cos(delta) - vx*gz)
-		vx += ax*self.dt
-		vy += ay*self.dt
-		gz += self.dt*(Ffy*self.lf*torch.cos(delta) - Fry*self.lr)/self.Iz
-		x += (torch.cos(yaw)*vx - torch.sin(yaw)*vy)*self.dt
-		y += (torch.sin(yaw)*vx + torch.cos(yaw)*vy)*self.dt
+		u = torch.clamp(u, -1, 1).to(device=self.device)
+		state = state.to(device=self.device)
+		XU = torch.hstack( (state[:,3:], u) ).to(device = self.device)
+		XU[:,5] = 0
+		
+		# if(self.use_model):
+		delta = self.network(XU)  #  vel, A, G,
+		ax = delta[:,3].view(-1, 1)
+		ay = delta[:,4].view(-1, 1)
+		az = delta[:,5].view(-1, 1)
+		gx = delta[:,6].view(-1, 1)
+		gy = delta[:,7].view(-1, 1)
+		gz = delta[:,8].view(-1, 1)
+		vx += self.dt*ax
+		vy += self.dt*ay
+		# vz += self.dt*az
 		yaw += self.dt*gz
+		roll += self.dt*gx
+		pitch += self.dt*gy
+		# v = vx + 5*u[:,1].view(-1, 1)*self.dt  # acceleration
+		# omega = vx * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
 
-
+		x += self.dt*(vx*torch.cos(yaw) - vy*torch.sin(yaw))
+		y += self.dt*(vx*torch.sin(yaw) + vy*torch.cos(yaw))
+		# yaw += self.dt*omega
+		# vx = v
 		state = torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz), dim=1)
 		return state
 
+	# @torch.jit.export
 	def running_cost(self, state, action):
 		x = state[:, 0]
 		y = state[:, 1]
@@ -200,11 +190,64 @@ class control_system:
 		img_Y = torch.tensor((y - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
 		state_cost = self.costmap[img_Y, img_X]
 		state_cost *= state_cost
-		state_cost[np.where(state_cost>=0.9)] = 1000
+		state_cost[torch.where(state_cost>=0.9)] = 1000
 		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
 		vel_cost = torch.sqrt(vel_cost)
+		
+		# lateral_accel = vx * vx * K
 		accel = (ax**2 + ay**2)*0.01
-		accel_cost = accel
-		accel_cost[np.where(accel < 0.9)] = 0
+		accel_cost = (accel - 1)**2
+		# turn_cost = (torch.abs(speed * speed * K)/7)
+		# turn_cost[np.where(turn_cost < 1)] = 0
 
-		return 1.5*vel_cost + state_cost + 0.5*accel_cost
+		return (2*vel_cost + state_cost + 0.03*accel_cost).cpu()
+
+    # def train(self, new_data):
+  
+    #     # not normalized inside the simulator
+    #     new_data[:, 0] = angle_normalize(new_data[:, 0])
+    #     if not torch.is_tensor(new_data):
+    #         new_data = torch.from_numpy(new_data)
+    #     # clamp actions
+    #     new_data[:, -1] = torch.clamp(new_data[:, -1], ACTION_LOW, ACTION_HIGH)
+    #     new_data = new_data.to(device=d)
+    #     # append data to whole dataset
+    #     if dataset is None:
+    #         dataset = new_data
+    #     else:
+    #         dataset = torch.cat((dataset, new_data), dim=0)
+
+    #     # train on the whole dataset (assume small enough we can train on all together)
+    #     XU = dataset
+    #     dtheta = angular_diff_batch(XU[1:, 0], XU[:-1, 0])
+    #     dtheta_dt = XU[1:, 1] - XU[:-1, 1]
+    #     Y = torch.cat((dtheta.view(-1, 1), dtheta_dt.view(-1, 1)), dim=1)  # x' - x residual
+    #     XU = XU[:-1]  # make same size as Y
+
+    #     # thaw network
+    #     for param in network.parameters():
+    #         param.requires_grad = True
+
+    #     optimizer = torch.optim.Adam(network.parameters())
+    #     for epoch in range(TRAIN_EPOCH):
+    #         optimizer.zero_grad()
+    #         # MSE loss
+    #         Yhat = network(XU)
+    #         loss = (Y - Yhat).norm(2, dim=1) ** 2
+    #         loss.mean().backward()
+    #         optimizer.step()
+    #         logger.debug("ds %d epoch %d loss %f", dataset.shape[0], epoch, loss.mean().item())
+
+    #     # freeze network
+    #     for param in network.parameters():
+    #         param.requires_grad = False
+
+    #     # evaluate network against true dynamics
+    #     yt = true_dynamics(statev, actionv)
+    #     yp = dynamics(statev, actionv)
+    #     dtheta = angular_diff_batch(yp[:, 0], yt[:, 0])
+    #     dtheta_dt = yp[:, 1] - yt[:, 1]
+    #     E = torch.cat((dtheta.view(-1, 1), dtheta_dt.view(-1, 1)), dim=1).norm(dim=1)
+    #     logger.info("Error with true dynamics theta %f theta_dt %f norm %f", dtheta.abs().mean(),
+    #                 dtheta_dt.abs().mean(), E.mean())
+    #     logger.debug("Start next collection sequence")

@@ -217,9 +217,9 @@ if __name__ == '__main__':
     # # position of the vehicle for untripped_flat on smallgrid:
 
     # start_point = np.array([-86.52589376, 321.26751955, 0.0])
-    # start_point = np.array([0,0, 0.0])
-    # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
-    # # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
+    # # start_point = np.array([0,0, 0.0])
+    # # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
+    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
     # turn_point = np.array([0, 50.0 ,0])
     # folder_name = "controller_test"
     # map_name = "smallgrid"
