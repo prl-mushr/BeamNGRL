@@ -9,7 +9,7 @@ import os
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 1):
+	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=25, track_width = 1):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -64,19 +64,19 @@ class control_system:
 		# 	np.save("train_data.npy", self.train_data)
 		# 	print("done")
 		# 	exit()
-		self.noise_sigma[0,0] = 0.1/max(1,abs(data[6]/5) )
-		self.noise_sigma[1,1] = 1.0/max(1,abs(data[6]/5) )
+		self.noise_sigma[0,0] = 0.2/max(1,abs(data[6]/5) )
+		self.noise_sigma[1,1] = 0.4/max(1,max(abs(data[6]/5), 2) )
 		self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
-		self.show_location_on_map(state)
+		# self.show_location_on_map(state)
 		action = self.mppi.command(state)
 		# self.dt = time.time() - self.now
 		self.now = time.time()
 		# print("dt: ", dt*1000)
+		action[0] = action[0]*0.5 + self.last_U[0]*0.5
+		action[1] = action[1]*0.2 + self.last_U[1]*0.8 - np.sin(data[4])/(10*np.pi)
 		action = torch.clamp(action, -1, 1)
 
-		# action[0] = action[0]*0.5 + self.last_U[0]*0.5
-		action[1] = action[1]*0.5 + self.last_U[1]*0.5
 		# phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
 		# phi_real = data[14]
 		# feedback = (phi_ref - phi_real)
@@ -151,9 +151,9 @@ class control_system:
 		u = perturbed_action
 		u = torch.clamp(u, -1, 1)
 		v = torch.sqrt(vx**2 + vy**2)
-		accel = u[:,1].view(-1, 1)
+		accel = 5*u[:,1].view(-1, 1)
 		pos_index = torch.where(accel>0)
-		accel[pos_index] = torch.clamp(accel[pos_index]*25/v[pos_index],0,5)
+		accel[pos_index] = torch.clamp(accel[pos_index]*25/torch.clamp(v[pos_index],5,30),0,5)
 		# ax = accel
 		# v = v + 5*accel*self.dt  # acceleration
 		# omega = v * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
@@ -164,8 +164,8 @@ class control_system:
 		Fry = self.Dr*torch.sin(self.Cr*torch.atan(self.Br*alphar))
 		Ffy = self.Df*torch.sin(self.Cf*torch.atan(self.Bf*alphaf))
 		Frx = accel
-		ax = (Frx - Ffy*torch.sin(delta) + vy*gz)
-		ay = (Fry + Ffy*torch.cos(delta) - vx*gz)
+		ax = (Frx - Ffy*torch.sin(delta) + vy*gz)# + 9.8*torch.sin(pitch)
+		ay = (Fry + Ffy*torch.cos(delta) - vx*gz)# - 9.8*torch.sin(pitch)
 		vx += ax*self.dt
 		vy += ay*self.dt
 		gz += self.dt*(Ffy*self.lf*torch.cos(delta) - Fry*self.lr)/self.Iz
@@ -200,11 +200,11 @@ class control_system:
 		img_Y = torch.tensor((y - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
 		state_cost = self.costmap[img_Y, img_X]
 		state_cost *= state_cost
-		state_cost[np.where(state_cost>=0.9)] = 1000
+		state_cost[np.where(state_cost>=0.9)] = 100
 		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
-		vel_cost = torch.sqrt(vel_cost)
-		accel = (ax**2 + ay**2)*0.01
-		accel_cost = accel
-		accel_cost[np.where(accel < 0.9)] = 0
+		vel_cost *= vel_cost
+		accel = ay*0.1
+		accel_cost = accel**2
+		accel_cost[np.where(accel < 0.7)] *= 0.1
 
-		return 1.5*vel_cost + state_cost + 0.5*accel_cost
+		return 3*vel_cost + state_cost + 0.05*accel_cost
