@@ -7,7 +7,7 @@ import time
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=20, track_width = 5):
+	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=30, lambda_= 0.0, costmap_resolution = 0.1, max_speed=20, track_width = 5, num_optimizations=1, noise_scale=1):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -21,12 +21,12 @@ class control_system:
 		self.wheelbase = torch.tensor(2.6)
 		self.steering_max = torch.tensor(0.5)
 		self.noise_sigma = torch.zeros((2,2), device=d, dtype=dtype)
-		self.noise_sigma[0,0] = 0.1
-		self.noise_sigma[1,1] = 0.2
+		self.noise_sigma[0,0] = 0.1*noise_scale
+		self.noise_sigma[1,1] = 0.2*noise_scale
 		self.dt = 0.05
 		self.now = time.time()
 		self.map_size = 40  # half map size
-		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = 1)
+		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = num_optimizations, percent_elites=0.2)
 		self.train_data = []
 		self.train_data_iter = int(60/self.dt)
 		self.last_U = torch.zeros(2, device=d, dtype=dtype)
@@ -51,9 +51,9 @@ class control_system:
 		# self.noise_sigma[1,1] = 0.4/max(1,abs(data[6]/5) )
 		# self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
-		self.show_location_on_map(state)
+		# self.show_location_on_map(state)
 		action = self.mppi.command(state)
-		# self.dt = time.time() - self.now
+		# self.dt = time.time() - self.now  # for comparing output quality, we assume dt is "constant" regardless of actual dt. Will change to different dt when we want to show perf advantage.
 		self.now = time.time()
 		# print("dt: ", dt*1000)
 		action = torch.clamp(action, -1, 1)
@@ -78,7 +78,7 @@ class control_system:
 			y = print_states[:,:,:,1].flatten().numpy()
 			X = np.array((x - self.x + self.map_size)*self.costmap_resolution_inv, dtype=np.int32)
 			Y = np.array((y - self.y + self.map_size)*self.costmap_resolution_inv, dtype=np.int32)
-			costmap[Y,X] = 0
+			costmap[Y,X] = 1
 
 		costmap = cv2.flip(costmap, 0)
 		cv2.imshow("map", costmap)
@@ -216,7 +216,7 @@ class control_system:
 		accel_cost = accel
 		accel_cost[np.where(accel < 0.9)] = 0
 
-		return 2*vel_cost + state_cost + 0.2*accel_cost
+		return 2*vel_cost + state_cost + 0.1*accel_cost
 
 	def running_cost_single(self, state, action):
 		x = state[ 0]
@@ -250,13 +250,13 @@ class control_system:
 		if(accel < 0.9):
 			accel_cost = 0
 
-		return (2*vel_cost + state_cost + 0.2*accel_cost).numpy()
+		return (2*vel_cost + state_cost + 0.1*accel_cost).numpy()
 
 	def add_obstacles(self, costmap):
 		max_shape = np.max(costmap.shape)
-		points = np.random.randint(0,max_shape, size=(2500,2))
+		points = np.random.randint(0,max_shape, size=(1600,2))
 		for i in range(len(points)):
 			X = points[i,0]
 			Y = points[i,1]
-			cv2.circle(costmap, (X,Y), int(0.5 * self.costmap_resolution_inv), 1, -1)
+			cv2.circle(costmap, (X,Y), int(2 * self.costmap_resolution_inv), 1, -1)
 		return costmap

@@ -202,7 +202,7 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
             print(traceback.format_exc())
     # bng.close()
 
-def main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=4):
+def main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=4, num_opts=1, num_samples=512, noise_scale=1,temperature=0.1):
     start = time.time()
     attempt = 0
     last_A = 0
@@ -214,9 +214,10 @@ def main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, sp
     # hypothesis 1: CEM over time and CEM in single optimization have the same overall cost in optimization.
     # hypothesis 2: CEM+MPPI outperforms standard MPPI.
     avg_cost = []
+    avg_dt = []
     for j in range(num_episodes):
         print("episode:", j)
-        controller = control_system(trajectory = wp_list)
+        controller = control_system(trajectory = wp_list, N_SAMPLES=num_samples, num_optimizations=num_opts, noise_scale=noise_scale, lambda_=temperature)
         st = 0
         th = 1
 
@@ -229,22 +230,24 @@ def main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, sp
         data = np.hstack((pos, rpy, vel, A, G)) #, t, dt, raw_A, start_turning, wheeldownforce, wheelhorizontalforce, wheelslip, wheelsideslip, wheelspeed, steering))
         now = time.time()
         bench_cost = 0
+        bench_dt = 0
         timesteps = 1000
         for i in tqdm(range(timesteps)):
-            try:
-                dt = time.time() - now 
+            try: 
                 now = time.time()
-                # print("dt: ",dt*1000)
                 action = controller.update(data)
+                dt = time.time() - now
                 data = controller.dynamics_single(torch.from_numpy(data), action)
                 cost = controller.running_cost_single(torch.from_numpy(data), action)
                 bench_cost += cost
+                bench_dt += dt
             except Exception:
                 print(traceback.format_exc())
         avg_cost.append(bench_cost/timesteps)
+        avg_dt.append(bench_dt/timesteps)
     avg_cost = np.array(avg_cost)
-    print(np.mean(avg_cost), np.var(avg_cost))
-        
+    avg_dt = np.array(avg_dt)
+    return avg_cost, avg_dt        
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
@@ -268,7 +271,33 @@ if __name__ == '__main__':
     map_name = "smallgrid"
     speed_target = 18.0
     episode_time = 10.0
-    main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+
+    '''
+    what can we vary?
+    noise scaling. 
+    num_samples -- effective samples!
+    num_optimizations
+    temperature
+    '''
+    num_samples = np.array([64,128,256,512,1024])
+    num_optimizations = np.array([1,2,4,8])  # num optimizations. We divide effective samples by this to get per opt samples
+    noise_scale = np.array([1.0,2.0,3.0,4.0,5.0])  # noise scale factor. scale factor of 5 results in throttle variance = 1
+    temperatures = np.arange(0.0, 2.0, 0.1)
+    test_results = []
+    for temp in temperatures:
+        for noise_ in noise_scale:
+            for samples in num_samples:
+                for NO in num_optimizations:
+                    NS = int(samples/NO)
+                    if(temp == 0.0):
+                        temp = 0.01
+                    # avg_cost is the avg cost per timestep. we run each test for 1000 timesteps (should be enough right?)
+                    avg_cost, avg_dt = main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=100, num_opts=NO, num_samples=NS, noise_scale=noise_, temperature=temp)
+                    results = np.hstack((temp, noise_, NS, NO, avg_cost, avg_dt))
+                    test_results.append(results)
+    test_results = np.array(test_results)
+    np.save("compare_CE_MPPI.npy", test_results)
+
     # time.sleep(2)
     # position of the vehicle for mixed_offroad on small_island:
     # start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
