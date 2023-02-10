@@ -9,7 +9,7 @@ import os
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=25, track_width = 1):
+	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=25, track_width = 1):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -74,7 +74,7 @@ class control_system:
 		self.now = time.time()
 		# print("dt: ", dt*1000)
 		action[0] = action[0]*0.5 + self.last_U[0]*0.5
-		action[1] = action[1]*0.2 + self.last_U[1]*0.8 - np.sin(data[4])/(4*np.pi)
+		action[1] = action[1]*0.2 + self.last_U[1]*0.8 - np.sin(data[4])/(np.pi)
 		action = torch.clamp(action, -1, 1)
 
 		# phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
@@ -205,6 +205,6 @@ class control_system:
 		vel_cost = torch.sqrt(vel_cost)
 		accel = ay*0.1
 		accel_cost = accel**2
-		accel_cost[np.where(vx < 15)] *= 0.01
+		# accel_cost[np.where(vx < 15)] *= 0.01
 
-		return 1.5*vel_cost + state_cost + accel_cost
+		return 1.5*vel_cost + state_cost + 0.04*vx[0]*accel_cost
