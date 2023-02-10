@@ -10,7 +10,7 @@ class control_system:
 	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=30, lambda_= 0.0, costmap_resolution = 0.1, max_speed=20, track_width = 5, num_optimizations=1, noise_scale=1):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-		self.device = torch.device("cuda")
+		self.device = torch.device("cuda:0")
 		dtype = torch.float
 		self.costmap_resolution = costmap_resolution
 		self.costmap_resolution_inv = 1/self.costmap_resolution
