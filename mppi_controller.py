@@ -22,7 +22,7 @@ class control_system:
 		self.steering_max = torch.tensor(0.5)
 		self.noise_sigma = torch.zeros((2,2), device=d, dtype=dtype)
 		self.noise_sigma[0,0] = 0.1*noise_scale
-		self.noise_sigma[1,1] = 0.2*noise_scale
+		self.noise_sigma[1,1] = 0.1*noise_scale
 		self.dt = 0.05
 		self.now = time.time()
 		self.map_size = 40  # half map size
@@ -51,7 +51,7 @@ class control_system:
 		# self.noise_sigma[1,1] = 0.4/max(1,abs(data[6]/5) )
 		# self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
-		# self.show_location_on_map(state)
+		self.show_location_on_map(state)
 		action = self.mppi.command(state)
 		# self.dt = time.time() - self.now  # for comparing output quality, we assume dt is "constant" regardless of actual dt. Will change to different dt when we want to show perf advantage.
 		self.now = time.time()
@@ -209,14 +209,14 @@ class control_system:
 		img_Y = torch.tensor((y - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
 		state_cost = self.costmap[img_Y, img_X]
 		state_cost *= state_cost
-		state_cost[np.where(state_cost>=0.9)] = 1000
+		state_cost[np.where(state_cost>=0.9)] = 100
 		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
 		vel_cost = torch.sqrt(vel_cost)
 		accel = (ax**2 + ay**2)*0.01
 		accel_cost = accel
 		accel_cost[np.where(accel < 0.9)] = 0
 
-		return 2*vel_cost + state_cost + 0.1*accel_cost
+		return 2*vel_cost + state_cost# + 0.1*accel_cost
 
 	def running_cost_single(self, state, action):
 		x = state[ 0]
@@ -242,7 +242,7 @@ class control_system:
 		state_cost = self.costmap[img_Y, img_X]
 		state_cost *= state_cost
 		if(state_cost > 0.9):
-			state_cost = 1000
+			state_cost = 100
 		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
 		vel_cost = torch.sqrt(vel_cost)
 		accel = (ax**2 + ay**2)*0.01
@@ -250,13 +250,15 @@ class control_system:
 		if(accel < 0.9):
 			accel_cost = 0
 
-		return (2*vel_cost + state_cost + 0.1*accel_cost).numpy()
+		return (2*vel_cost + state_cost).numpy() # + 0.1*accel_cost).numpy()
 
 	def add_obstacles(self, costmap):
 		max_shape = np.max(costmap.shape)
 		points = np.random.randint(0,max_shape, size=(1600,2))
 		for i in range(len(points)):
-			X = points[i,0]
-			Y = points[i,1]
-			cv2.circle(costmap, (X,Y), int(2 * self.costmap_resolution_inv), 1, -1)
+			center = np.array([ costmap.shape[1]/2, costmap.shape[0]/2 ])
+			if(np.linalg.norm(points[i,:2] - center) > 5*self.costmap_resolution_inv):
+				X = points[i,0]
+				Y = points[i,1]
+				cv2.circle(costmap, (X,Y), int(2*self.costmap_resolution_inv), 1, -1)
 		return costmap

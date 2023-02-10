@@ -4,6 +4,8 @@ import numpy as np
 from scipy.stats import mannwhitneyu as utest
 import traceback
 import matplotlib.pyplot as plt
+# import for ttest that takes mean and std:
+from scipy.stats import ttest_ind_from_stats as ttest
 
 data = np.load('compare_CE_MPPI.npy')
 
@@ -16,18 +18,26 @@ NO = data[:,3]
 avg_cost = data[:,4:54]
 avg_dt = data[:,54:104]
 
-plt.figure()
-for t in temp:
-    for n in noise_:
-        for ns in NS:
-            for no in NO:
-                # get the index of the data
-                idx = np.where((temp==t) & (noise_==n) & (NS==ns) & (NO==no))
-                # get the data
-                avg_cost_ = avg_cost[idx]
-                avg_dt_ = avg_dt[idx]
-                # plot
-                plt.plot(avg_dt_, avg_cost_, label='temp = {}, noise = {}, NS = {}, NO = {}'.format(t, n, ns, no))
-                plt.xlabel('dt')
-                plt.ylabel('cost')
-plt.show()
+mean_cost = np.mean(avg_cost, axis=1)
+std_cost = np.std(avg_cost, axis=1)
+
+# print mean_cost where NO = 1, 2, 4, temp = 0.1, noise_ = 0.1 and NS = 128
+noise_scale = np.array([1.0, 2.0])  # noise scale factor. scale factor of 5 results in throttle variance = 1
+temperatures = np.arange(0.0, 0.3, 0.1)
+for t in temperatures:
+    for noise in noise_scale:
+        if(t == 0.0):
+            t = 0.01
+        MPPI_1_mean, MPPI_1_std = mean_cost[(NO == 1) & (temp == t) & (noise_ == noise) & (NS == 256)], std_cost[(NO == 1) & (temp == t) & (noise_ == noise) & (NS == 256)]
+        MPPI_2_mean, MPPI_2_std = mean_cost[(NO == 2) & (temp == t) & (noise_ == noise) & (NS == 128)], std_cost[(NO == 2) & (temp == t) & (noise_ == noise) & (NS == 128)]
+        MPPI_4_mean, MPPI_4_std = mean_cost[(NO == 4) & (temp == t) & (noise_ == noise) & (NS == 64)], std_cost[(NO == 4) & (temp == t) & (noise_ == noise) & (NS == 64)]
+
+        # perform ttest between MPPI_1_mean and MPPI_2_mean, where MPPI_1_mean is the mean of the avg_cost for NO = 1, temp = t, noise_ = noise, NS = 128
+        # MPPI_1_mean is a single number, MPPI_2_mean is a single number:
+        _, p1 = ttest(MPPI_1_mean, MPPI_1_std,50, MPPI_2_mean, MPPI_2_std, 50)
+        _, p2 = ttest(MPPI_1_mean, MPPI_1_std,50, MPPI_4_mean, MPPI_4_std, 50)
+
+
+        print("temp: {}, noise: {}, num_opts:{}, effective samples: {}, mean cost: {}, p {}".format(t, noise, 1, 256, MPPI_1_mean, 1) )
+        print("temp: {}, noise: {}, num_opts:{}, effective samples: {}, mean cost: {}, p {}".format(t, noise, 2, 256, MPPI_2_mean, p1) )
+        print("temp: {}, noise: {}, num_opts:{}, effective samples: {}, mean cost: {}, p {}".format(t, noise, 4, 256, MPPI_4_mean, p2) )

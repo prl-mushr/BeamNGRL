@@ -279,24 +279,24 @@ if __name__ == '__main__':
     num_optimizations
     temperature
     '''
-    num_samples = np.array([64, 128, 256])
+    # num_samples = np.array([64, 128, 256])
+    samples = 64
     num_optimizations = np.array([1, 2, 4])  # num optimizations. We divide effective samples by this to get per opt samples
-    noise_scale = np.array([1.0, 2.0])  # noise scale factor. scale factor of 5 results in throttle variance = 1
+    noise_scale = np.array([1.0, 2.0, 3.0])  # noise scale factor. scale factor of 5 results in throttle variance = 1
     temperatures = np.arange(0.0, 0.3, 0.1)
     test_results = []
-    expected_time = np.sum(num_optimizations)*len(num_samples)*len(temperatures)*len(noise_scale)*50*7/3600
+    expected_time = np.sum(num_optimizations)*len(temperatures)*len(noise_scale)*50*7/3600
     print("expected_time = ",round(expected_time,2), " hrs")
     for temp in temperatures:
         for noise_ in noise_scale:
-            for samples in num_samples:
-                for NO in num_optimizations:
-                    NS = int(samples/NO)
-                    if(temp == 0.0):
-                        temp = 0.01
-                    # avg_cost is the avg cost per timestep. we run each test for 1000 timesteps (should be enough right?)
-                    avg_cost, avg_dt = main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=50, num_opts=NO, num_samples=NS, noise_scale=noise_, temperature=temp)
-                    results = np.hstack((temp, noise_, NS, NO, avg_cost, avg_dt))
-                    test_results.append(results)
+            for NO in num_optimizations:
+                NS = int(samples/NO)
+                if(temp == 0.0):
+                    temp = 0.01
+                # avg_cost is the avg cost per timestep. we run each test for 1000 timesteps (should be enough right?)
+                avg_cost, avg_dt = main_noBeamNG(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=50, num_opts=NO, num_samples=NS, noise_scale=noise_, temperature=temp)
+                results = np.hstack((temp, noise_, NS, NO, avg_cost, avg_dt))
+                test_results.append(results)
     test_results = np.array(test_results)
     np.save("compare_CE_MPPI.npy", test_results)
 
