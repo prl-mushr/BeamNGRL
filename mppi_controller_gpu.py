@@ -7,7 +7,7 @@ import time
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=50, lambda_= 0.0, costmap_resolution = 0.1, max_speed=15, track_width = 5, num_optimizations=1, noise_scale=1):
+	def __init__(self,trajectory, N_SAMPLES=512, TIMESTEPS=50, lambda_= 0.0, costmap_resolution = 0.1, max_speed=10, track_width = 5, num_optimizations=1, noise_scale=1):
 		nx = 15
 		d = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda:0")
@@ -25,8 +25,8 @@ class control_system:
 		self.noise_sigma[1,1] = 0.1*noise_scale
 		self.dt = 0.05
 		self.now = time.time()
-		self.map_size = 60  # half map size
-		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = num_optimizations, percent_elites=0.4)
+		self.map_size = 40  # half map size
+		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = num_optimizations, percent_elites=0.2, device=self.device)
 		self.train_data = []
 		self.train_data_iter = int(60/self.dt)
 		self.last_U = torch.zeros(2, device=d, dtype=dtype)
@@ -46,15 +46,13 @@ class control_system:
 		self.y = y
 		self.img_X = np.array(x*self.costmap_resolution_inv + self.shift_X, dtype=np.int32)
 		self.img_Y = np.array(y*self.costmap_resolution_inv + self.shift_Y, dtype=np.int32)
-		state = data
-		# self.noise_sigma[0,0] = 0.1/max(1,abs(data[6]/5) )
-		# self.noise_sigma[1,1] = 0.4/max(1,abs(data[6]/5) )
-		# self.mppi.update_noise_sigma(self.noise_sigma)
+		state = torch.tensor(data,dtype=torch.float, device=self.device)
 		self.create_costmap_truncated()
-		# self.show_location_on_map(state)
+		self.show_location_on_map(state.cpu().numpy())
+		now = time.time()
 		action = self.mppi.command(state)
+		dt = time.time() - now
 		# self.dt = time.time() - self.now  # for comparing output quality, we assume dt is "constant" regardless of actual dt. Will change to different dt when we want to show perf advantage.
-		self.now = time.time()
 		# print("dt: ", dt*1000)
 		action = torch.clamp(action, -1, 1)
 
@@ -65,15 +63,15 @@ class control_system:
 		# feedback = (phi_ref - phi_real)
 		# action[0] += 0.1*feedback		
 		# self.last_U = action
-		return action
+		return action.cpu().numpy()
 
 	def show_location_on_map(self, state):
 		X = int((state[0] - self.x + self.map_size)*self.costmap_resolution_inv)
 		Y = int((state[1] - self.y + self.map_size)*self.costmap_resolution_inv)
-		costmap = np.copy(self.costmap)
+		costmap = np.copy(self.costmap.cpu().numpy())
 		# cv2.circle(costmap, (X,Y), int(self.costmap_resolution_inv), 1, -1)
 		if(self.mppi.print_states is not None):
-			print_states = self.mppi.print_states
+			print_states = self.mppi.print_states.cpu()
 			x = print_states[:,:,:,0].flatten().numpy()
 			y = print_states[:,:,:,1].flatten().numpy()
 			X = np.array((x - self.x + self.map_size)*self.costmap_resolution_inv, dtype=np.int32)
@@ -90,7 +88,7 @@ class control_system:
 
 		X_min = int(self.img_X - self.map_size*self.costmap_resolution_inv)
 		X_max = int(self.img_X + self.map_size*self.costmap_resolution_inv)
-		self.costmap = self.costmap_full[Y_min:Y_max,X_min:X_max]
+		self.costmap = torch.tensor(self.costmap_full[Y_min:Y_max,X_min:X_max], dtype=torch.float, device=self.device)
 
 	def create_costmap(self, trajectory, costmap_resolution, track_width):
 		max_x = np.max(trajectory[:,0]) * self.costmap_resolution_inv
@@ -112,7 +110,7 @@ class control_system:
 		k = int(2*track_width * self.costmap_resolution_inv)
 		costmap = cv2.blur(costmap, (k, k))
 		costmap = self.add_obstacles(costmap)
-		self.costmap_full = torch.from_numpy(costmap) 
+		self.costmap_full = torch.from_numpy(costmap)
 
 	def dynamics(self, state, perturbed_action):
 		x = state[:, 0].view(-1, 1)
@@ -132,24 +130,26 @@ class control_system:
 		gz = state[:,14].view(-1, 1)
 
 		u = perturbed_action
-		u = torch.clamp(u, -1, 1)
-		v = torch.sqrt(vx**2 + vy**2)
+		u = torch.clamp(u, -1, 1)  # 10 us
+		# v = torch.sqrt(vx*vx + vy*vy)
 		accel = u[:,1].view(-1, 1)
-		pos_index = torch.where(accel>0)
-		accel[pos_index] = torch.clamp(accel[pos_index]*25/v[pos_index],0,5)
+		# pos_index = torch.where(accel>0)
+		# accel[pos_index] = torch.clamp(accel[pos_index]*25/vx[pos_index],0,5)
+
 		ax = accel
-		v = v + 5*accel*self.dt  # acceleration
-		omega = v * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
-		ay = v*omega
+		vx = vx + 5*accel*self.dt  # acceleration
+		omega = vx * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
+		ay = vx * omega
 
 		x += self.dt*(vx*torch.cos(yaw))# - vy*torch.sin(yaw))
 		y += self.dt*(vx*torch.sin(yaw))# + vy*torch.cos(yaw))
 		yaw += self.dt*omega
-		vx = v
-		state = torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz), dim=1)
-		return state
+		
+		return torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz), dim=1)
 
 	def dynamics_single(self, state, perturbed_action):
+		state = torch.tensor(state, dtype=torch.float, device=self.device)
+		perturbed_action = torch.tensor(perturbed_action, dtype=torch.float, device=self.device)
 		x = state[ 0]
 		y = state[ 1]
 		z = state[ 2]
@@ -167,58 +167,63 @@ class control_system:
 		gz = state[14]
 
 		u = perturbed_action
-		u = torch.clamp(u, -1, 1)
-		v = torch.sqrt(vx**2 + vy**2)
+		# u = torch.clamp(u, -1, 1)
+		# v = torch.sqrt(vx**2 + vy**2)
 		accel = u[1]
-		if(accel > 0):
-			accel = torch.clamp(accel*25/v,0,5)
-		else:
-			accel *= 5
+		# if(accel > 0):
+		# 	accel = torch.clamp(accel*25/v,0,5)
+		# else:
+		# 	accel *= 5
 		ax = accel
-		v = v + 5*accel*self.dt  # acceleration
-		omega = v * torch.tan(u[0]*self.steering_max) / self.wheelbase
-		ay = v*omega
+		vx = vx + 5*accel*self.dt  # acceleration
+		omega = vx * torch.tan(u[0]*self.steering_max) / self.wheelbase
+		ay = vx*omega
 
 		x += self.dt*(vx*torch.cos(yaw))# - vy*torch.sin(yaw))
 		y += self.dt*(vx*torch.sin(yaw))# + vy*torch.cos(yaw))
 		yaw += self.dt*omega
-		vx = v
+
 		state = torch.hstack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz))
-		return state.numpy()
+		return state.cpu().numpy()
 
 	def running_cost(self, state, action):
-		x = state[:, 0]
-		y = state[:, 1]
-		z = state[:, 2]
-		roll = state[:, 3]
-		pitch = state[:, 4]
-		yaw = state[:, 5]
-		vx = state[:,6]
-		vy = state[:,7]
-		vz = state[:,8]
-		ax = state[:,9]
-		ay = state[:,10]
-		az = state[:,11]
-		gx = state[:,12]
-		gy = state[:,13]
-		gz = state[:,14]
-
-		K = torch.tan(action[:,0]*self.steering_max) / self.wheelbase
+		now = time.time()
+		# x = state[:, 0]
+		# y = state[:, 1]
+		# z = state[:, 2]
+		# roll = state[:, 3]
+		# pitch = state[:, 4]
+		# yaw = state[:, 5]
+		# vx = state[:,6]
+		# vy = state[:,7]
+		# vz = state[:,8]
+		# ax = state[:,9]
+		# ay = state[:,10]
+		# az = state[:,11]
+		# gx = state[:,12]
+		# gy = state[:,13]
+		# gz = state[:,14]
 		## get the location within the truncated costmap
-		img_X = torch.tensor((x - self.x + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
-		img_Y = torch.tensor((y - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
+		img_X = torch.tensor((state[:, 0] - self.x + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
+		img_Y = torch.tensor((state[:, 1] - self.y + self.map_size) * self.costmap_resolution_inv, dtype=torch.long)
 		state_cost = self.costmap[img_Y, img_X]
 		state_cost *= state_cost
-		state_cost[np.where(state_cost>=0.9)] = 100 #self.mppi.hard_cost
-		vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
-		vel_cost = torch.sqrt(vel_cost)
-		accel = ay*0.1
-		accel_cost = accel**2
-		accel_cost[np.where(accel_cost < 0.5)] *= 0.01
 
-		return 2*vel_cost + state_cost + 0.01*accel_cost #self.mppi.hard_cost
+		state_cost[torch.where(state_cost>=0.9)] = 100.0 #self.mppi.hard_cost
+
+		vel_cost = (self.max_speed - state[:, 6])/self.max_speed
+		vel_cost *= vel_cost
+		accel = state[:,10]*0.1
+		accel_cost = accel*accel
+		# accel_cost[torch.where(accel_cost < 0.5)] *= 0.01
+		# print(vel_cost.device, state_cost.device, vx[0].device, accel_cost.device, state.device)
+
+		out = 2*vel_cost + state_cost + 0.01*state[0, 6]*accel_cost
+		return out
 
 	def running_cost_single(self, state, action):
+		state = torch.tensor(state, dtype=torch.float, device=self.device)
+		action = torch.tensor(action, dtype=torch.float, device=self.device)
 		x = state[ 0]
 		y = state[ 1]
 		z = state[ 2]
@@ -250,14 +255,14 @@ class control_system:
 		if(accel_cost < 0.5):
 			accel_cost *= 0.01
 
-		return (2*vel_cost + state_cost + 0.01*accel_cost).numpy()
+		return (2*vel_cost + state_cost + 0.01*vx*accel_cost).cpu().numpy()
 
 	def add_obstacles(self, costmap):
 		max_shape = np.max(costmap.shape)
 		points = np.random.randint(0,max_shape, size=(1600,2))
 		for i in range(len(points)):
 			center = np.array([ costmap.shape[1]/2, costmap.shape[0]/2 ])
-			if(np.linalg.norm(points[i,:2] - center) > 5*self.costmap_resolution_inv):
+			if(np.linalg.norm(points[i,:2] - center) > 50*self.costmap_resolution_inv):
 				X = points[i,0]
 				Y = points[i,1]
 				cv2.circle(costmap, (X,Y), int(2*self.costmap_resolution_inv), 1, -1)
