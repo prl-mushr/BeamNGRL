@@ -94,8 +94,8 @@ def main():
 
     scenario = Scenario('small_island', name="test integration")
 
-    vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
-    
+    # vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
+    vehicle = Vehicle('ego_vehicle', model='RG_RC', partConfig='vehicles/RG_RC/Short_Course_Truck.pc')
     scenario.add_vehicle(vehicle, pos=(-67, 336, 34.5),
                          rot_quat=(0, 0, 0.3826834, 0.9238795))
     # scenario.add_vehicle(vehicle, pos=(-771, -700,  100.5 ),
@@ -127,7 +127,7 @@ def main():
     start = time.time()
     attempt = 0
     episode_time = 10.0
-    time.sleep(10)
+    # time.sleep(10)
     print("start!")
     wp_list = []
     while True:
@@ -135,8 +135,8 @@ def main():
             # now = time.time()
             # # camera_readings = camera1.poll() #
             # dt = time.time() - now
-            # vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-            # sensors = vehicle.sensors
+            vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+            sensors = vehicle.sensors
             # pos = np.copy(vehicle.state['pos'])
             # quat = np.copy(vehicle.state['rotation'])
             # wheeldownforce = vehicle.sensors['electrics']['wheeldownforce']
@@ -155,6 +155,8 @@ def main():
             # print("wheelsideslip", wheelsideslip)
             # print("wheeldownforce", wheeldownforce)
             # print("wheelhorizontalforce", wheelhorizontalforce)
+            print("got here")
+            print(vehicle.sensors['electrics']['engine_load'])
             time.sleep(0.1)
             # wp_list.append(pos)
             # steering = vehicle.sensors['electrics']['steering']

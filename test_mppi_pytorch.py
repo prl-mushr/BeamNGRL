@@ -108,6 +108,7 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
     bng.open()
     scenario = Scenario(map_name, name="test integration")
     vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
+    # vehicle = Vehicle('ego_vehicle', model='RG_RC', partConfig='vehicles/RG_RC/Short_Course_Truck.pc')
 
     scenario.add_vehicle(vehicle, pos=(start_point[0], start_point[1], start_point[2] + 0.5),
                      rot_quat=(start_quat[0], start_quat[1], start_quat[2], start_quat[3]))

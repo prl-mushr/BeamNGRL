@@ -9,7 +9,7 @@ import os
 
 class control_system:
 
-	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=25, track_width = 1):
+	def __init__(self,trajectory, N_SAMPLES=256, TIMESTEPS=30, lambda_= 0.1, costmap_resolution = 0.1, max_speed=40, track_width = 1):
 		nx = 15
 		d = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 		self.device = torch.device("cuda")
@@ -23,15 +23,15 @@ class control_system:
 		self.wheelbase = torch.tensor(2.6)
 		self.steering_max = torch.tensor(0.5)
 		self.noise_sigma = torch.zeros((2,2), device=d, dtype=dtype)
-		self.noise_sigma[0,0] = 0.05
-		self.noise_sigma[1,1] = 0.2
+		self.noise_sigma[0,0] = 0.5
+		self.noise_sigma[1,1] = 0.5
 		self.dt = 0.05
 		self.now = time.time()
-		self.map_size = 40  # half map size
+		self.map_size = 70  # half map size
 		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = 1)
 		self.train_data = []
 		self.train_data_iter = int(60/self.dt)
-		self.last_U = torch.zeros(2, device=d, dtype=dtype)
+		self.last_U = torch.zeros(2, device=d)
 		self.use_model = True
 		model_name = 'dynamics_full.h5'
 		checkpoint = torch.load(model_name) #uncomment this and the line below to train an existing model
@@ -54,7 +54,7 @@ class control_system:
 		self.y = y
 		self.img_X = np.array(x*self.costmap_resolution_inv + self.shift_X, dtype=np.int32)
 		self.img_Y = np.array(y*self.costmap_resolution_inv + self.shift_Y, dtype=np.int32)
-		state = data
+		state = np.hstack((data, self.last_U.cpu()))
 		# if(self.train_data_iter > 0):
 		# 	# note that xyz positions don't matter for dynamics prediction.
 		# 	self.train_data.append( np.hstack( (data, self.last_U.cpu().numpy() ) ) )
@@ -64,17 +64,17 @@ class control_system:
 		# 	np.save("train_data.npy", self.train_data)
 		# 	print("done")
 		# 	exit()
-		self.noise_sigma[0,0] = 1.0/max(1,abs(data[6]) )
-		self.noise_sigma[1,1] = 1.0/max(1,max(abs(data[6]/2.5), 4) )
-		self.mppi.update_noise_sigma(self.noise_sigma)
+		# self.noise_sigma[0,0] = 1.0/max(1,abs(data[6]) )
+		# self.noise_sigma[1,1] = 1.0/max(1,max(abs(data[6]/2.5), 4) )
+		# self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
 		# self.show_location_on_map(state)
-		action = self.mppi.command(state)
+		action = self.mppi.command(state)*self.dt + self.last_U.cpu()
 		# self.dt = time.time() - self.now
 		self.now = time.time()
 		# print("dt: ", dt*1000)
-		action[0] = action[0]*0.5 + self.last_U[0]*0.5
-		action[1] = action[1]*0.2 + self.last_U[1]*0.8 - np.sin(data[4])/(np.pi)
+		# action[0] = action[0]*0.5 + self.last_U[0]*0.5
+		# action[1] = action[1]*0.2 + self.last_U[1]*0.8 - np.sin(data[4])/(np.pi)
 		action = torch.clamp(action, -1, 1)
 
 		# phi_ref = np.linalg.norm(data[6:8]) * torch.tan(action[0]*self.steering_max) / self.wheelbase
@@ -148,17 +148,19 @@ class control_system:
 		gy = state[:,13].view(-1, 1)
 		gz = state[:,14].view(-1, 1)
 
-		u = perturbed_action
-		u = torch.clamp(u, -1, 1)
+		state[:,15] += perturbed_action[:,0]*self.dt
+		state[:,16] += perturbed_action[:,1]*self.dt
+
+		u = torch.clamp(state[:,15:17], -1, 1)
 		v = torch.sqrt(vx**2 + vy**2)
-		accel = 5*u[:,1].view(-1, 1)
+		accel = 5*u[:,1].view(-1,1)
 		pos_index = torch.where(accel>0)
 		accel[pos_index] = torch.clamp(accel[pos_index]*25/torch.clamp(v[pos_index],5,30),0,5)
 		# ax = accel
 		# v = v + 5*accel*self.dt  # acceleration
 		# omega = v * torch.tan(u[:,0].view(-1, 1)*self.steering_max) / self.wheelbase
 		# ay = v*omega
-		delta = u[:,0].view(-1, 1)*self.steering_max
+		delta = u[:,0].view(-1,1)*self.steering_max
 		alphaf = delta - torch.atan2(gz*self.lf + vy, vx) 
 		alphar = torch.atan2(gz*self.lr - vy, vx)
 		Fry = self.Dr*torch.sin(self.Cr*torch.atan(self.Br*alphar))
@@ -174,7 +176,7 @@ class control_system:
 		yaw += self.dt*gz
 
 
-		state = torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz), dim=1)
+		state = torch.cat((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, state[:,15].view(-1,1), state[:, 16].view(-1,1)), dim=1)
 		return state
 
 	def running_cost(self, state, action):
