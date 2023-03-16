@@ -27,7 +27,7 @@ class control_system:
 		self.noise_sigma[1,1] = 0.5
 		self.dt = 0.05
 		self.now = time.time()
-		self.map_size = 70  # half map size
+		self.map_size = 40  # half map size
 		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, num_optimizations = 1)
 		self.train_data = []
 		self.train_data_iter = int(60/self.dt)
@@ -68,7 +68,7 @@ class control_system:
 		# self.noise_sigma[1,1] = 1.0/max(1,max(abs(data[6]/2.5), 4) )
 		# self.mppi.update_noise_sigma(self.noise_sigma)
 		self.create_costmap_truncated()
-		# self.show_location_on_map(state)
+		self.show_location_on_map(state)
 		action = self.mppi.command(state)*self.dt + self.last_U.cpu()
 		# self.dt = time.time() - self.now
 		self.now = time.time()
@@ -88,14 +88,14 @@ class control_system:
 		X = int((state[0] - self.x + self.map_size)*self.costmap_resolution_inv)
 		Y = int((state[1] - self.y + self.map_size)*self.costmap_resolution_inv)
 		costmap = np.copy(self.costmap)
-		# cv2.circle(costmap, (X,Y), int(self.costmap_resolution_inv), 1, -1)
+		cv2.circle(costmap, (X,Y), int(self.costmap_resolution_inv), 1, -1)
 		if(self.mppi.print_states is not None):
 			print_states = self.mppi.print_states
 			x = print_states[:,:,:,0].flatten().numpy()
 			y = print_states[:,:,:,1].flatten().numpy()
 			X = np.array((x - self.x + self.map_size)*self.costmap_resolution_inv, dtype=np.int32)
 			Y = np.array((y - self.y + self.map_size)*self.costmap_resolution_inv, dtype=np.int32)
-			costmap[Y,X] = 0
+			costmap[Y,X] = 1
 
 		costmap = cv2.flip(costmap, 0)
 		cv2.imshow("map", costmap)
