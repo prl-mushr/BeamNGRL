@@ -10,6 +10,8 @@ from Bezier import *
 import traceback
 from mppi_controller import *
 
+import multiprocessing
+
 def convert_beamng_to_REP103(rot):
     rot = Quaternion(rot[2], -rot[0], -rot[1], -rot[3])
     new = Quaternion([0,m.sqrt(2)/2,m.sqrt(2)/2,0])*rot
@@ -100,18 +102,39 @@ def get_WP(filename):
         for j in range(N):
             Curvature,Direction,Normal = get_CTN(P0,P1,P2,P3,float(j)/float(N))
             wp_list[N*i + j] = np.array([bx[j],by[j],bz[j],Direction[0],Direction[1],Direction[2]])
-    return wp_list
+    return wp_list, target_WP, target_Vhat
 
-def main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=4):
+def main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes, iterator):
+
+    WP_file = "WP_file_test_1.npy"
+    wp_list, target_WP, target_Vhat = get_WP(WP_file)
+    costmap_obj = costmap_handler(trajectory = wp_list, make_arena=True)
+
+    controller = control_system()
+    controller.set_full_costmap(costmap_obj.costmap_full, costmap_obj.shift_X, costmap_obj.shift_Y)
+    st = 0
+    th = 1
+    recording = False
+    current_wp_index = 0
+
+    target_WP = np.array(target_WP)
+
+    controller.set_goal(target_WP[0])
+    costmap_obj.costmap_full[:,:,0] = 0
+
     bng = BeamNGpy('localhost', 64256, home='/home/stark/BeamNG/BeamNG', user='/home/stark/BeamNG/BeamNG/userfolder')
     # Launch BeamNG.tech
     bng.open()
     scenario = Scenario(map_name, name="test integration")
     # vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
     vehicle = Vehicle('ego_vehicle', model='RG_RC', partConfig='vehicles/RG_RC/Short_Course_Truck.pc')
+    # box = Vehicle('box', model='carboard_box', partConfig='vehicles/carboard_box/large.pc')
 
+    # scenario.add_vehicle(box, pos=(-302, -324, 100 + 0.5),
+    #                  rot_quat=(start_quat[0], start_quat[1], start_quat[2], start_quat[3]))
     scenario.add_vehicle(vehicle, pos=(start_point[0], start_point[1], start_point[2] + 0.5),
                      rot_quat=(start_quat[0], start_quat[1], start_quat[2], start_quat[3]))
+
     bng.set_tod(0.5)
     scenario.make(bng)
 
@@ -120,6 +143,7 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
     bng.load_scenario(scenario)
     # bng.hide_hud()
     bng.start_scenario()
+    print("scenario started")
 
     vehicle.poll_sensors()
     sensors = vehicle.sensors
@@ -141,17 +165,13 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
     now = time.time()
     time.sleep(0.02)
 
-    WP_file = "WP_file_offroad.npy"
-    wp_list = get_WP(WP_file)
-    controller = control_system(trajectory = wp_list)
-    st = 0
-    th = 1
-    recording = False
+    max_wp = len(target_WP)
+    # time.sleep(5)
     while True:
         try:
             dt = time.time() - now 
             now = time.time()
-            print("dt: ",dt*1000)
+            # print("dt: ",dt*1000)
             vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
             acc = accel.poll()
             A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
@@ -184,12 +204,23 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
             wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
             steering = vehicle.sensors['electrics']['steering']
             t = time.time() - start
-
+            # print("true-speed/wheel-speed ratio:",np.linalg.norm(vel)/max(np.mean(np.abs(wheelspeed)),0.1))
             data = np.hstack((pos, rpy, vel, A, G)) #, t, dt, raw_A, start_turning, wheeldownforce, wheelhorizontalforce, wheelslip, wheelsideslip, wheelspeed, steering))
 
+            costmap_obj.create_costmap_truncated(data)
+            d = np.linalg.norm(target_WP[current_wp_index,:2] - pos[:2])
+            if(d < 5 and current_wp_index < max_wp):
+                current_wp_index += 1
+            if current_wp_index == max_wp:
+                vehicle.control(throttle = 0, brake=1, steering = 0)
+                print("Reached last waypoint.")
+                time.sleep(2)
+                vehicle.control(throttle = 0, brake=0, steering = 0)
+                exit()    
 
-            action = controller.update(data.copy())
-            action = action.numpy()
+            action = controller.update(data, costmap_obj.costmap, target_WP[current_wp_index])
+            delta = time.time() - now
+            action = action.cpu().numpy()
             action = np.array(action, dtype=np.float64)
             st, th = -action[0], action[1]
             br = 0
@@ -206,21 +237,29 @@ def main(start_point, start_quat, turn_point, folder_name, map_name, speed_targe
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
-    # start_point = np.array([-814.33583743, -669.04329255,  100.56901635])
-    # start_quat = np.array([-0.00396234, -0.002702,   -0.16445144,  0.9863735])
-    # turn_point = np.array([-798.569961,  -716.46442828,  100.87442045])
-    # folder_name = "tripped_flat_with_correction"
-    # map_name = "gridmap_v2"
-    # speed_target = 18.0
-    # episode_time = 10.0
-    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+    start_point = np.array([-340, -270,  100.56901635])
+    start_quat = np.array([0, 0, 0, 1])
+    turn_point = np.array([-798.569961,  -716.46442828,  100.87442045])
+    folder_name = "tripped_flat_with_correction"
+    map_name = "gridmap_v2"
+    speed_target = 18.0
+    episode_time = 10.0
+    main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, 4, 0)
     # time.sleep(2)
     # # position of the vehicle for untripped_flat on smallgrid:
+    # proc_list = []
+    # for i in range(16):
+    #     proc = multiprocessing.Process(target=main, args=(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, 4, i,)) # daemon -> kills thread when main program is stopped
+    #     proc_list.append(proc)
+    #     proc_list[-1].start()
+
+    # for i in range(16):
+    #     proc_list[i].join()
 
     # start_point = np.array([-86.52589376, 321.26751955, 0.0])
-    # # start_point = np.array([0,0, 0.0])
-    # # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
-    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
+    # start_point = np.array([0,0, 0.0])
+    # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
+    # # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
     # turn_point = np.array([0, 50.0 ,0])
     # folder_name = "controller_test"
     # map_name = "smallgrid"
@@ -229,11 +268,11 @@ if __name__ == '__main__':
     # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
     # time.sleep(2)
     # position of the vehicle for mixed_offroad on small_island:
-    start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
-    start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    turn_point = np.array([-101.02775679,  291.77741613,   37.28218909])
-    folder_name = "mixed_offroad_with_correction"
-    map_name = "small_island"
-    speed_target = 12.0
-    episode_time = 15.0
-    main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+    # start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
+    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
+    # turn_point = np.array([-101.02775679,  291.77741613,   37.28218909])
+    # folder_name = "mixed_offroad_with_correction"
+    # map_name = "small_island"
+    # speed_target = 12.0
+    # episode_time = 15.0
+    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
