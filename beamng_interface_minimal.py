@@ -3,11 +3,14 @@ import cv2
 from beamng_interface import *
 import traceback
 
-def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/BeamNG/BeamNG'):
-    bng_interface = beamng_interface(homedir= BeamNG_dir, userfolder=BeamNG_dir+'/userfolder')
-    bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
+def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
+    map_res = 0.05
+    map_size = 16 # 16 x 16 map
+
+    bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
+    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
                                 start_pos=start_point, start_rot=start_quat)
-    bng_interface.set_map_attributes(map_size = 16, resolution=0.25)
+    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/', rotate=False)
     # set lock-step to true if you want the simulator to pause while you calculate the controls:
     # this will make the overall simulation slower since it takes some time to communicate the pause/resume command + whatever time you take to compute controls
 

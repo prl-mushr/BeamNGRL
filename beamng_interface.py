@@ -9,8 +9,8 @@ import cv2
 ## BeamNG Interface Class
 
 class beamng_interface():
-    def __init__(self, homedir='G:/BeamNG/BeamNG',userfolder='G:/BeamNG/BeamNG/userfolder', host='localhost', port=64256):
-        self.bng = BeamNGpy(host, port, home = homedir, user=userfolder)
+    def __init__(self, BeamNG_dir='/home/stark/', host='localhost', port=64256):
+        self.bng = BeamNGpy(host, port, home = BeamNG_dir + 'BeamNG/BeamNG', user=BeamNG_dir + 'BeamNG/BeamNG/userfolder')
         # Launch BeamNG.tech
         self.bng.open()
         self.lockstep   = False
@@ -58,16 +58,17 @@ class beamng_interface():
         self.state_poll()
         self.flipped_over = False
 
-    def set_map_attributes(self, map_size = 16, resolution = 0.25):
-        self.elevation_map_full = np.load('map_data/elevation_map.npy', allow_pickle=True)
-        self.color_map_full = cv2.imread('map_data/color_map.png')
-        self.segmt_map_full = cv2.imread('map_data/segmt_map.png')
-        self.path_map_full  = cv2.imread('map_data/paths.png')
+    def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps='', rotate=False):
+        self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
+        self.color_map_full = cv2.imread(path_to_maps + '/map_data/color_map.png')
+        self.segmt_map_full = cv2.imread(path_to_maps + '/map_data/segmt_map.png')
+        self.path_map_full  = cv2.imread(path_to_maps + '/map_data/paths.png')
         self.image_shape    = self.color_map_full.shape
         self.image_resolution = 0.1  # this is the original meters per pixel resolution of the image
         self.resolution     = resolution  # meters per pixel of the target map
         self.resolution_inv = 1/self.resolution  # pixels per meter
         self.map_size       = map_size/2  # 16 x 16 m grid around the car by default
+        self.rotate = rotate
 
         if(self.image_resolution != self.resolution):
             scale_factor = self.image_resolution/self.resolution
@@ -86,17 +87,17 @@ class beamng_interface():
         self.mask_center = (self.map_size_px[0], self.map_size_px[1])
 
     ## this "nested" function uses variables from the intrinsic data, be careful if you move this function out
-    def get_map_bf_no_rp(self, map_img, rotate = False, rpy=None):
+    def get_map_bf_no_rp(self, map_img):
         if(len(map_img.shape)==3):
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max, :]
         else:
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max]
-        if(rotate):
-            BEV = cv2.bitwise_and(BEV, BEV, mask=mask)
+        if(self.rotate):
+            BEV = cv2.bitwise_and(BEV, BEV, mask=self.mask)
             # get rotation matrix using yaw:
-            rotate_matrix = cv2.getRotationMatrix2D(center=mask_center, angle= -rpy[i,2]*57.3, scale=1)
+            rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= -self.rpy[2]*57.3, scale=1)
             # rotate the image using cv2.warpAffine
-            BEV = cv2.warpAffine(src=BEV, M=rotate_matrix, dsize=mask_size)
+            BEV = cv2.warpAffine(src=BEV, M=rotate_matrix, dsize=self.mask_size)
         return BEV
 
     def transform_world_to_bodyframe(x, y, xw, yw, th):
@@ -280,6 +281,7 @@ class beamng_interface():
                 self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
                 self.rpy = self.rpy_from_quat(self.quat)
                 self.Tnb, self.Tbn = self.calc_Transform(self.quat)
+                self.vel_wf = np.copy(self.vel)
                 self.vel = np.matmul(self.Tnb, self.vel)
                 diff = self.quat/self.last_quat
                 self.last_quat = self.quat

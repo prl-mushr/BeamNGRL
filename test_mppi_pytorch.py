@@ -42,14 +42,15 @@ def update_goal(goal, pos, target_WP, current_wp_index):
             return goal, False, current_wp_index
 
 
-def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/BeamNG/BeamNG', target_WP = None):
+def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
     map_res = 0.05
-    map_size = 16
+    map_size = 16 # 16 x 16 map
 
-    bng_interface = beamng_interface(homedir= BeamNG_dir, userfolder=BeamNG_dir+'/userfolder')
+    bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
     bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
                                 start_pos=start_point, start_rot=start_quat)
-    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res)
+    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
+
 
     # bng_interface.set_lockstep(True)
     dtype = torch.float

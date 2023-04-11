@@ -1,0 +1,13 @@
+{
+  "uiUnitConsumptionRate":"metric",
+  "uiUnitDate":"iso",
+  "uiUnitEnergy":"metric",
+  "uiUnitLength":"metric",
+  "uiUnitPower":"hp",
+  "uiUnitPressure":"bar",
+  "uiUnitTemperature":"c",
+  "uiUnitTorque":"metric",
+  "uiUnitVolume":"l",
+  "uiUnitWeight":"kg",
+  "uiUnits":"metric"
+}
