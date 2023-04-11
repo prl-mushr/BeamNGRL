@@ -1,98 +1,157 @@
 import time
-from time import sleep
-from beamngpy import BeamNGpy, Scenario, Vehicle, set_up_simple_logging
+from pyquaternion import Quaternion
+from beamngpy import BeamNGpy, Scenario, Vehicle
 from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer
-import math as m
-import cv2
 import numpy as np
 import traceback
-import threading
-from pyquaternion import Quaternion
+import cv2
 
 ## BeamNG Interface Class
 
 class beamng_interface():
-    def __init__(self, homedir='G:/BeamNG/BeamNG',userfolder='G:/BeamNG/BeamNG/userfolder', host='localhost', port=64256, state_update_rate = 50):
+    def __init__(self, homedir='G:/BeamNG/BeamNG',userfolder='G:/BeamNG/BeamNG/userfolder', host='localhost', port=64256):
         self.bng = BeamNGpy(host, port, home = homedir, user=userfolder)
         # Launch BeamNG.tech
         self.bng.open()
+        self.lockstep   = False
         self.lidar_list = []
         self.camera_list = []
         self.state_init = False
-        self.last_A = np.zeros(3)
-        self.quat = np.array([1,0,0,0])
+        self.last_A     = np.zeros(3)
+        self.quat       = np.array([1,0,0,0])
         self.Tnb, self.Tbn = self.calc_Transform(self.quat)
-        self.state_update_rate = state_update_rate
-        self.depth = None
-        self.pos = None
-        self.color = None
-        self.segmt = None
+        self.depth      = None
+        self.pos        = None
+        self.color      = None
+        self.segmt      = None
+        self.lidar_pts  = None
+        self.Gravity    = np.array([0,0,9.81])
+        self.state      = None
 
-    def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER', time_of_day=1200, hide_hud=False, fps=60):
+    def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
+                      start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
+                      time_of_day=1200, hide_hud=False, fps=60):
         self.scenario = Scenario('small_island', name="test integration")
 
-        self.vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
+        self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 
-        self.scenario.add_vehicle(self.vehicle, pos=(-67, 336, 34.5),
-                             rot_quat=(0, 0, 0.3826834, 0.9238795))
+        self.start_pos = start_pos
+        self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
+                             rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
         self.bng.set_tod(time_of_day/2400)
         self.scenario.make(self.bng)
-        if(not hide_hud):
+        if(hide_hud):
             self.bng.hide_hud()
-        self.bng.set_steps_per_second(fps)  # Set simulator to 60hz temporal resolution
+        # self.bng.set_steps_per_second(fps)  # Set simulator to 60hz temporal resolution
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
         self.vehicle.attach_sensor('electrics', self.electrics)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-
-        # proc_state = threading.Thread(target = self.state_loop, args=(50,)) # daemon -> kills thread when main program is stopped
-        # proc_state.daemon = True
-        # proc_state.start()
         time.sleep(2)
         self.attach_accelerometer()
         time.sleep(2)
-        ## top down camera:
-        self.attach_camera(name='camera', pos=(0, -30, 30), dir = (0,0,-1),field_of_view_y=90, resolution=(300,300), annotation=True)
-        ## standard camera:
         # self.attach_camera(name='camera')
-        time.sleep(2)
+        # time.sleep(2)
         # self.attach_lidar(name='lidar')
         # time.sleep(2)
+        self.state_poll()
+        self.flipped_over = False
 
-        # proc_camera = threading.Thread(target = self.camera_loop, args=(0, 30, )) # daemon -> kills thread when main program is stopped
-        # proc_camera.daemon = True
-        # proc_camera.start()
-        # print("camera started")
-        # time.sleep(2)
+    def set_map_attributes(self, map_size = 16, resolution = 0.25):
+        self.elevation_map_full = np.load('map_data/elevation_map.npy', allow_pickle=True)
+        self.color_map_full = cv2.imread('map_data/color_map.png')
+        self.segmt_map_full = cv2.imread('map_data/segmt_map.png')
+        self.path_map_full  = cv2.imread('map_data/paths.png')
+        self.image_shape    = self.color_map_full.shape
+        self.image_resolution = 0.1  # this is the original meters per pixel resolution of the image
+        self.resolution     = resolution  # meters per pixel of the target map
+        self.resolution_inv = 1/self.resolution  # pixels per meter
+        self.map_size       = map_size/2  # 16 x 16 m grid around the car by default
 
-        # proc_accel = threading.Thread(target = self.Accelerometer_loop)
-        # proc_accel.daemon = True
-        # proc_accel.start()
-        # print("accelerometer started")
-        # time.sleep(2) # wait for accel to start
+        if(self.image_resolution != self.resolution):
+            scale_factor = self.image_resolution/self.resolution
+            new_shape = np.array(np.array(self.image_shape) * scale_factor, dtype=np.int32)
+            self.elevation_map_full = cv2.resize(self.elevation_map_full, (new_shape[0], new_shape[1]), cv2.INTER_AREA)
+            self.color_map_full = cv2.resize(self.color_map_full, (new_shape[0], new_shape[1]), cv2.INTER_AREA)
+            self.segmt_map_full = cv2.resize(self.segmt_map_full, (new_shape[0], new_shape[1]), cv2.INTER_AREA)
+            self.path_map_full  = cv2.resize(self.path_map_full, (new_shape[0], new_shape[1]), cv2.INTER_AREA)
+            self.image_shape    = (new_shape[0], new_shape[1])
 
-        # proc_lidar = threading.Thread(target = self.lidar_loop, args=(0, 10,)) # daemon -> kills thread when main program is stopped
-        # proc_lidar.daemon = True
-        # proc_lidar.start()
-        # print("lidar started")
-        # time.sleep(2)
-        self.state_loop(self.state_update_rate)
+        self.map_size_px = int(self.map_size*self.resolution_inv)
+        self.map_size_px = (self.map_size_px, self.map_size_px)
+        self.mask_size   = (2 * self.map_size_px[0], 2 * self.map_size_px[1])
+        mask             = np.zeros(self.mask_size, np.uint8)
+        self.mask        = cv2.circle(mask, self.map_size_px, self.map_size_px[0], 255, thickness=-1)
+        self.mask_center = (self.map_size_px[0], self.map_size_px[1])
+
+    ## this "nested" function uses variables from the intrinsic data, be careful if you move this function out
+    def get_map_bf_no_rp(self, map_img, rotate = False, rpy=None):
+        if(len(map_img.shape)==3):
+            BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max, :]
+        else:
+            BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max]
+        if(rotate):
+            BEV = cv2.bitwise_and(BEV, BEV, mask=mask)
+            # get rotation matrix using yaw:
+            rotate_matrix = cv2.getRotationMatrix2D(center=mask_center, angle= -rpy[i,2]*57.3, scale=1)
+            # rotate the image using cv2.warpAffine
+            BEV = cv2.warpAffine(src=BEV, M=rotate_matrix, dsize=mask_size)
+        return BEV
+
+    def transform_world_to_bodyframe(x, y, xw, yw, th):
+        x -= xw
+        y -= yw
+        R = np.zeros((2,2))
+        ct, st = np.cos(-th), np.sin(-th)
+        R[0,0], R[0,1], R[1,0], R[1,1] = ct, -st, st, ct
+        X = np.array(x)
+        Y = np.array(y)
+        V = np.array([X,Y])
+        O = np.matmul(R, V)
+        x, y = O[0,:], O[1,:]
+        return x, y
+ 
+    def gen_BEVmap(self):
+        self.img_X = int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2)
+        self.img_Y = int( self.pos[1]*self.resolution_inv + self.image_shape[1]//2)
+
+        self.Y_min = int(self.img_Y - self.map_size*self.resolution_inv)
+        self.Y_max = int(self.img_Y + self.map_size*self.resolution_inv)
+
+        self.X_min = int(self.img_X - self.map_size*self.resolution_inv)
+        self.X_max = int(self.img_X + self.map_size*self.resolution_inv)
+
+        ## inputs:
+        self.BEV_color = self.get_map_bf_no_rp(self.color_map_full)  # crops circle, rotates into body frame
+        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full)
+        self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full)
+        self.BEV_path  = self.get_map_bf_no_rp(self.path_map_full)
+
+        mask = np.zeros_like(self.BEV_heght, dtype=np.uint8)
+        index = np.where(self.BEV_heght == 0)
+        mask[index] = 255
+
+        self.BEV_color = cv2.inpaint(self.BEV_color, mask, 3,cv2.INPAINT_TELEA)
+        self.BEV_segmt = cv2.inpaint(self.BEV_segmt, mask, 3,cv2.INPAINT_TELEA)
+        self.BEV_heght = cv2.inpaint(self.BEV_heght, mask, 1,cv2.INPAINT_TELEA)
+        self.BEV_heght -= self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
+        self.BEV_heght = np.clip(self.BEV_heght, -2.0, 2.0)
 
     def rpy_from_quat(self, quat):
         y = np.zeros(3)
-        y[0] = m.atan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2));
-        y[1] = -m.asin(2.0*(quat[1]*quat[3]-quat[0]*quat[2]));
-        y[2] = m.atan2((2.0*(quat[1]*quat[2]+quat[0]*quat[3])) , (quat[0]**2 + quat[1]**2 - quat[2]**2 - quat[3]**2));
+        y[0] = np.arctan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2));
+        y[1] = -np.arcsin(2.0*(quat[1]*quat[3]-quat[0]*quat[2]));
+        y[2] = np.arctan2((2.0*(quat[1]*quat[2]+quat[0]*quat[3])) , (quat[0]**2 + quat[1]**2 - quat[2]**2 - quat[3]**2));
         return y
 
     def quat_from_rpy(self, rpy):
-        u1 = m.cos(0.5*rpy[0]);
-        u2 = m.cos(0.5*rpy[1]);
-        u3 = m.cos(0.5*rpy[2]);
-        u4 = m.sin(0.5*rpy[0]);
-        u5 = m.sin(0.5*rpy[1]);
-        u6 = m.sin(0.5*rpy[2]);
+        u1 = np.cos(0.5*rpy[0]);
+        u2 = np.cos(0.5*rpy[1]);
+        u3 = np.cos(0.5*rpy[2]);
+        u4 = np.sin(0.5*rpy[0]);
+        u5 = np.sin(0.5*rpy[1]);
+        u6 = np.sin(0.5*rpy[2]);
         quat = np.zeros(4)
         quat[0] = u1*u2*u3+u4*u5*u6;
         quat[1] = u4*u2*u3-u1*u5*u6;
@@ -102,7 +161,7 @@ class beamng_interface():
 
     def convert_beamng_to_REP103(self, rot):
         rot = Quaternion(rot[2], -rot[0], -rot[1], -rot[3])
-        new = Quaternion([0,m.sqrt(2)/2,m.sqrt(2)/2,0])*rot
+        new = Quaternion([0,np.sqrt(2)/2,np.sqrt(2)/2,0])*rot
         rot = Quaternion(-new[1], -new[3], -new[0], -new[2])
         return rot
 
@@ -165,98 +224,104 @@ class beamng_interface():
         self.accel = Accelerometer('accel', self.bng, self.vehicle, pos = (0, 0.0,0.8), requested_update_time=0.01, is_using_gravity=False)
         print("accel attached")
 
-    def camera_loop(self, index, update_frequency):
-        update_time = 1.0/update_frequency
-        # print("camera_loop started")
-        # while True:
+    def camera_poll(self, index):
         try:
-            # now = time.time()
             camera_readings = self.camera_list[index].poll()
-            # dt = time.time() - now
             color = camera_readings['colour']
             self.color = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
-            # color = self.increase_brightness(color, 60)  # only needed if lidar running
             self.depth = camera_readings['depth']
             self.segmt = camera_readings['annotation']
-            # print("got camera: ", dt*1000)
-            # while(time.time() - now < update_time):
-            #     time.sleep(0.001) 
         except Exception as e:
             print(traceback.format_exc())
-            time.sleep(update_time)
 
-    def lidar_loop(self, index, update_frequency):
-        update_time = 1.0/update_frequency
-        print("lidar_loop started")
-        while True:
-            try:
-                now = time.time()
-                lidar_readings = np.copy(self.lidar_list[index].poll)
-                dt = time.time() - now
-                print("got lidar: ", dt*1000)
-                while(time.time() - now < update_time):
-                    time.sleep(0.001)
-            except:
-                time.sleep(update_time)
-
-    def Accelerometer_loop(self):
-        update_time = 0.01
-        # while True:
+    def lidar_poll(self, index):
         try:
-            now = time.time()
+            self.lidar_pts = np.copy(self.lidar_list[index].poll())
+        except:
+            pass
+
+    def Accelerometer_poll(self):
+        try:
             acc = self.accel.poll()
             self.A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
-            g_bf = np.matmul(self.Tnb, np.array([0,0,-9.8]))
+            g_bf = np.matmul(self.Tnb, self.Gravity)
             if( np.all(self.A) == 0):
                 self.A = self.last_A
             else:
                 self.last_A = self.A
             self.A += g_bf
-            # while time.time() - now < update_time:
-            #     time.sleep(0.001)
         except Exception:
             print(traceback.format_exc())
-            time.sleep(update_time)
 
-    def state_loop(self, update_frequency):
-        delta = 1.0/update_frequency
-        while True:
-            try:
-                if(self.state_init == False):
-                    print("state_init")
-                    self.camera_loop(0, update_frequency)
-                    self.Accelerometer_loop()
-                    self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                    self.state_init = True
-                    self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
-                    print("state_init done")
-                    time.sleep(0.02)
-                else:
-                    now = time.time()
-                    self.camera_loop(0, update_frequency)
-                    self.Accelerometer_loop()
-                    self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                    self.pos = np.copy(self.vehicle.state['pos'])
-                    self.vel = np.copy(self.vehicle.state['vel'])
-                    self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
-                    self.Tnb, self.Tbn = self.calc_Transform(self.quat)
-                    self.vel = np.matmul(self.Tnb, self.vel)
-                    diff = self.quat/self.last_quat
-                    self.last_quat = self.quat
-                    self.G = np.array([diff[1]*2*50, diff[2]*2*50, diff[3]*2*50])  # gx gy gz
-                    dt = time.time() - now
-                    # print("got state: ", dt*1000)
-                    # while(time.time() - now < delta):
-                    #     time.sleep(0.001)
-            except Exception:
-                print(traceback.format_exc())
-                time.sleep(delta)
-            except KeyboardInterrupt:
-                exit()
+    def set_lockstep(self, lockstep):
+        self.lockstep = lockstep
 
-# main function:
-if __name__ == "__main__":
-    interface = beamng_interface()
-    # load scenario:
-    interface.load_scenario()
-    time.sleep(60)
+    def state_poll(self):
+        try:
+            if(self.state_init == False):
+                # self.camera_poll(0)
+                # self.lidar_poll(0)
+                self.Accelerometer_poll()
+                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.state_init = True
+                self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
+                self.now = time.time()
+                print("beautiful day, __init__?")
+                time.sleep(0.02)
+            else:
+                dt = time.time() - self.now
+                self.now = time.time()
+                # self.camera_poll(0)
+                # self.lidar_poll(0)
+                self.Accelerometer_poll()
+                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.pos = np.copy(self.vehicle.state['pos'])
+                self.vel = np.copy(self.vehicle.state['vel'])
+                self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
+                self.rpy = self.rpy_from_quat(self.quat)
+                self.Tnb, self.Tbn = self.calc_Transform(self.quat)
+                self.vel = np.matmul(self.Tnb, self.vel)
+                diff = self.quat/self.last_quat
+                self.last_quat = self.quat
+                self.G = np.array([diff[1]*2/dt, diff[2]*2/dt, diff[3]*2/dt])  # gx gy gz
+                # wheeldownforce = vehicle.sensors['electrics']['wheeldownforce']
+                # wheelhorizontalforce = vehicle.sensors['electrics']['wheelhorizontalforce']
+                # wheelslip = vehicle.sensors['electrics']['wheelslip']
+                # wheelsideslip = vehicle.sensors['electrics']['wheelsideslip']
+                # wheelspeed = vehicle.sensors['electrics']['wheelspeed_individual']
+                # self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
+                # self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
+                # self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
+                # self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
+                # self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
+                self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
+                throttle = float(self.vehicle.sensors['electrics']['throttle'])
+                brake = float(self.vehicle.sensors['electrics']['brake'])
+                self.thbr = throttle - brake
+                self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
+                self.gen_BEVmap()
+                if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
+                    self.flipped_over = True
+                if(self.lockstep):
+                    self.bng.pause()
+        except Exception:
+            print(traceback.format_exc())
+
+    def send_ctrl(self, action):
+        st, th = -action[0], action[1]
+        br = 0
+        th_out = th
+        if(th < 0):
+            br = -th
+            th_out = 0
+        if(self.lockstep):
+            self.bng.resume()
+
+        self.vehicle.control(throttle = th_out, brake = br, steering = st)
+
+    def reset(self, start_pos = None):
+        if(start_pos is None):
+            start_pos = np.copy(self.start_pos)
+        self.vehicle.teleport(pos=(start_pos[0], start_pos[1], start_pos[2]))# rot_quat= (start_quat[0], start_quat[1], start_quat[2], start_quat[3]) )
+        self.vehicle.control(throttle = 0, brake = 0, steering = 0)
+        self.flipped_over = False

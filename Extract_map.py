@@ -5,6 +5,7 @@ import math as m
 import traceback
 import numba
 from numba import jit
+import json
 
 positions = np.load('map_data_binary_50/positions.npy')
 color = np.load('map_data_binary_50/color.npy')
@@ -43,7 +44,7 @@ F_inv = m.tan(fov*0.5)/(A/2)
 elevation_map_size = A*8  # this is kinda hacky. There is a way to do this more "programmatically"
 resolution = A/tile_size
 
-elevation_map = np.zeros((int(elevation_map_size + A) , int(elevation_map_size + A)))  
+elevation_map = np.zeros((int(elevation_map_size + A) , int(elevation_map_size + A)), dtype=np.float32)  
 color_map = np.zeros((int(elevation_map_size + A) , int(elevation_map_size + A), 3), dtype=np.uint8)
 segment_map = np.zeros((int(elevation_map_size + A) , int(elevation_map_size + A), 4), dtype=np.uint8)
 for i in range(len(positions)):
@@ -52,9 +53,20 @@ for i in range(len(positions)):
     dt = time.time() - now
     print('Frame: %d/%d, Time: %f' % (i, len(positions), dt))
 
+image_shape = color_map.shape
+resolution = 10 # 5 pixels per meter
+trail_data = json.load(open('meta_data/paths.json', encoding='utf-8'))
+path_map = np.ones_like(color_map)*255
+for line in trail_data:
+    pos = np.array(line["nodes"])[:,:2]
+    img_pos = np.array(pos*resolution + (image_shape[0]//2), dtype= np.int32).reshape((-1, 1, 2))
+    path_map = cv2.polylines(path_map, [img_pos], False, (0,0,0), resolution*3)
+
+path_map = cv2.blur(path_map, (30, 30))
 ## flip image before saving because of north-south flipping
-np.save('map_data/elevation_map.npy', elevation_map)
-cv2.imwrite('map_data/elevation_map.png', (cv2.flip(elevation_map, 0)*65535/100).astype(np.uint16))
-cv2.imwrite('map_data/color_map.png', cv2.flip(color_map, 0))
-cv2.imwrite('map_data/segmt_map.png', cv2.flip(segment_map, 0))
-print("saved image")
+cv2.imwrite('map_data/test_paths.png', path_map)
+cv2.imwrite('map_data/test_elevation_map.png', (elevation_map*65535/100).astype(np.uint16))
+cv2.imwrite('map_data/test_color_map.png', color_map)
+cv2.imwrite('map_data/test_segmt_map.png', segment_map)
+np.save('/home/stark/CSE573/Getting_map_beamNG/map_data/test_elevation_map.npy', elevation_map)
+print("saved")

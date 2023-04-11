@@ -1,263 +1,107 @@
-import time
-from time import sleep
-
-from beamngpy import BeamNGpy, Scenario, Vehicle, set_up_simple_logging
-from beamngpy.sensors import Electrics, Accelerometer
-from pyquaternion import Quaternion
-import math as m
 import numpy as np
-from Bezier import *
+import cv2
+from beamng_interface import *
 import traceback
-from mppi_controller import *
+import torch
+from mppi_torchscript import MPPI
 
-def convert_beamng_to_REP103(rot):
-    rot = Quaternion(rot[2], -rot[0], -rot[1], -rot[3])
-    new = Quaternion([0,m.sqrt(2)/2,m.sqrt(2)/2,0])*rot
-    rot = Quaternion(-new[1], -new[3], -new[0], -new[2])
-    return rot
+def visualization(states, pos, goal, costmap, resolution_inv):
+    goal -= pos
+    map_size = costmap.shape[0]//2
+    goal_X = int((goal[0]*resolution_inv) + map_size)
+    goal_Y = int((goal[1]*resolution_inv) + map_size)
+    cv2.line(costmap, (map_size, map_size), (goal_X, goal_Y), (0,1,0), 1)
+    cv2.circle(costmap, (goal_X, goal_Y), int(resolution_inv*0.2), (1,0,0), -1)
+    if(states is not None):
+        print_states = states
+        x = print_states[:,:,:,0].flatten()
+        y = print_states[:,:,:,1].flatten()
+        X = np.array((x * resolution_inv) + map_size, dtype=np.int32)
+        Y = np.array((y * resolution_inv) + map_size, dtype=np.int32)
+        costmap[Y,X] = np.array([0,0,1])
+    costmap = cv2.resize(costmap, (500,500), interpolation= cv2.INTER_AREA)
+    costmap = cv2.flip(costmap, 0)  # this is just for visualization
+    cv2.imshow("map", costmap)
+    cv2.waitKey(1)
 
-def calc_Transform(quat):
-    q00 = quat[0]**2;
-    q11 = quat[1]**2;
-    q22 = quat[2]**2;
-    q33 = quat[3]**2;
-    q01 =  quat[0]*quat[1];
-    q02 =  quat[0]*quat[2];
-    q03 =  quat[0]*quat[3];
-    q12 =  quat[1]*quat[2];
-    q13 =  quat[1]*quat[3];
-    q23 =  quat[2]*quat[3];
-
-    Tbn = np.zeros((3,3)) # transform body->ned
-    Tbn[0][0] = q00 + q11 - q22 - q33;
-    Tbn[1][1] = q00 - q11 + q22 - q33;
-    Tbn[2][2] = q00 - q11 - q22 + q33;
-    Tbn[0][1] = 2*(q12 - q03);
-    Tbn[0][2] = 2*(q13 + q02);
-    Tbn[1][0] = 2*(q12 + q03);
-    Tbn[1][2] = 2*(q23 - q01);
-    Tbn[2][0] = 2*(q13 - q02);
-    Tbn[2][1] = 2*(q23 + q01);
-
-    Tnb = Tbn.transpose(); # transform ned->body
-    return Tnb, Tbn
-
-def rpy_from_quat(quat):
-    y = np.zeros(3)
-    y[0] = m.atan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2));
-    y[1] = -m.asin(2.0*(quat[1]*quat[3]-quat[0]*quat[2]));
-    y[2] = m.atan2((2.0*(quat[1]*quat[2]+quat[0]*quat[3])) , (quat[0]**2 + quat[1]**2 - quat[2]**2 - quat[3]**2));
-    return y
-
-def steering_limiter(steering_setpoint, wheelspeed, accBF, wheelbase, critical_angle, steering_max, roll_rate, roll):
-    steering_setpoint = steering_setpoint*steering_max
-    intervention = False
-    whspd2 = max(1.0, wheelspeed)
-    whspd2 *= whspd2
-    t_h = m.tan(critical_angle)
-    Aylim_static = t_h * max(1.0, abs(accBF[2]))
-    Aylim_static -= min(Aylim_static, abs(accBF[0]))
-    Aylim_dynamic = Aylim_static*max(m.cos(roll*2),0)
-    steering_limit = abs(m.atan2(wheelbase * Aylim_static, whspd2))
-
-    if(abs(steering_setpoint) > steering_limit):
-        intervention = True
-        steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
-    # print(steering_limit*57.3, t_h, wheelspeed,steering_setpoint*57.3, st_init*57.3)
-    Ay = accBF[1]
-    Ay_error = 0
-    if(abs(accBF[1]) > Aylim_dynamic):
-        intervention = True
-        if(Ay >= 0):
-            Ay_error = Ay - Aylim_dynamic
+def update_goal(goal, pos, target_WP, current_wp_index):
+    if(goal is None):
+        if current_wp_index == 0:
+            return target_WP[current_wp_index,:2], False, current_wp_index
         else:
-            Ay_error = Ay + Aylim_dynamic
-        Ay_rate_error = -roll_rate/(m.fabs(accBF[2])/(accBF[1]**2 + accBF[2]**2))
-        steering_projection_inverse = m.fabs((1/max(m.cos(roll*2),0.01)**2))
-        delta_steering = steering_projection_inverse*(Ay_error + Ay_rate_error*10) * (m.cos(steering_setpoint)**2) * wheelbase / whspd2
-        steering_setpoint += delta_steering
-    steering_setpoint = steering_setpoint/steering_max
-    steering_setpoint = min(max(steering_setpoint, -1.0),1.0)
-    return steering_setpoint, intervention
+            print("bruh moment")
+            return pos, True, current_wp_index ## terminate
+    else:
+        d = np.linalg.norm(goal - pos)
+        if(d < 10 and current_wp_index < len(target_WP) - 1):
+            current_wp_index += 1
+            return target_WP[current_wp_index,:2], False, current_wp_index ## new goal
+        if current_wp_index == len(target_WP):
+            return pos, True, current_wp_index # Terminal condition
+        else:
+            return goal, False, current_wp_index
 
 
-def get_WP(filename):
-    target_WP = np.load(filename,allow_pickle=True)
-    target_WP = np.array(target_WP,dtype=float)
-    target_Vhat = np.zeros_like(target_WP) # 0 out everything
-    cruise_speed = 50
-    for i in range(1,len(target_WP)-1): # all points except first and last
-        V_prev = target_WP[i] - target_WP[i-1]
-        V_next = target_WP[i+1] - target_WP[i]
-        target_Vhat[i] = (V_next + V_prev)/np.linalg.norm(V_next + V_prev)
-    N = 200
-    wp_list = np.zeros((N*len(target_WP),6)) # x,y,z, x^, y^, z^
-    for i in range(len(target_WP)-1):
-        P0 = target_WP[i]
-        P3 = target_WP[i+1]
-        P1,P2 = get_Intermediate_Points_generic(P0,P3,target_Vhat[i],target_Vhat[i+1],cruise_speed,compliment=False)
-        bx,by,bz = get_bezier(P0,P1,P2,P3,float(N))
-        for j in range(N):
-            Curvature,Direction,Normal = get_CTN(P0,P1,P2,P3,float(j)/float(N))
-            wp_list[N*i + j] = np.array([bx[j],by[j],bz[j],Direction[0],Direction[1],Direction[2]])
-    return wp_list, target_WP, target_Vhat
+def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/BeamNG/BeamNG', target_WP = None):
+    map_res = 0.05
+    map_size = 16
 
-def main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time, num_episodes=4):
-    bng = BeamNGpy('localhost', 64256, home='/home/stark/BeamNG/BeamNG', user='/home/stark/BeamNG/BeamNG/userfolder')
-    # Launch BeamNG.tech
-    bng.open()
-    scenario = Scenario(map_name, name="test integration")
-    # vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
-    vehicle = Vehicle('ego_vehicle', model='RG_RC', partConfig='vehicles/RG_RC/Short_Course_Truck.pc')
+    bng_interface = beamng_interface(homedir= BeamNG_dir, userfolder=BeamNG_dir+'/userfolder')
+    bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
+                                start_pos=start_point, start_rot=start_quat)
+    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res)
 
-    scenario.add_vehicle(vehicle, pos=(start_point[0], start_point[1], start_point[2] + 0.5),
-                     rot_quat=(start_quat[0], start_quat[1], start_quat[2], start_quat[3]))
-    bng.set_tod(0.5)
-    scenario.make(bng)
+    # bng_interface.set_lockstep(True)
+    dtype = torch.float
+    d = torch.device("cuda")
+    ns = torch.zeros((2,2), device=d, dtype=dtype)
+    ns[0,0] = 1.0  # steering
+    ns[1,1] = 1.0 # throttle/brake
+    controller = MPPI(nx=17, noise_sigma=ns, num_samples=512, horizon=16, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
+    current_wp_index = 0 # initialize waypoint index with 0
+    goal = None
+    action = np.zeros(2)
 
-    electrics = Electrics()
-    vehicle.attach_sensor('electrics', electrics)
-    bng.load_scenario(scenario)
-    # bng.hide_hud()
-    bng.start_scenario()
-
-    vehicle.poll_sensors()
-    sensors = vehicle.sensors
-    accel = Accelerometer('accel', bng, vehicle, pos = (0, 0.0,0), requested_update_time=0.01, is_using_gravity=False)
-    print("accel attached")
-    sleep(2)
-    print("starting")
-    start = time.time()
-    attempt = 0
-    last_A = 0
-    episode = []
-
-    acc = accel.poll()
-    last_A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
-    vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-    last_quat = convert_beamng_to_REP103(vehicle.state['rotation'])
-    start_turning = False
-    fraction = 1/float(num_episodes)
-    now = time.time()
-    time.sleep(0.02)
-
-    WP_file = "WP_file_arena_plan.npy"
-    wp_list, target_WP, target_Vhat = get_WP(WP_file)
-    costmap_obj = costmap_handler(trajectory = wp_list, make_arena=True)
-    controller = control_system()
-    st = 0
-    th = 1
-    recording = False
-    current_wp_index = 0
-
-    # target_WP = []
-    # target_WP.append([-302, -324,  100])
-
-    # target_WP.append([-268, -324,  100])
-
-    # target_WP.append([-336, -324,  100])
-
-    # target_WP = np.array(target_WP)
-    # target_WP = target_WP[50:]
-    max_wp = len(target_WP)
-    # time.sleep(5)
     while True:
         try:
-            dt = time.time() - now 
-            now = time.time()
-            # print("dt: ",dt*1000)
-            vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-            acc = accel.poll()
-            A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
-            raw_A = np.copy(A)
-            pos = np.copy(vehicle.state['pos'])
-            vel = np.copy(vehicle.state['vel'])
-            vel_wf = np.copy(vehicle.state['vel'])
-            quat = convert_beamng_to_REP103(np.copy(vehicle.state['rotation']))
-            rpy = rpy_from_quat(quat)
-            Tnb, Tbn = calc_Transform(quat)
-            vel = np.matmul(Tnb, vel)
-            diff = quat/last_quat
-            last_quat = quat
-            g_bf = np.matmul(Tnb, np.array([0,0,9.8]))
-            if( np.all(A) == 0):
-                A = last_A
-            else:
-                last_A = A
-            A += g_bf
-            G = np.array([diff[1]*2/dt, diff[2]*2/dt, diff[3]*2/dt])  # gx gy gz
-            wheeldownforce = vehicle.sensors['electrics']['wheeldownforce']
-            wheelhorizontalforce = vehicle.sensors['electrics']['wheelhorizontalforce']
-            wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
-            wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
-            wheelslip = vehicle.sensors['electrics']['wheelslip']
-            wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
-            wheelsideslip = vehicle.sensors['electrics']['wheelsideslip']
-            wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-            wheelspeed = vehicle.sensors['electrics']['wheelspeed_individual']
-            wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
-            steering = vehicle.sensors['electrics']['steering']
-            t = time.time() - start
-            print("true-speed/wheel-speed ratio:",np.linalg.norm(vel)/max(np.mean(np.abs(wheelspeed)),0.1))
-            data = np.hstack((pos, rpy, vel, A, G)) #, t, dt, raw_A, start_turning, wheeldownforce, wheelhorizontalforce, wheelslip, wheelsideslip, wheelspeed, steering))
+            bng_interface.state_poll()
+            # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
+            state =  bng_interface.state
+            pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
+            goal, terminate, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index)
 
-            costmap_obj.create_costmap_truncated(data)
-            d = np.linalg.norm(target_WP[current_wp_index] - pos) 
-            if(d < 5 and current_wp_index < max_wp):
-                current_wp_index += 1
-            if current_wp_index == max_wp:
-                vehicle.control(throttle = 0, brake=0, steering = 0)
-                print("Reached last waypoint.")
-                time.sleep(10)
-                exit()    
+            if(terminate):
+                print("done!")
+                bng_interface.send_ctrl(np.zeros(2))
+                time.sleep(5)
+                exit()
+            ## get robot_centric BEV (not rotated into robot frame)
+            BEV_color = torch.from_numpy(bng_interface.BEV_color).to(d)
+            BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(d)
+            BEV_segmt = torch.from_numpy(bng_interface.BEV_segmt).to(d)
+            BEV_path  = torch.from_numpy(bng_interface.BEV_path).to(d)  # trail/roads
+            BEV_center = torch.from_numpy(pos).to(d)
+            controller.set_BEV(BEV_color, BEV_heght, BEV_segmt, BEV_path, BEV_center)
+            controller.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(d)) # you can also do this asynchronously
 
-            action = controller.update(data, costmap_obj.costmap, target_WP[current_wp_index])
-            delta = time.time() - now
-            action = action.cpu().numpy()
-            action = np.array(action, dtype=np.float64)
-            st, th = -action[0], action[1]
-            br = 0
-            th_out = th
-            if(th < 0):
-                br = -th
-                th_out = 0
-            vehicle.control(throttle = th_out, brake=br, steering = st)
+            state[:3] = np.zeros(3)  # this is for the MPPI: technically this should be state[:3] -= BEV_center
+
+            action = np.array(controller.forward(torch.from_numpy(state).to(d)).cpu().numpy(), dtype=np.float64)[0]
+
+            visualization(controller.states.cpu().numpy(), pos, np.copy(goal), BEV_path.cpu().numpy(), 1/map_res)
+
+            bng_interface.send_ctrl(action)
+
         except Exception:
             print(traceback.format_exc())
-    # bng.close()
+    bng_interface.bng.close()
 
 
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-340, -260,  100.56901635])
-    start_quat = np.array([0, 0, 0, 1])
-    turn_point = np.array([-798.569961,  -716.46442828,  100.87442045])
-    folder_name = "tripped_flat_with_correction"
-    map_name = "gridmap_v2"
-    speed_target = 18.0
-    episode_time = 10.0
-    main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
-    # time.sleep(2)
-    # # position of the vehicle for untripped_flat on smallgrid:
-
-    # start_point = np.array([-86.52589376, 321.26751955, 0.0])
-    # start_point = np.array([0,0, 0.0])
-    # start_quat = np.array([0.0, 0.0, 1.0, 0.0])
-    # # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    # turn_point = np.array([0, 50.0 ,0])
-    # folder_name = "controller_test"
-    # map_name = "smallgrid"
-    # speed_target = 18.0
-    # episode_time = 10.0
-    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
-    # time.sleep(2)
-    # position of the vehicle for mixed_offroad on small_island:
-    # start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
-    # start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    # turn_point = np.array([-101.02775679,  291.77741613,   37.28218909])
-    # folder_name = "mixed_offroad_with_correction"
-    # map_name = "small_island"
-    # speed_target = 12.0
-    # episode_time = 15.0
-    # main(start_point, start_quat, turn_point, folder_name, map_name, speed_target, episode_time)
+    start_point = np.array([-67, 336, 34.5])
+    start_quat = np.array([0, 0, 0.3826834, 0.9238795])
+    map_name = "small_island"
+    target_WP = np.load('WP_file_offroad.npy')
+    main(map_name,start_point, start_quat, target_WP=target_WP)
