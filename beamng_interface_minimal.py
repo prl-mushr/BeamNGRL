@@ -8,7 +8,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
     map_size = 16 # 16 x 16 map
 
     bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
-    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
+    bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
                                 start_pos=start_point, start_rot=start_quat)
     bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/', rotate=False)
     # set lock-step to true if you want the simulator to pause while you calculate the controls:
@@ -46,7 +46,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
             ## example of how to send controls:
             ## steering is 0th index, throttle/brake/reverse is 1st index. steering is +ve when turning left (following ROS REP103 convention)
             action = np.ones(2, dtype=np.float64)  # has to be numpy array. The inputs are always between (-1.0, 1.0) (for both throttle and steering)
-            bng_interface.send_ctrl(action)
+            # bng_interface.send_ctrl(action)
 
             ## check if the car has flipped over. This can be replaced by whatever your reset condition is
             if(bng_interface.flipped_over):

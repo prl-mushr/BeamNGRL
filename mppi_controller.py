@@ -158,7 +158,7 @@ class control_system():
 		accel_cost = accel**2
 		# accel_cost[np.where(vx < 15)] *= 0.01
 
-		return 10*vel_cost + state_cost + vx[0]*accel_cost + 1*torch.abs(vy)
+		return 10*vel_cost + state_cost + vx*accel_cost + 1*torch.abs(vy)
 
 
 class costmap_handler():

@@ -129,14 +129,15 @@ class MPPI(torch.nn.Module):
         self.lr = torch.tensor(0.24).to(self.d)
         self.Iz = torch.tensor(0.02).to(self.d)
 
-        self.steering_max = torch.tensor(25/57.3).to(self.d)
+        self.steering_max = torch.tensor(30/57.3).to(self.d)
         self.wheelspeed_max = torch.tensor(17.0).to(self.d)
         self.dt_var = torch.tensor(0.05).to(self.d)#torch.arange(0.02, 0.1, 0.08/self.T).to(self.d)
-        self.dt = torch.tensor(0.05).to(self.d)
+        self.dt = torch.tensor(0.02).to(self.d)
         self.gravity = torch.tensor(9.8).to(self.d)
         self.last_action = torch.zeros((self.u_per_command, 2)).to(self.d)
         self.curvature_max = torch.tan(self.steering_max)/ (self.lf + self.lr)
-        self.max_speed = torch.tensor(10.0).to(self.d)
+        self.max_curvature_rate = self.curvature_max * 20 * self.dt
+        self.max_speed_rate = self.gravity * self.dt
 
     def reset(self):
         """
@@ -154,11 +155,8 @@ class MPPI(torch.nn.Module):
         self.U = torch.roll(self.U, -1, dims=0)
         self.U[-1] = self.u_init
         state[15:17] = self.last_action[0]
-        self.dt_var = self.dt * torch.tensor(10.0)/ torch.clamp(state[6], 8, 10)
-        delta_action = self._command(state)
-        action = delta_action*self.dt_var + self.last_action
-        action = torch.clamp(action, -1, 1)
-        self.last_action = torch.clone(action)
+        self.dt_var = self.dt # * torch.tensor(10.0)/ torch.clamp(state[6], 4, 10)
+        action = self._command(state)
         return action
 
     def _command(self, state):
@@ -193,22 +191,13 @@ class MPPI(torch.nn.Module):
 
     def _compute_rollout_costs(self, _state, perturbed_actions):
         # M bins per control traj, K rollouts.
-        state = _state.view(1, -1).repeat(self.M, self.K, 1)
-        cost_samples = torch.zeros((self.M, self.K)).to(self.d)
-        for t in range(self.T):
-            ## M possible bins for controls
-            u = perturbed_actions[:, t].repeat(self.M, 1, 1).to(self.dtype)
-            state = self.dynamics(state, u, t)
-            self.states[:,:,t,:] = state
-            cost_samples += self.running_cost(state)
-            
-        # self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
-        # self.states = self.vectorized_dynamics(self.states, perturbed_actions)
-        # cost_samples, terminal_cost = self.running_cost(self.states)
+        self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
+        self.states = self.vectorized_dynamics(self.states, perturbed_actions)
+        cost_samples, terminal_cost = self.running_cost(self.states)
         ## terminal cost is not really needed since you could just do that in the running-cost cost function!
         ## dimension 0 is self.M !
         # print(cost_samples.var(dim=0).shape)
-        self.cost_total = cost_samples.mean(dim=0)# + terminal_cost.mean(dim=0)
+        self.cost_total = torch.sum(cost_samples, dim=2).mean(dim=0) + terminal_cost.mean(dim=0)
 
     @torch.jit.export
     def set_goal(self, goal_state):
@@ -223,47 +212,6 @@ class MPPI(torch.nn.Module):
     @torch.jit.export
     def get_states(self):
         return self.states
-
-    def dynamics(self, state, perturbed_actions, t:int):
-        x = state[:, :, 0]
-        y = state[:, :, 1]
-        z = state[:, :, 2]
-        roll = state[:, :, 3]
-        pitch = state[:, :, 4]
-        yaw = state[:, :, 5]
-        vx = state[:, :,6]
-        vy = state[:, :,7]
-        vz = state[:, :,8]
-        ax = state[:, :,9]
-        ay = state[:, :,10]
-        az = state[:, :,11]
-        gx = state[:, :,12]
-        gy = state[:, :,13]
-        gz = state[:, :,14]
-
-        u0 = torch.clamp(state[:, :, 15] + perturbed_actions[:,:,0] * self.dt_var, -1, 1)
-        u1 = torch.clamp(state[:, :, 16] + perturbed_actions[:,:,1] * self.dt_var, -1, 1)
-        
-        v = torch.sqrt(vx**2 + vy**2)
-        Frx = u1*torch.tensor(5)
-        pos_index = torch.where(Frx>0)
-        Frx[pos_index] = torch.clamp(Frx[pos_index]*5/torch.clamp(v[pos_index],5,30),0,5)
-
-        delta = u0*self.steering_max
-        alphaf = delta - torch.atan2(gz*self.lf + vy, vx) 
-        alphar = torch.atan2(gz*self.lr - vy, vx)
-        Fry = self.D*torch.sin(self.C*torch.atan(self.B*alphar))
-        Ffy = self.D*torch.sin(self.C*torch.atan(self.B*alphaf))
-        ax = (Frx - Ffy*torch.sin(delta) + vy*gz) + self.gravity*torch.sin(pitch)
-        ay = (Fry + Ffy*torch.cos(delta) - vx*gz) - self.gravity*torch.sin(roll)
-        vx = vx + ax*self.dt_var
-        vy = vy + ay*self.dt_var
-        gz = gz + self.dt_var*(Ffy*self.lf*torch.cos(delta) - Fry*self.lr)/self.Iz
-        x =  x + (torch.cos(yaw)*vx - torch.sin(yaw)*vy)*self.dt_var
-        y = y + (torch.sin(yaw)*vx + torch.cos(yaw)*vy)*self.dt_var
-        yaw = yaw + self.dt_var*gz
-
-        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, u0, u1), dim=2)
 
     def vectorized_dynamics(self, state, perturbed_actions):
         x = state[:, :, :, 0]
@@ -282,31 +230,34 @@ class MPPI(torch.nn.Module):
         gy = state[:, :, :,13]
         gz = state[:, :, :,14]
 
-        u0 = state[:, :, :, 15] + perturbed_actions[:,:, 0].unsqueeze(dim=0) * self.dt
-        u1 = state[:, :, :, 16] + perturbed_actions[:,:, 1].unsqueeze(dim=0) * self.dt
+        curvature = perturbed_actions[:,:, 0].unsqueeze(dim=0) * self.max_curvature_rate
+        curvature[:,:,:-1] = torch.cumsum(torch.clamp(torch.diff(curvature, dim=2), -self.max_curvature_rate, self.max_curvature_rate), dim=2)
 
-        curvature = u0 * self.curvature_max  # this is just a placeholder for curvature since steering correlates to curvature
-        speed = u1 * self.wheelspeed_max  # this is a placeholder for speed
+        speed = perturbed_actions[:,:, 1].unsqueeze(dim=0) * self.wheelspeed_max
+        speed[:,:,:-1] = torch.cumsum(torch.clamp(torch.diff(speed, dim=2), -self.max_speed_rate, self.max_speed_rate), dim=2)
+
+        u0 = curvature/self.curvature_max
+        u1 = speed/self.wheelspeed_max
+
         yaw = yaw + torch.cumsum(speed * curvature * self.dt, dim=2)  # this is what the yaw will become
         x = x + torch.cumsum(speed * torch.cos(yaw) * self.dt, dim=2)
         y = y + torch.cumsum(speed * torch.sin(yaw) * self.dt, dim=2)
         return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, u0, u1), dim=3)
 
     def running_cost(self, state):
-        x = state[ :, :, 0]
-        y = state[ :, :, 1]
-        vx =state[ :, :, 6]
-        ay =state[ :, :, 9]
+        x = state[:, :, :, 0]
+        y = state[:, :, :, 1]
+        vx =state[:, :, :, 6]
+        ay =state[:, :, :, 9]
 
         img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         state_cost = self.BEVmap[img_Y, img_X]
-        state_cost *= state_cost
-        state_cost[torch.where(state_cost>=0.9)] = 100
-        vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
-        vel_cost = torch.sqrt(vel_cost)
-
-        return 1.5*vel_cost + state_cost
+        # state_cost[torch.where(state_cost > 0.99)]
+        vel_cost = torch.clamp(vx - 5, 0, 10)
+        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state, dim=2)
+        state_cost = 10*vel_cost + state_cost
+        return state_cost, terminal_cost
 
 
 

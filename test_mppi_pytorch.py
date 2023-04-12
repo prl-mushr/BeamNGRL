@@ -42,23 +42,23 @@ def update_goal(goal, pos, target_WP, current_wp_index):
             return goal, False, current_wp_index
 
 
-def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
-    map_res = 0.05
-    map_size = 16 # 16 x 16 map
+def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP=None):
+    map_res = 0.1
+    map_size = 32 # 16 x 16 map
 
     bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
-    bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
+    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
                                 start_pos=start_point, start_rot=start_quat)
     bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
 
 
     # bng_interface.set_lockstep(True)
     dtype = torch.float
-    d = torch.device("cuda")
+    d = torch.device("cpu")
     ns = torch.zeros((2,2), device=d, dtype=dtype)
-    ns[0,0] = 1.0  # steering
-    ns[1,1] = 1.0 # throttle/brake
-    controller = MPPI(nx=17, noise_sigma=ns, num_samples=512, horizon=16, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
+    ns[0,0] = 0.5  # steering
+    ns[1,1] = 0.5 # throttle/brake
+    controller = MPPI(nx=17, noise_sigma=ns, num_samples=512, horizon=20, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
     current_wp_index = 0 # initialize waypoint index with 0
     goal = None
     action = np.zeros(2)
@@ -89,7 +89,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
 
             action = np.array(controller.forward(torch.from_numpy(state).to(d)).cpu().numpy(), dtype=np.float64)[0]
 
-            visualization(controller.states.cpu().numpy(), pos, np.copy(goal), BEV_path.cpu().numpy(), 1/map_res)
+            visualization(controller.states.cpu().numpy(), pos, np.copy(goal), np.copy(BEV_path.cpu().numpy()), 1/map_res)
 
             bng_interface.send_ctrl(action)
 
@@ -101,8 +101,8 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 34.5])
-    start_quat = np.array([0, 0, 0.3826834, 0.9238795])
+    start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
+    start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
     map_name = "small_island"
     target_WP = np.load('WP_file_offroad.npy')
     main(map_name,start_point, start_quat, target_WP=target_WP)

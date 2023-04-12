@@ -31,7 +31,7 @@ class beamng_interface():
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
                       time_of_day=1200, hide_hud=False, fps=60):
-        self.scenario = Scenario('small_island', name="test integration")
+        self.scenario = Scenario(scenario_name, name="test integration")
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 

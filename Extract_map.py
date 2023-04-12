@@ -13,7 +13,7 @@ depth = np.load('map_data_binary_50/depth.npy')
 segmt = np.load('map_data_binary_50/segment.npy')
 
 ## photogrammetry. Yes I'm old school.
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def photogrammetry(depth_image, elevation_map, pos, color_image, color_map, segment_image, segment_map):
     CX_DEPTH = depth_image.shape[0]/2
     CY_DEPTH = depth_image.shape[1]/2
