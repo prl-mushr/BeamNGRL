@@ -139,6 +139,24 @@ class beamng_interface():
         self.BEV_heght -= self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
         self.BEV_heght = np.clip(self.BEV_heght, -2.0, 2.0)
 
+        self.BEV_normal = self.compute_surface_normals()
+
+    def compute_surface_normals(self):
+        # Compute the gradient of the elevation map using the Sobel operator
+        dzdx = cv2.Sobel(self.BEV_heght, cv2.CV_32F, 1, 0, ksize=3)
+        dzdy = cv2.Sobel(self.BEV_heght, cv2.CV_32F, 0, 1, ksize=3)
+
+        # Compute the normal vector as the cross product of the x and y gradients
+        normal_x = -dzdx
+        normal_y = -dzdy
+        normal_z = np.ones_like(self.BEV_heght)
+        normals = np.stack([normal_x, normal_y, normal_z], axis=-1)
+
+        # Normalize the normal vectors
+        norms = np.linalg.norm(normals, axis=-1, keepdims=True)
+        normals = normals / norms
+        return normals
+
     def rpy_from_quat(self, quat):
         y = np.zeros(3)
         y[0] = np.arctan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2));

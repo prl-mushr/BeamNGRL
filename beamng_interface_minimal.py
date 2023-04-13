@@ -34,12 +34,13 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
             BEV_heght = (bng_interface.BEV_heght + 2.0)/4.0  # note that BEV_heght (elevation) has a range of +/- 2 meters around the center of the elevation.
             BEV_segmt = bng_interface.BEV_segmt
             BEV_path  = bng_interface.BEV_path  # trail/roads
+            BEV_normal = bng_interface.BEV_normal
             ## displaying BEV for visualization:
             BEV = cv2.resize(BEV_color, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('color', BEV)
             BEV = cv2.resize(BEV_heght, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('height', BEV)
-            BEV = cv2.resize(BEV_segmt, (500,500), interpolation= cv2.INTER_AREA)
+            BEV = cv2.resize(BEV_normal, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
             ## you can now "encapsulate the BEV and state into whatever form of "observation" you want.
