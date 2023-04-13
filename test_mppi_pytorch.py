@@ -24,7 +24,7 @@ def visualization(states, pos, goal, costmap, resolution_inv):
     cv2.imshow("map", costmap)
     cv2.waitKey(1)
 
-def update_goal(goal, pos, target_WP, current_wp_index):
+def update_goal(goal, pos, target_WP, current_wp_index, lookahead):
     if(goal is None):
         if current_wp_index == 0:
             return target_WP[current_wp_index,:2], False, current_wp_index
@@ -33,7 +33,7 @@ def update_goal(goal, pos, target_WP, current_wp_index):
             return pos, True, current_wp_index ## terminate
     else:
         d = np.linalg.norm(goal - pos)
-        if(d < 10 and current_wp_index < len(target_WP) - 1):
+        if(d < lookahead and current_wp_index < len(target_WP) - 1):
             current_wp_index += 1
             return target_WP[current_wp_index,:2], False, current_wp_index ## new goal
         if current_wp_index == len(target_WP):
@@ -44,7 +44,7 @@ def update_goal(goal, pos, target_WP, current_wp_index):
 
 def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP=None):
     map_res = 0.1
-    map_size = 32 # 16 x 16 map
+    map_size = 64 # 16 x 16 map
 
     bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
     bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
@@ -52,13 +52,13 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
     bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
 
 
-    # bng_interface.set_lockstep(True)
+    bng_interface.set_lockstep(True)
     dtype = torch.float
     d = torch.device("cpu")
     ns = torch.zeros((2,2), device=d, dtype=dtype)
     ns[0,0] = 0.5  # steering
     ns[1,1] = 0.5 # throttle/brake
-    controller = MPPI(nx=17, noise_sigma=ns, num_samples=512, horizon=20, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
+    controller = MPPI(nx=17, noise_sigma=ns, num_samples=256, horizon=30, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
     current_wp_index = 0 # initialize waypoint index with 0
     goal = None
     action = np.zeros(2)
@@ -69,7 +69,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
             # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
             state =  bng_interface.state
             pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
-            goal, terminate, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index)
+            goal, terminate, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, 20)
 
             if(terminate):
                 print("done!")
@@ -96,7 +96,6 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
         except Exception:
             print(traceback.format_exc())
     bng_interface.bng.close()
-
 
 
 if __name__ == '__main__':

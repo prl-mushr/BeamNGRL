@@ -125,9 +125,9 @@ class MPPI(torch.nn.Module):
         self.B = torch.tensor(2.58).to(self.d)
         self.C = torch.tensor(1.2).to(self.d)
         self.D = torch.tensor(9.8 * 0.9).to(self.d)
-        self.lf = torch.tensor(0.24).to(self.d)
-        self.lr = torch.tensor(0.24).to(self.d)
-        self.Iz = torch.tensor(0.02).to(self.d)
+        self.lf = torch.tensor(1.4).to(self.d)
+        self.lr = torch.tensor(1.4).to(self.d)
+        self.Iz = torch.tensor(1).to(self.d)
 
         self.steering_max = torch.tensor(25/57.3).to(self.d)
         self.wheelspeed_max = torch.tensor(17.0).to(self.d)
@@ -136,7 +136,7 @@ class MPPI(torch.nn.Module):
         self.gravity = torch.tensor(9.8).to(self.d)
         self.last_action = torch.zeros((self.u_per_command, 2)).to(self.d)
         self.curvature_max = torch.tan(self.steering_max)/ (self.lf + self.lr)
-        self.max_speed = torch.tensor(10.0).to(self.d)
+        self.max_speed = torch.tensor(20.0).to(self.d)
 
     def reset(self):
         """
@@ -154,9 +154,9 @@ class MPPI(torch.nn.Module):
         self.U = torch.roll(self.U, -1, dims=0)
         self.U[-1] = self.u_init
         state[15:17] = self.last_action[0]
-        self.dt_var = self.dt * torch.tensor(10.0)/ torch.clamp(state[6], 8, 10)
+        self.dt_var = self.dt# * torch.tensor(10.0)/ torch.clamp(state[6], 8, 10)
         delta_action = self._command(state)
-        action = delta_action*self.dt_var + self.last_action
+        action = delta_action*self.dt + self.last_action
         action = torch.clamp(action, -1, 1)
         self.last_action = torch.clone(action)
         return action
@@ -201,14 +201,14 @@ class MPPI(torch.nn.Module):
             state = self.dynamics(state, u, t)
             self.states[:,:,t,:] = state
             cost_samples += self.running_cost(state)
-            
+        terminal_cost = self.terminal_cost(self.states)
         # self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
         # self.states = self.vectorized_dynamics(self.states, perturbed_actions)
         # cost_samples, terminal_cost = self.running_cost(self.states)
         ## terminal cost is not really needed since you could just do that in the running-cost cost function!
         ## dimension 0 is self.M !
         # print(cost_samples.var(dim=0).shape)
-        self.cost_total = cost_samples.mean(dim=0)# + terminal_cost.mean(dim=0)
+        self.cost_total = cost_samples[0]# + terminal_cost
 
     @torch.jit.export
     def set_goal(self, goal_state):
@@ -247,7 +247,7 @@ class MPPI(torch.nn.Module):
         v = torch.sqrt(vx**2 + vy**2)
         Frx = u1*torch.tensor(5)
         pos_index = torch.where(Frx>0)
-        Frx[pos_index] = torch.clamp(Frx[pos_index]*5/torch.clamp(v[pos_index],5,30),0,5)
+        Frx[pos_index] = torch.clamp(Frx[pos_index]*25/torch.clamp(v[pos_index],5,30),0,5)
 
         delta = u0*self.steering_max
         alphaf = delta - torch.atan2(gz*self.lf + vy, vx) 
@@ -293,10 +293,10 @@ class MPPI(torch.nn.Module):
         return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, u0, u1), dim=3)
 
     def running_cost(self, state):
-        x = state[ :, :, 0]
-        y = state[ :, :, 1]
-        vx =state[ :, :, 6]
-        ay =state[ :, :, 9]
+        x = state[:, :, 0]
+        y = state[:, :, 1]
+        vx =state[:, :, 6]
+        ay =state[:, :, 9]
 
         img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
@@ -305,8 +305,30 @@ class MPPI(torch.nn.Module):
         state_cost[torch.where(state_cost>=0.9)] = 100
         vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
         vel_cost = torch.sqrt(vel_cost)
+        accel_cost = (ay*0.1)**2
+        accel_cost[torch.where(torch.abs(ay) > 5)] = 100
+        return 1.5*vel_cost + state_cost + accel_cost
 
-        return 1.5*vel_cost + state_cost
+    def cost_vectorized(self, state):
+        x = state[:, :, :, 0]
+        y = state[:, :, :, 1]
+        vx =state[:, :, :, 6]
+        ay =state[:, :, :, 9]
+
+        img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
+        img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
+        state_cost = self.BEVmap[img_Y, img_X]
+        state_cost *= state_cost
+        state_cost[torch.where(state_cost>=0.9)] = 100
+        vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
+        vel_cost = torch.sqrt(vel_cost)
+        accel_cost = (ay*0.1)**2
+        accel_cost[torch.where(torch.abs(ay) > 5)] = 100
+        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
+        return 0.05*vel_cost + state_cost + accel_cost, terminal_cost
+
+    def terminal_cost(self, state):
+        return torch.linalg.norm(state[0,:,-1,:2] - self.goal_state, dim=1)
 
 
 

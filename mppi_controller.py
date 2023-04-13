@@ -159,7 +159,7 @@ class control_system:
 		vel_cost = torch.sqrt(vel_cost)
 		accel = ay*0.1
 		accel_cost = accel**2
-		accel_cost[torch.where(accel > 0.5)] = 100
+		accel_cost[torch.where(torch.abs(accel) > 0.5)] = 100
 		return 0.05*vel_cost + state_cost + accel_cost
 
 	def terminal_cost(self, state, action):
