@@ -86,6 +86,7 @@ class MPPI(torch.nn.Module):
         self.noise_sigma = noise_sigma.to(self.d)
         self.noise_sigma_inv = torch.inverse(self.noise_sigma).to(self.d)
         self.noise = torch.matmul(torch.randn((self.K, self.T, self.nu), device = self.d), self.noise_sigma) + self.noise_mu  # scale and add mean
+        self.noise_dist = MultivariateNormal(self.noise_mu, covariance_matrix=self.noise_sigma)
 
         self.u_per_command = u_per_command
         # T x nu control sequence
@@ -177,7 +178,8 @@ class MPPI(torch.nn.Module):
     def _compute_total_cost_batch(self, state):
         # parallelize sampling across trajectories
         # resample noise each time we take an action
-        self.noise = torch.matmul(torch.randn((self.K, self.T, self.nu), device = self.d), self.noise_sigma) + self.noise_mu  # scale and add mean
+        # self.noise = torch.matmul(torch.randn((self.K, self.T, self.nu), device = self.d), self.noise_sigma) + self.noise_mu  # scale and add mean
+        self.noise = self.noise_dist.sample((self.K, self.T))
         # broadcast own control to noise over samples; now it's K x T x nu
         perturbed_action = self.U + self.noise
 
@@ -192,23 +194,24 @@ class MPPI(torch.nn.Module):
         return self.cost_total
 
     def _compute_rollout_costs(self, _state, perturbed_actions):
-        # M bins per control traj, K rollouts.
-        state = _state.view(1, -1).repeat(self.M, self.K, 1)
-        cost_samples = torch.zeros((self.M, self.K)).to(self.d)
-        for t in range(self.T):
-            ## M possible bins for controls
-            u = perturbed_actions[:, t].repeat(self.M, 1, 1).to(self.dtype)
-            state = self.dynamics(state, u, t)
-            self.states[:,:,t,:] = state
-            cost_samples += self.running_cost(state)
-        terminal_cost = self.terminal_cost(self.states)
-        # self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
-        # self.states = self.vectorized_dynamics(self.states, perturbed_actions)
-        # cost_samples, terminal_cost = self.running_cost(self.states)
+        ## M bins per control traj, K rollouts.
+
+        # state = _state.view(1, -1).repeat(self.M, self.K, 1)
+        # for t in range(self.T):
+        #     ## M possible bins for controls
+        #     u = perturbed_actions[:, t].repeat(self.M, 1, 1).to(self.dtype)
+        #     state = self.dynamics(state, u, t)
+        #     self.states[:,:,t,:] = state
+        #     cost_samples += self.running_cost(state)
+        # terminal_cost = self.terminal_cost(self.states)
+
+        self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
+        self.states = self.vectorized_dynamics(self.states, perturbed_actions)
+        cost_samples, terminal_cost = self.cost_vectorized(self.states)
         ## terminal cost is not really needed since you could just do that in the running-cost cost function!
         ## dimension 0 is self.M !
         # print(cost_samples.var(dim=0).shape)
-        self.cost_total = cost_samples[0]# + terminal_cost
+        self.cost_total = torch.sum(cost_samples.mean(dim=0), dim=1) + terminal_cost.mean(dim=0)
 
     @torch.jit.export
     def set_goal(self, goal_state):
@@ -247,7 +250,7 @@ class MPPI(torch.nn.Module):
         v = torch.sqrt(vx**2 + vy**2)
         Frx = u1*torch.tensor(5)
         pos_index = torch.where(Frx>0)
-        Frx[pos_index] = torch.clamp(Frx[pos_index]*25/torch.clamp(v[pos_index],5,30),0,5)
+        Frx[pos_index] = torch.clamp(Frx[pos_index]*5/torch.clamp(v[pos_index],5,30),0,5)
 
         delta = u0*self.steering_max
         alphaf = delta - torch.atan2(gz*self.lf + vy, vx) 
@@ -282,15 +285,25 @@ class MPPI(torch.nn.Module):
         gy = state[:, :, :,13]
         gz = state[:, :, :,14]
 
-        u0 = state[:, :, :, 15] + perturbed_actions[:,:, 0].unsqueeze(dim=0) * self.dt
-        u1 = state[:, :, :, 16] + perturbed_actions[:,:, 1].unsqueeze(dim=0) * self.dt
+        u0 = state[:, :, :, 15] + torch.cumsum(perturbed_actions[:,:, 0].unsqueeze(dim=0) * self.dt, dim=2)
+        u1 = state[:, :, :, 16] + torch.cumsum(perturbed_actions[:,:, 1].unsqueeze(dim=0) * self.dt, dim=2)
 
         curvature = u0 * self.curvature_max  # this is just a placeholder for curvature since steering correlates to curvature
-        speed = u1 * self.wheelspeed_max  # this is a placeholder for speed
-        yaw = yaw + torch.cumsum(speed * curvature * self.dt, dim=2)  # this is what the yaw will become
-        x = x + torch.cumsum(speed * torch.cos(yaw) * self.dt, dim=2)
-        y = y + torch.cumsum(speed * torch.sin(yaw) * self.dt, dim=2)
-        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, u0, u1), dim=3)
+        
+        pos_index = torch.where(u1 > 0)
+        ax = u1
+        ax[pos_index] = torch.clamp(ax[pos_index]*5/torch.abs(vx[pos_index]),0,5)
+        
+        vx = vx + torch.cumsum(ax * self.dt, dim=2)
+        gz = vx * curvature
+
+        ay = vx * gz
+
+        yaw = yaw + torch.cumsum(gz * self.dt, dim=2)  # this is what the yaw will become
+        x = x + torch.cumsum(vx * torch.cos(yaw) * self.dt, dim=2)
+        y = y + torch.cumsum(vx * torch.sin(yaw) * self.dt, dim=2)
+
+        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, gx, gy, gz, u0, u1), dim=3).to(dtype=self.dtype)
 
     def running_cost(self, state):
         x = state[:, :, 0]
@@ -307,7 +320,7 @@ class MPPI(torch.nn.Module):
         vel_cost = torch.sqrt(vel_cost)
         accel_cost = (ay*0.1)**2
         accel_cost[torch.where(torch.abs(ay) > 5)] = 100
-        return 1.5*vel_cost + state_cost + accel_cost
+        return 0.05*vel_cost + state_cost + accel_cost
 
     def cost_vectorized(self, state):
         x = state[:, :, :, 0]
@@ -319,13 +332,13 @@ class MPPI(torch.nn.Module):
         img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         state_cost = self.BEVmap[img_Y, img_X]
         state_cost *= state_cost
-        state_cost[torch.where(state_cost>=0.9)] = 100
+        state_cost[torch.where(state_cost>=0.9)] = torch.tensor(1000.0, dtype=self.dtype)
         vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
         vel_cost = torch.sqrt(vel_cost)
         accel_cost = (ay*0.1)**2
-        accel_cost[torch.where(torch.abs(ay) > 5)] = 100
+        accel_cost[torch.where(torch.abs(ay) > 5)] = torch.tensor(100.0, dtype=self.dtype)
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
-        return 0.05*vel_cost + state_cost + accel_cost, terminal_cost
+        return 0.5*vel_cost + state_cost + accel_cost, terminal_cost
 
     def terminal_cost(self, state):
         return torch.linalg.norm(state[0,:,-1,:2] - self.goal_state, dim=1)

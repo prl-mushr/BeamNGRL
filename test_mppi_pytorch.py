@@ -3,7 +3,7 @@ import cv2
 from beamng_interface import *
 import traceback
 import torch
-from mppi_torchscript import MPPI
+from mppi_torchscript_vectorized import MPPI
 
 def visualization(states, pos, goal, costmap, resolution_inv):
     goal -= pos
@@ -52,13 +52,13 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
     bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
 
 
-    bng_interface.set_lockstep(True)
+    # bng_interface.set_lockstep(True)
     dtype = torch.float
-    d = torch.device("cpu")
+    d = torch.device("cuda")
     ns = torch.zeros((2,2), device=d, dtype=dtype)
-    ns[0,0] = 0.5  # steering
+    ns[0,0] = 1.0  # steering
     ns[1,1] = 0.5 # throttle/brake
-    controller = MPPI(nx=17, noise_sigma=ns, num_samples=256, horizon=30, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
+    controller = MPPI(nx=17, noise_sigma=ns, num_samples=256, horizon=64, lambda_=0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
     current_wp_index = 0 # initialize waypoint index with 0
     goal = None
     action = np.zeros(2)
@@ -100,8 +100,8 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-86.52589376, 322.26751955,  35.33346797]) 
-    start_quat = np.array([ 0.02423989, -0.05909005,  0.19792375,  0.97813445])
-    map_name = "small_island"
+    start_point = np.array([-67, 336, 0.5])
+    start_quat = np.array([0, 0, 0.3826834, 0.9238795])
+    map_name = "smallgrid"
     target_WP = np.load('WP_file_offroad.npy')
     main(map_name,start_point, start_quat, target_WP=target_WP)
