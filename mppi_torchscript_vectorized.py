@@ -37,8 +37,8 @@ class MPPI(torch.nn.Module):
                  rollout_var_discount=0.95,
                  sample_null_action=False,
                  noise_abs_cost=False,
-                 BEVmap_size=20,
-                 BEVmap_res=0.4):
+                 BEVmap_size=64,
+                 BEVmap_res=0.25):
         """
         :param dynamics: function(state, action) -> next_state (K x nx) taking in batch state (K x nx) and action (K x nu)
         :param running_cost: function(state, action) -> cost (K) taking in batch state and action (same as dynamics)
@@ -129,14 +129,14 @@ class MPPI(torch.nn.Module):
         self.lr = torch.tensor(1.4).to(self.d)
         self.Iz = torch.tensor(1).to(self.d)
 
-        self.steering_max = torch.tensor(25/57.3).to(self.d)
+        self.steering_max = torch.tensor(35/57.3).to(self.d)
         self.wheelspeed_max = torch.tensor(17.0).to(self.d)
         self.dt_var = torch.tensor(0.05).to(self.d)#torch.arange(0.02, 0.1, 0.08/self.T).to(self.d)
         self.dt = torch.tensor(0.02).to(self.d)
         self.gravity = torch.tensor(9.8).to(self.d)
         self.last_action = torch.zeros((self.u_per_command, 2)).to(self.d)
         self.curvature_max = torch.tan(self.steering_max)/ (self.lf + self.lr)
-        self.max_speed = torch.tensor(20.0).to(self.d)
+        self.max_speed = torch.tensor(10.0).to(self.d)
 
     def reset(self):
         """
@@ -169,9 +169,9 @@ class MPPI(torch.nn.Module):
 
         eta = torch.sum(self.cost_total_non_zero)
         self.omega = (1. / eta) * self.cost_total_non_zero
-        # self.U = self.U + (self.omega.view(-1, 1, 1) * self.noise).sum(dim=0) ## this method is ~ 50 % faster
-        for t in range(self.T):
-            self.U[t] = self.U[t] + torch.sum(self.omega.view(-1, 1) * self.noise[:, t], dim=0)
+        self.U = self.U + (self.omega.view(-1, 1, 1) * self.noise).sum(dim=0) ## this method is ~ 50 % faster
+        # for t in range(self.T):
+        #     self.U[t] = self.U[t] + torch.sum(self.omega.view(-1, 1) * self.noise[:, t], dim=0)
         return self.U[:self.u_per_command]
 
     def _compute_total_cost_batch(self, state):
@@ -231,9 +231,9 @@ class MPPI(torch.nn.Module):
         u0 = state[:, :, :, 15] + torch.cumsum(perturbed_actions[:,:, 0].unsqueeze(dim=0) * self.dt, dim=2)
         u1 = state[:, :, :, 16] + torch.cumsum(perturbed_actions[:,:, 1].unsqueeze(dim=0) * self.dt, dim=2)
 
-        curvature = u0 * self.curvature_max  # this is just a placeholder for curvature since steering correlates to curvature
+        curvature = torch.tan(u0 * self.steering_max)/ (self.lf + self.lr) # this is just a placeholder for curvature since steering correlates to curvature
         
-        ax = u1 * self.wheelspeed_max       
+        ax = u1 * self.wheelspeed_max     
         vx = vx + torch.cumsum(ax * self.dt, dim=2)
         gz = vx * curvature
 
@@ -250,7 +250,7 @@ class MPPI(torch.nn.Module):
         x = state[:, :, :, 0]
         y = state[:, :, :, 1]
         vx =state[:, :, :, 6]
-        ay =state[:, :, :, 9]
+        ay =state[:, :, :, 10]
 
         img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
@@ -264,11 +264,11 @@ class MPPI(torch.nn.Module):
 
         accel_cost = (ay*ay)
         condition = accel_cost > 25
-        accel_cost = torch.masked_fill(accel_cost, condition, torch.tensor(100.0, dtype=self.dtype))
+        accel_cost = torch.masked_fill(accel_cost, condition, torch.tensor(1000.0, dtype=self.dtype))
 
-        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
+        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)*5
 
-        return 1.5*vel_cost + state_cost + torch.tensor(0.01,dtype=self.dtype)*accel_cost, terminal_cost
+        return state_cost + torch.tensor(0.01,dtype=self.dtype)*accel_cost, terminal_cost
 
 
 
