@@ -52,13 +52,13 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
     bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
 
 
-    # bng_interface.set_lockstep(True)
+    bng_interface.set_lockstep(True)
     dtype = torch.float
     d = torch.device("cuda")
     ns = torch.zeros((2,2), device=d, dtype=dtype)
     ns[0,0] = 1.  # steering
     ns[1,1] = 1. # throttle/brake
-    controller = MPPI(nx=17, noise_sigma=ns, num_samples=256, horizon=64, lambda_= 0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
+    controller = MPPI(nx=17, noise_sigma=ns, num_samples=256, horizon=32, lambda_= 0.1, device=d, rollout_samples = 1, BEVmap_size = map_size, BEVmap_res = map_res)
     current_wp_index = 0 # initialize waypoint index with 0
     goal = None
     action = np.zeros(2)
@@ -86,16 +86,14 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP
             controller.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(d)) # you can also do this asynchronously
 
             state[:3] = np.zeros(3)  # this is for the MPPI: technically this should be state[:3] -= BEV_center
-            now = time.time()
             action = np.array(controller.forward(torch.from_numpy(state).to(d)).cpu().numpy(), dtype=np.float64)[0]
-            dt = time.time() - now
-            print("dt:", dt*1e3)
             visualization(controller.states.cpu().numpy(), pos, np.copy(goal), np.copy(BEV_path.cpu().numpy()), 1/map_res)
 
             bng_interface.send_ctrl(action)
 
         except Exception:
             print(traceback.format_exc())
+
     bng_interface.bng.close()
 
 

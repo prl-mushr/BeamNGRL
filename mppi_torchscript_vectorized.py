@@ -125,14 +125,14 @@ class MPPI(torch.nn.Module):
         self.B = torch.tensor(2.58).to(self.d)
         self.C = torch.tensor(1.2).to(self.d)
         self.D = torch.tensor(9.8 * 0.9).to(self.d)
-        self.lf = torch.tensor(1.4).to(self.d)
-        self.lr = torch.tensor(1.4).to(self.d)
+        self.lf = torch.tensor(1.3).to(self.d)
+        self.lr = torch.tensor(1.3).to(self.d)
         self.Iz = torch.tensor(1).to(self.d)
 
         self.steering_max = torch.tensor(35/57.3).to(self.d)
-        self.wheelspeed_max = torch.tensor(17.0).to(self.d)
+        self.wheelspeed_max = torch.tensor(25.0).to(self.d)
         self.dt_var = torch.tensor(0.05).to(self.d)#torch.arange(0.02, 0.1, 0.08/self.T).to(self.d)
-        self.dt = torch.tensor(0.02).to(self.d)
+        self.dt = torch.tensor(0.04).to(self.d)
         self.gravity = torch.tensor(9.8).to(self.d)
         self.last_action = torch.zeros((self.u_per_command, 2)).to(self.d)
         self.curvature_max = torch.tan(self.steering_max)/ (self.lf + self.lr)
@@ -256,19 +256,18 @@ class MPPI(torch.nn.Module):
         img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         state_cost = self.BEVmap[img_Y, img_X]
         state_cost *= state_cost
-        condition = state_cost >= 0.9  # Boolean mask
-        state_cost = torch.masked_fill(state_cost, condition, torch.tensor(100.0, dtype=self.dtype))
+        # condition = state_cost >= 0.9  # Boolean mask
+        # state_cost = torch.masked_fill(state_cost, condition, torch.tensor(100.0, dtype=self.dtype))
 
         vel_cost = torch.abs(self.max_speed - vx)/self.max_speed
-        vel_cost = torch.sqrt(vel_cost)
 
-        accel_cost = (ay*ay)
-        condition = accel_cost > 25
+        accel_cost = ay*0
+        condition = torch.abs(ay) > 6
         accel_cost = torch.masked_fill(accel_cost, condition, torch.tensor(1000.0, dtype=self.dtype))
 
-        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)*5
+        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
 
-        return state_cost + torch.tensor(0.01,dtype=self.dtype)*accel_cost, terminal_cost
+        return 2.0*state_cost + 1.5*vel_cost + torch.tensor(1.0,dtype=self.dtype)*accel_cost, terminal_cost
 
 
 

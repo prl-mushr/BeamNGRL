@@ -294,6 +294,8 @@ class beamng_interface():
                 # self.lidar_poll(0)
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                if(self.lockstep):
+                    self.bng.pause()
                 self.pos = np.copy(self.vehicle.state['pos'])
                 self.vel = np.copy(self.vehicle.state['vel'])
                 self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
@@ -322,8 +324,6 @@ class beamng_interface():
                 self.gen_BEVmap()
                 if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
                     self.flipped_over = True
-                if(self.lockstep):
-                    self.bng.pause()
         except Exception:
             print(traceback.format_exc())
 
