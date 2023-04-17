@@ -1,0 +1,13 @@
+dataset:
+  dataset_path: '/media/dataset'
+  augment: True
+
+network:
+  class: BasicMLP
+  net_kwargs:
+    hidden_depth: 2
+    hidden_dim: 256
+    batch_norm: True
+  opt: Adam
+  opt_kwargs:
+    lr: 1.0e-4

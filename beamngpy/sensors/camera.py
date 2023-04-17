@@ -16,8 +16,8 @@ from xml.etree.ElementTree import Element, SubElement
 
 import numpy as np
 from beamngpy.beamngcommon import LOGGER_ID, BNGValueError
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-import time
+from PIL import Image, ImageDraw, ImageFont
+
 
 class Camera:
 
