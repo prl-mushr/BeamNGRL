@@ -42,7 +42,7 @@ def update_goal(goal, pos, target_WP, current_wp_index, lookahead):
             return goal, False, current_wp_index
 
 
-def main(map_name, start_point, start_quat, BeamNG_dir='/home/sasha/libraries/', target_WP=None):
+def main(map_name, start_point, start_quat, target_WP=None):
 
     map_res = 0.1
     map_size = 64 # 16 x 16 map
@@ -53,7 +53,6 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/sasha/libraries/',
         map_res=map_res,
         start_pos=start_point,
         start_quat=start_quat,
-        beamng_dir=BeamNG_dir,
     )
 
     bng_interface.set_lockstep(True)

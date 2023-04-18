@@ -7,10 +7,11 @@ import traceback
 import cv2
 import BeamNGRL
 from pathlib import Path
-
+import os
 
 ROOT_PATH = Path(BeamNGRL.__file__).parent
 DATA_PATH = ROOT_PATH.parent / 'data'
+BNG_HOME = os.environ.get('BNG_HOME')
 
 
 def get_beamng_default(
@@ -19,13 +20,13 @@ def get_beamng_default(
         start_quat=None,
         map_name=None,
         car_make='sunburst',
-        beamng_dir='/home/sasha/libraries/',
+        beamng_path=BNG_HOME,
         map_res=0.05,
         map_size=16, # 16 x 16 map
         path_to_maps=DATA_PATH.__str__(),
 ):
 
-    bng = beamng_interface(BeamNG_dir=beamng_dir)
+    bng = beamng_interface(BeamNG_path=beamng_path)
 
     bng.load_scenario(
         scenario_name=map_name, car_make=car_make, car_model=car_model,
@@ -37,9 +38,10 @@ def get_beamng_default(
 
     return bng
 
+
 class beamng_interface():
-    def __init__(self, BeamNG_dir='/home/stark/', host='localhost', port=64256):
-        self.bng = BeamNGpy(host, port, home = BeamNG_dir + 'BeamNG/BeamNG', user=BeamNG_dir + 'BeamNG/BeamNG/userfolder')
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256):
+        self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
         # Launch BeamNG.tech
         self.bng.open()
         self.lockstep   = False
