@@ -41,17 +41,19 @@ def update_goal(goal, pos, target_WP, current_wp_index, lookahead):
             return goal, False, current_wp_index
 
 
-# def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/', target_WP=None):
 def main(map_name, start_point, start_quat, BeamNG_dir='/home/sasha/libraries/', target_WP=None):
 
     map_res = 0.1
     map_size = 64 # 16 x 16 map
 
-    bng_interface = beamng_interface(BeamNG_dir=BeamNG_dir)
-    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
-                                start_pos=start_point, start_rot=start_quat)
-    # bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')
-    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/sasha/projects/offroad_mbrl')
+    bng_interface = get_beamng_default(
+        map_size=map_size,
+        map_name=map_name,
+        map_res=map_res,
+        start_pos=start_point,
+        start_quat=start_quat,
+        beamng_dir=BeamNG_dir,
+    )
 
     # bng_interface.set_lockstep(True)
     dtype = torch.float
@@ -70,7 +72,6 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/sasha/libraries/',
     lookahead = 20
     current_wp_index = 0 # initialize waypoint index with 0
     goal = None
-    action = np.zeros(2)
 
     while True:
         try:

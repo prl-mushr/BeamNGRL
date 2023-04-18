@@ -5,33 +5,8 @@ import BeamNGRL
 from pathlib import Path
 
 
-ROOT_PATH = Path(BeamNGRL.__file__)
-DATA_PATH = ROOT_PATH.parents[1] / 'data'
-
-
-def get_beamng(
-        car_model='RACER',
-        start_pos=None,
-        start_quat=None,
-        map_name=None,
-        car_make='sunburst',
-        beamng_dir='/home/sasha/libraries/',
-        map_res=0.05,
-        map_size=16, # 16 x 16 map
-        path_to_maps=DATA_PATH.__str__(),
-):
-
-    bng = beamng_interface(BeamNG_dir=beamng_dir)
-
-    bng.load_scenario(
-        scenario_name=map_name, car_make=car_make, car_model=car_model,
-        start_pos=start_pos, start_rot=start_quat,
-    )
-    bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
-    )
-
-    return bng
+ROOT_PATH = Path(BeamNGRL.__file__).parent
+DATA_PATH = ROOT_PATH.parent / 'data'
 
 
 def collect_data(args):
@@ -39,7 +14,7 @@ def collect_data(args):
     output_path = DATA_PATH / args.output_dir
     output_path.mkdir(parents=True, exist_ok=True)
 
-    bng = get_beamng(
+    bng = get_beamng_default(
         map_name=args.map_name,
         start_pos=np.array(args.start_pos),
         start_quat=np.array(args.start_quat),

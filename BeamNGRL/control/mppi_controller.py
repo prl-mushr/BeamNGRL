@@ -6,6 +6,12 @@ import cv2
 import time
 import pandas as pd
 import os
+from pathlib import Path
+import BeamNGRL
+
+ROOT_PATH = Path(BeamNGRL.__file__).parent
+CRL_PATH = ROOT_PATH / 'control'
+
 
 class control_system:
 
@@ -37,7 +43,8 @@ class control_system:
 		self.mppi = mppi.MPPI(self.dynamics, self.running_cost, nx, self.noise_sigma, num_samples=N_SAMPLES, horizon=TIMESTEPS, lambda_=lambda_, terminal_state_cost = self.terminal_cost)
 		self.last_U = torch.zeros(2, device=d)
 
-		self.dyn_csts = pd.read_json(os.path.join('bicycle_model.json'), typ='series')
+		print(f'\nCRL_PATH: {CRL_PATH}')
+		self.dyn_csts = pd.read_json(CRL_PATH / 'bicycle_model.json', typ='series')
 		self.Br, self.Cr, self.Dr, self.Bf, self.Cf, self.Df,\
 		self.m, self.Iz, self.lf, self.lr = [self.dyn_csts[key] for key in ['Br', 'Cr', 'Dr', 'Bf', 'Cf', 'Df',
 														'm', 'Iz', 'lf', 'lr']]

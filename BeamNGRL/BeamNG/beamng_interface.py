@@ -5,8 +5,37 @@ from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer
 import numpy as np
 import traceback
 import cv2
+import BeamNGRL
+from pathlib import Path
 
-## BeamNG Interface Class
+
+ROOT_PATH = Path(BeamNGRL.__file__).parent
+DATA_PATH = ROOT_PATH.parent / 'data'
+
+
+def get_beamng_default(
+        car_model='RACER',
+        start_pos=None,
+        start_quat=None,
+        map_name=None,
+        car_make='sunburst',
+        beamng_dir='/home/sasha/libraries/',
+        map_res=0.05,
+        map_size=16, # 16 x 16 map
+        path_to_maps=DATA_PATH.__str__(),
+):
+
+    bng = beamng_interface(BeamNG_dir=beamng_dir)
+
+    bng.load_scenario(
+        scenario_name=map_name, car_make=car_make, car_model=car_model,
+        start_pos=start_pos, start_rot=start_quat,
+    )
+    bng.set_map_attributes(
+        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+    )
+
+    return bng
 
 class beamng_interface():
     def __init__(self, BeamNG_dir='/home/stark/', host='localhost', port=64256):
