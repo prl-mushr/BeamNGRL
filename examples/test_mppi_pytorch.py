@@ -2,26 +2,8 @@ from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import torch
 from BeamNGRL.control.mppi_torchscript_vectorized import MPPI
+from BeamNGRL.utils.visualisation import costmap_vis
 
-
-def visualization(states, pos, goal, costmap, resolution_inv):
-    goal -= pos
-    map_size = costmap.shape[0]//2
-    goal_X = int((goal[0]*resolution_inv) + map_size)
-    goal_Y = int((goal[1]*resolution_inv) + map_size)
-    cv2.line(costmap, (map_size, map_size), (goal_X, goal_Y), (0,1,0), 1)
-    cv2.circle(costmap, (goal_X, goal_Y), int(resolution_inv*0.2), (1,0,0), -1)
-    if(states is not None):
-        print_states = states
-        x = print_states[:,:,:,0].flatten()
-        y = print_states[:,:,:,1].flatten()
-        X = np.array((x * resolution_inv) + map_size, dtype=np.int32)
-        Y = np.array((y * resolution_inv) + map_size, dtype=np.int32)
-        costmap[Y,X] = np.array([0,0,1])
-    costmap = cv2.resize(costmap, (500,500), interpolation= cv2.INTER_AREA)
-    costmap = cv2.flip(costmap, 0)  # this is just for visualization
-    cv2.imshow("map", costmap)
-    cv2.waitKey(1)
 
 def update_goal(goal, pos, target_WP, current_wp_index, lookahead):
     if(goal is None):
@@ -97,7 +79,7 @@ def main(map_name, start_point, start_quat, target_WP=None):
 
             state[:3] = np.zeros(3)  # this is for the MPPI: technically this should be state[:3] -= BEV_center
             action = np.array(controller.forward(torch.from_numpy(state).to(d)).cpu().numpy(), dtype=np.float64)[0]
-            visualization(controller.states.cpu().numpy(), pos, np.copy(goal), np.copy(BEV_path.cpu().numpy()), 1/map_res)
+            costmap_vis(controller.states.cpu().numpy(), pos, np.copy(goal), np.copy(BEV_path.cpu().numpy()), 1/map_res)
 
             bng_interface.send_ctrl(action)
 
