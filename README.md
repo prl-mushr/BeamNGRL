@@ -1,13 +1,14 @@
 # BeamNGRL
 
 ## Installation:
-1) Download the map folder and BeamNG folder from [here](https://drive.google.com/drive/folders/1sZ8aDUqtnTomdXn6bxoryJ8X4yT7RS06). Extract the 'BeamNG' and 'map' folder outside the BeamNGRL folder(usually `/home/username/` directory, for instance, I keep it in `/home/stark/`)
+1) Download the map folder and BeamNG folder from [here](https://drive.google.com/drive/folders/1sZ8aDUqtnTomdXn6bxoryJ8X4yT7RS06). Extract the 'BeamNG' outside the BeamNGRL folder(usually `/home/username/` directory, for instance
 
 
-2) inside the BeamNGRL folder, run:
-
-```
-git submodule update --init --recursive
+2) Environment setup:
+put this in your bash:
+```bash
+export BNG_HOME=/absolute/path/to/BeamNG/BeamNG/
+export PYTHONPATH="${PYTHONPATH}:/absolute/path/to/BeamNGRL"
 ```
 
 ## Running minimal interface example:
