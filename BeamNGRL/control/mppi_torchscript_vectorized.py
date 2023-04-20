@@ -194,6 +194,7 @@ class MPPI(torch.nn.Module):
         ## M bins per control traj, K rollouts.
         self.states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
         self.states = self.vectorized_dynamics(self.states, perturbed_actions)
+
         cost_samples, terminal_cost = self.cost_vectorized(self.states)
         ## dimension 0 is self.M !
         self.cost_total = torch.sum(cost_samples.mean(dim=0), dim=1) + terminal_cost.mean(dim=0)
@@ -242,7 +243,7 @@ class MPPI(torch.nn.Module):
         # This is just a placeholder for curvature since steering correlates to curvature.
         curvature = torch.tan(u0 * self.steering_max)/ (self.lf + self.lr)
         
-        ax = u1 * self.wheelspeed_max     
+        ax = u1 * self.wheelspeed_max
         vx = vx + torch.cumsum(ax * self.dt, dim=2)
         gz = vx * curvature
 

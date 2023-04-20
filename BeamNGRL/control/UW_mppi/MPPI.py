@@ -1,8 +1,8 @@
 import torch
-import time
+import torch.nn as nn
 
 
-class MPPI(torch.nn.Module):
+class MPPI(nn.Module):
     """
     Model Predictive Path Integral control
     Implemented according to algorithm 2 in Williams et al., 2017
@@ -11,18 +11,20 @@ class MPPI(torch.nn.Module):
 
     def __init__(
         self,
-        Dynamics,
-        Costs,
-        CTRL_NOISE,
-        CTRL_NOISE_MU=None,
-        N_SAMPLES=128,
-        TIMESTEPS=16,
-        device="cuda:0",
+        dynamics_func,
+        cost_func,
+        ctrl_sigma,
+        ctrl_mean=None,
+        n_ctrl_samples=128,
+        horizon=16,
         lambda_=1.0,
+        dt=0.04,
         u_final=None,
         u_per_command=1,
         num_optimizations=1,
-        Rollout_bins=1,
+        n_state_samples=1,
+        device="cuda:0",
+        dtype=torch.float32,
     ):
         """
         :param Dynamics: nn module (object) that provides a forward function for propagating the dynamics forward in time
@@ -35,49 +37,54 @@ class MPPI(torch.nn.Module):
         :param lambda_: temperature, positive scalar where larger values will allow more exploration
         :param u_init: (nu) what to initialize new end of trajectory control to be; defeaults to zero
         """
-        super(MPPI, self).__init__()
-        self.d = device
-        self.dtype = torch.float
-        self.K = N_SAMPLES
-        self.T = TIMESTEPS
-        self.M = Rollout_bins
-        # dimensions of state and control
-        self.nx = Dynamics.NX
-        self.num_optimizations = num_optimizations
-        self.nu = 1 if len(CTRL_NOISE.shape) == 0 else CTRL_NOISE.shape[0]
-        self.lambda_ = torch.tensor(lambda_).to(self.d).to(dtype=self.dtype)
-        if CTRL_NOISE_MU is None:
-            CTRL_NOISE_MU = torch.zeros(self.nu, dtype=self.dtype)
+        super().__init__()
 
-        self.CTRL_NOISE_MU = CTRL_NOISE_MU.to(self.d)
-        self.CTRL_NOISE = CTRL_NOISE.to(self.d).to(dtype=self.dtype)
-        self.CTRL_NOISE_inv = torch.inverse(self.CTRL_NOISE).to(self.d)
+        tn_args = {'device': device, 'dtype': dtype}
+        self.tn_args = tn_args
+        self.device = device
+        self.dtype = dtype
+
+        self.num_optimizations = num_optimizations
+        self.n_ctrl_samples = n_ctrl_samples
+        self.n_state_samples = n_state_samples
+        self.horiz = horizon
+        self.dt = dt
+
+        self.state_dim = dynamics_func.NX
+        self.ctrl_dim = 1 if len(ctrl_sigma.shape) == 0 else ctrl_sigma.shape[0]
+
+        self.lambda_ = torch.tensor(lambda_).to(**tn_args)
+        if ctrl_mean is None:
+            ctrl_mean = torch.zeros(self.ctrl_dim, dtype=self.dtype)
+
+        self.ctrl_mean = ctrl_mean.to(device)
+        self.ctrl_sigma = ctrl_sigma.to(**tn_args)
+        self.ctrl_sigma_inv = torch.inverse(self.ctrl_sigma)
 
         ## for torchscript we have to initialize these things to same shape and size as what we'll use later
-        self.noise = (
+        self.ctrl_eps = (
             torch.matmul(
-                torch.randn((self.K, self.T, self.nu), device=self.d, dtype=self.dtype),
-                self.CTRL_NOISE,
+                torch.randn(n_ctrl_samples, horizon, self.ctrl_dim).to(**tn_args),
+                self.ctrl_sigma_inv,
             )
-            + self.CTRL_NOISE_MU
-        )  # scale and add mean
+            + self.ctrl_mean
+        )
 
         self.u_per_command = u_per_command
-        # T x nu control sequence
         if u_final is None:
-            u_final = torch.zeros(self.nu, dtype=self.dtype)
-        self.u_final = u_final.to(self.d)
+            u_final = torch.zeros(self.ctrl_dim, dtype=self.dtype)
+        self.u_final = u_final.to(device)
 
-        self.U = torch.randn((self.T, self.nu), dtype=self.dtype).to(self.d)
-        # handling dynamics networks that output a distribution (take multiple trajectory samples)
+        self.U = torch.randn((horizon, self.ctrl_dim), dtype=dtype).to(device)
+        self.last_action = torch.zeros((u_per_command, 2)).to(**tn_args)
 
         # sampled results from last command
-        self.cost_total = torch.zeros(self.K, device=self.d, dtype=self.dtype)
-        self.cost_total_non_zero = torch.zeros(self.K, device=self.d, dtype=self.dtype)
-        self.omega = torch.zeros(self.K, device=self.d, dtype=self.dtype)
+        self.cost_total = torch.zeros(n_ctrl_samples).to(**tn_args)
+        self.cost_total_non_zero = torch.zeros(n_ctrl_samples).to(**tn_args)
+        self.omega = torch.zeros(n_ctrl_samples).to(**tn_args)
 
-        self.Dynamics = Dynamics
-        self.Costs = Costs
+        self.dynamics_func = dynamics_func
+        self.cost_func = cost_func
 
     @torch.jit.export
     def reset(self, U=None):
@@ -85,22 +92,27 @@ class MPPI(torch.nn.Module):
         Clear controller state after finishing a trial
         """
         if U is not None:
-            self.U = U.to(device=self.d).to(dtype=self.dtype)
+            self.U = U.to(**self.tn_args)
         else:
-            self.U = torch.randn((self.T, self.nu), dtype=self.dtype, device=self.d)
+            self.U = torch.randn((self.horiz, self.ctrl_dim),
+                                 dtype=self.dtype, device=self.device)
 
     def forward(self, state):
         """
         :param: state
         :returns: best actions
         """
-        # print(f'\nMPPI state shape: {state.shape}')
 
-        ## shift command 1 time step
+        # FIXME: shift operation should be after action selection
         self.U = torch.roll(self.U, -1, dims=0)
         self.U[-1] = self.u_final
+
         for i in range(self.num_optimizations):
-            action = self.optimize(state)
+            delta_action = self.optimize(state)
+
+        action = delta_action*self.dt + self.last_action
+        action = torch.clamp(action, -1, 1)
+        self.last_action = torch.clone(action)
         return action
 
     def optimize(self, state):
@@ -108,48 +120,65 @@ class MPPI(torch.nn.Module):
         :param: state
         :returns: best set of actions
         """
+        # Sample
+        ctrl_samples = self.sample_controls()
 
-        cost_total = self.compute_total_cost_batch(state)
+        # Rollout
+        states = self.rollout_dynamics(state, ctrl_samples)
 
-        beta = torch.min(cost_total)
-        self.cost_total_non_zero = torch.exp((-1 / self.lambda_) * (cost_total - beta))
+        # Cost eval.
+        cost_total = self.compute_total_cost(states, ctrl_samples)
 
-        eta = torch.sum(self.cost_total_non_zero)
-        self.omega = (1.0 / eta) * self.cost_total_non_zero
-
-        self.U = self.U + (self.omega.view(-1, 1, 1) * self.noise).sum(dim=0)
+        # Update ctrl param.
+        self.U = self.update_ctrl_params(cost_total)
 
         return self.U[: self.u_per_command]
 
-    def compute_total_cost_batch(self, state):
-        # parallelize sampling across trajectories
-        # resample noise each time we take an action
-        self.noise = (
+    def sample_controls(self):
+        self.ctrl_eps = (
             torch.matmul(
-                torch.randn((self.K, self.T, self.nu), device=self.d), self.CTRL_NOISE
+                torch.randn(
+                    (self.n_ctrl_samples, self.horiz, self.ctrl_dim),
+                    device=self.device), self.ctrl_sigma
             )
-            + self.CTRL_NOISE_MU
-        )  # scale and add mean
+            + self.ctrl_mean
+        )
+        ctrl_samples = self.U + self.ctrl_eps
+        return ctrl_samples
 
-        # broadcast own control to noise over samples; now it's K x T x nu
-        perturbed_action = self.U + self.noise
-        ## compute the costs:
-        self._compute_rollout_costs(state, perturbed_action)
+    def rollout_dynamics(self, state, controls):
+        # FIXME: why repeat across horizon?
+        states = state.view(1, -1).repeat(
+            self.n_state_samples,
+            self.n_ctrl_samples,
+            self.horiz,
+            1,
+        )
+        states = self.dynamics_func(states, controls)
+        self.set_rollouts(states, controls)
+        return states
 
-        action_cost = self.lambda_ * torch.matmul(self.noise, self.CTRL_NOISE_inv)
-        ## action perturbation cost
+    def set_rollouts(self, states, controls):
+        self.rollout_states = states
+        self.rollout_controls = controls
+
+    def compute_total_cost(self, states, ctrl_samples):
+        rollout_costs = self.compute_rollout_costs(states, ctrl_samples)
+
+        # FIXME: these should be separate from cost
+        action_cost = self.lambda_ * torch.matmul(ctrl_samples - self.U, self.ctrl_sigma_inv)
         perturbation_cost = torch.sum(self.U * action_cost, dim=(1, 2))
-        ## Evaluate total cost:
-        self.cost_total = self.cost_total + perturbation_cost.to(self.d)
-        return self.cost_total
 
-    def _compute_rollout_costs(self, _state, perturbed_actions):
-        ## All the states are initialized as copies of the current state
-        ## M bins per control traj, K control trajectories, T timesteps, NX states
-        states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
-        ## update all the states using the dynamics function
-        states = self.Dynamics.forward(states, perturbed_actions)
-        ## Evaluate costs on STATES with dimensions M x K x T x NX.
-        ## Including the terminal costs in here is YOUR own responsibility!
-        self.cost_total = self.Costs.forward(states)
+        cost_total = rollout_costs + perturbation_cost.to(self.device)
+        return cost_total
 
+    def compute_rollout_costs(self, states, controls):
+        cost_total = self.cost_func(states, controls)
+        return cost_total
+
+    def update_ctrl_params(self, costs):
+        beta = torch.min(costs)
+        cost_total_non_zero = torch.exp((-1 / self.lambda_) * (costs - beta))
+        eta = torch.sum(cost_total_non_zero)
+        omega = (1. / eta) * cost_total_non_zero
+        return self.U + (omega.view(-1, 1, 1) * self.ctrl_eps).sum(dim=0)

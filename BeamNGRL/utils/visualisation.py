@@ -11,8 +11,8 @@ def costmap_vis(states, pos, goal, costmap, resolution_inv):
     cv2.circle(costmap, (goal_X, goal_Y), int(resolution_inv*0.2), (1,0,0), -1)
     if(states is not None):
         print_states = states
-        x = print_states[:,:,:,0].flatten()
-        y = print_states[:,:,:,1].flatten()
+        x = print_states[...,0].flatten()
+        y = print_states[...,1].flatten()
         X = np.array((x * resolution_inv) + map_size, dtype=np.int32)
         Y = np.array((y * resolution_inv) + map_size, dtype=np.int32)
         costmap[Y,X] = np.array([0,0,1])
