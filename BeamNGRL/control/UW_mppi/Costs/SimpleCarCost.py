@@ -2,86 +2,115 @@ import torch
 
 class SimpleCarCost(torch.nn.Module):
     """
-	Class for Dynamics modelling
+    Class for Dynamics modelling
     """
     def __init__(
         self,
-        BEVmap_size=32,
+        goal_w = 1,
+        speed_w = 1,
+        roll_w = 1,
+        lethal_w = 1,
+        speed_target = 10,
+        critical_z = 0.5,
+        critical_FA = 0.5,
+        BEVmap_size=64,
         BEVmap_res=0.25,
+        dtype=torch.float32,
         device=torch.device("cuda"),
     ):
 
         super(SimpleCarCost, self).__init__()
-
-        self.POS = slice(0, 2)
-        self.YAW = slice(2, 3)
-        self.VEL = slice(3, 4)
-        self.CURVATURE = slice(4, 5)
-        self.ACCEL = slice(5, 6)
-
-        self.STEER = slice(0, 1)
-        self.THROTTLE = slice(1, 2)
-        ## always have NU and NX!
-        self.NU = max(self.STEER.stop, self.THROTTLE.stop)
-        self.NX = max(self.POS.stop, self.YAW.stop, self.VEL.stop, self.STEER.stop, self.THROTTLE.stop)
+        self.dtype = dtype
         self.d = device
+        ## I feel like "state" definitions like these should be shared across dynamics and cost, perhaps something to think about
+        ## like a class "CAR" that has all the state definitions and dynamics and cost functions as methods plus the bevmap stuff? then we can just pass that in?
 
-        self.goal_state = torch.zeros(2).to(self.d)  # possible goal state
+        self.NX = 17
+
         self.BEVmap_size = torch.tensor(BEVmap_size).to(self.d)
         self.BEVmap_res = torch.tensor(BEVmap_res).to(self.d)
-        assert self.BEVmap_res > 0
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.BEVmap = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item() )).to(self.d)
-        self.BEVmap_heght = torch.zeros_like(self.BEVmap)
-        self.BEVmap_segmt = torch.zeros_like(self.BEVmap)
-        self.BEVmap_color = torch.zeros_like(self.BEVmap)
-        self.BEVmap_normal = torch.zeros_like(self.BEVmap)
-        self.BEVmap_center = self.BEVmap_size * 0.5
-        self.BEVmap_res_inv = 1.0 / self.BEVmap_res
+        self.BEVmap_height = torch.zeros_like(self.BEVmap)
+        self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype).to(self.d)
+        self.BEVmap_center = torch.zeros(3, dtype=self.dtype).to(self.d)
+
+        self.GRAVITY = torch.tensor(9.8, dtype=self.dtype).to(self.d)
+
+        self.critical_z = torch.tensor(critical_z, dtype=self.dtype).to(self.d)
+        self.speed_target = torch.tensor(speed_target, dtype=self.dtype).to(self.d)
+        self.critical_FA = torch.tensor(critical_FA, dtype=self.dtype).to(self.d)
+
+        self.lethal_w = torch.tensor(lethal_w, dtype=self.dtype).to(self.d)
+        self.goal_w = torch.tensor(goal_w, dtype=self.dtype).to(self.d)
+        self.speed_w = torch.tensor(speed_w, dtype=self.dtype).to(self.d)
+        self.roll_w = torch.tensor(roll_w, dtype=self.dtype).to(self.d)
+
+        self.goal_state = torch.zeros(2, device = self.d, dtype=self.dtype)
 
     @torch.jit.export
-    def update_maps(self, BEVmap, BEVmap_heght, BEVmap_segmt, BEVmap_color, BEVmap_normal):
-        self.BEVmap = BEVmap
-        self.BEVmap_heght = BEVmap_heght
-        self.BEVmap_segmt = BEVmap_segmt
-        self.BEVmap_color = BEVmap_color
+    def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_center):
+        '''
+        BEVmap_height, BEVmap_normal are robot-centric elevation and normal maps.
+        BEV_center is the x,y,z coordinate at the center of the map. Technically this could just be x,y, but its easier to just remove it from all dims at once.
+        '''
+        assert BEVmap_height.shape[0] == self.BEVmap_size_px
+        self.BEVmap_height = BEVmap_height
         self.BEVmap_normal = BEVmap_normal
+        self.BEVmap_center = BEV_center  # translate the state into the center of the costmap.
 
+    @torch.jit.export
     def set_goal(self, goal_state):
-        self.goal_state = goal_state
+        self.goal_state = goal_state[:2]
 
     def forward(self, state):
-        ## State is a tensor of shape
-        # (bins, samples, horizon, state_dim). If you're not using bins, you can take mean over the first dimension or just use the first bin.
+        # unpack all values we can remove the stuff we don't need later
+        x = state[..., 0] 
+        y = state[..., 1]
+        z = state[..., 2]
+        roll = state[..., 3]
+        pitch = state[..., 4]
+        yaw = state[..., 5]
+        vx = state[...,6]
+        vy = state[...,7]
+        vz = state[...,8]
+        ax = state[...,9]
+        ay = state[...,10]
+        az = state[...,11]
+        wx = state[...,12]
+        wy = state[...,13]
+        wz = state[...,14]
 
-        # print(f'\nCost: state shape: {state.shape}')
-        pos = state[..., self.POS]
-        x = pos[..., [0]]
-        y = pos[..., [1]]
-        yaw = state[..., self.YAW]
-        vel = state[..., self.VEL]
+        # I hate recomputing these values in the cost function but oh well, what can you do?
+        # img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
+        # img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
         
-        img_X = ((x + self.BEVmap_center) / self.BEVmap_res_inv).to(dtype=torch.long, device=self.d)
-        img_Y = ((y + self.BEVmap_center) / self.BEVmap_res_inv).to(dtype=torch.long, device=self.d)
-        
-        state_cost = self.BEVmap[img_Y, img_X]
-        state_cost *= state_cost
-        condition = state_cost >= 0.9  # Boolean mask
-        state_cost = torch.masked_fill(state_cost, condition, torch.tensor(100.0, dtype=self.dtype))
+        # normal = self.BEVmap_normal[img_Y, img_X]
+        ## this is one way of doing it:
+        # condition = normal[...,2] < self.critical_z  # Boolean mask
+        # state_cost = torch.masked_fill(state_cost, condition, torch.tensor(100.0, dtype=self.dtype)) ## lethal cost
+        ## this is another way of doing it:
+        # state_cost = torch.square(1/normal[...,2]) ## this is the cost function for the terrain. It is a function of the normal vector.
 
-        vel_cost = torch.abs(self.max_speed - vel)/self.max_speed
-        vel_cost = torch.sqrt(vel_cost)
+        # potentially another way of doing this is to use the roll and pitch as a proxy for the normal vector since we already got those things
+        # this would let us just skip using the BEVmap entirely.
+        state_cost = torch.square(1/torch.cos(roll)) + torch.square(1/torch.cos(pitch))
 
-        ay = vel*yaw
-        accel_cost = ay*ay
-        condition = accel_cost > 25
-        accel_cost = torch.masked_fill(accel_cost, condition, torch.tensor(100.0, dtype=self.dtype))
+        vel_cost = torch.square( (self.speed_target - vx)/self.speed_target )
+        # condition = vx > self.speed_target
+        # vel_cost = torch.masked_fill(vel_cost, condition, torch.tensor(10000.0, dtype=self.dtype))
+        ## we could perhaps create a speed limit as well where we penalize exceeding the target speed.
+        # condition = vx > self.speed_target
+        # vel_cost = torch.masked_fill(vel_cost, condition, torch.tensor(100.0, dtype=self.dtype))
 
-        cost_to_come = 1.5*vel_cost + state_cost + torch.tensor(0.01,dtype=self.dtype)*accel_cost
-        cost_to_come = cost_to_come.mean(dim=0).sum(dim = -1)
+        force_angle = torch.atan2(ay, az)
+        condition = torch.abs(force_angle) > self.critical_FA
+        roll_cost = torch.masked_fill(force_angle, condition, torch.tensor(1000.0, dtype=self.dtype))
 
-        cost_to_go = torch.linalg.norm(state[...,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
-        cost_to_go = cost_to_go.mean(dim=0)
+        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
+        running_cost = self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost
+        cost_to_go = self.goal_w * terminal_cost
 
-        return cost_to_come + cost_to_go
-    
+        ## for running cost mean over the 0th dimension (bins), which results in a KxT tensor. Then sum over the 1st dimension (time), which results in a [K] tensor.
+        ## for terminal cost, just mean over the 0th dimension (bins), which results in a [K] tensor.
+        return (running_cost.mean(dim=0)).sum(dim=1) + cost_to_go.mean(dim=0)

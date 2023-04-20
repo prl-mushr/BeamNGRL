@@ -26,6 +26,16 @@ def get_beamng_default(
         path_to_maps=DATA_PATH.__str__(),
 ):
 
+    if(start_pos is None):
+        print("please provide a start pos! I can not spawn a car in the ether!")
+        exit()
+    if(start_quat is None):
+        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
+        exit()
+    if(map_name is None):
+        print("please provide a map_name! I can not spawn a car in the ether!")
+        exit()
+        
     bng = beamng_interface(BeamNG_path=beamng_path)
 
     bng.load_scenario(
@@ -58,6 +68,11 @@ class beamng_interface():
         self.lidar_pts  = None
         self.Gravity    = np.array([0,0,9.81])
         self.state      = None
+        self.avg_wheelspeed = 0
+        self.dt = 0.016
+        self.last_whspd_error = 0
+        self.whspd_error_sigma = 0
+        self.whspd_error_diff = 0
 
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
@@ -319,7 +334,7 @@ class beamng_interface():
                 print("beautiful day, __init__?")
                 time.sleep(0.02)
             else:
-                dt = time.time() - self.now
+                self.dt = time.time() - self.now
                 self.now = time.time()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)
@@ -327,6 +342,7 @@ class beamng_interface():
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 if(self.lockstep):
                     self.bng.pause()
+                    self.dt = 0.016
                 self.pos = np.copy(self.vehicle.state['pos'])
                 self.vel = np.copy(self.vehicle.state['vel'])
                 self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
@@ -336,17 +352,23 @@ class beamng_interface():
                 self.vel = np.matmul(self.Tnb, self.vel)
                 diff = self.quat/self.last_quat
                 self.last_quat = self.quat
-                self.G = np.array([diff[1]*2/dt, diff[2]*2/dt, diff[3]*2/dt])  # gx gy gz
-                # wheeldownforce = vehicle.sensors['electrics']['wheeldownforce']
-                # wheelhorizontalforce = vehicle.sensors['electrics']['wheelhorizontalforce']
-                # wheelslip = vehicle.sensors['electrics']['wheelslip']
-                # wheelsideslip = vehicle.sensors['electrics']['wheelsideslip']
-                # wheelspeed = vehicle.sensors['electrics']['wheelspeed_individual']
-                # self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
-                # self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
-                # self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
-                # self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-                # self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
+                self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
+
+                ## wheel ordering is FR BR FL BL
+                wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
+                wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
+                wheelslip = self.vehicle.sensors['electrics']['wheelslip']
+                wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
+                wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
+                self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
+                self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
+                self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
+                self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
+                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], -wheelspeed[2.0], -wheelspeed[3.0]])
+                
+                innovation = (self.wheelspeed @ self.wheeldownforce)/np.sum(self.wheeldownforce) - self.avg_wheelspeed
+                self.avg_wheelspeed += innovation * 0.5 * self.dt/0.016
+
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
                 brake = float(self.vehicle.sensors['electrics']['brake'])
@@ -358,17 +380,33 @@ class beamng_interface():
         except Exception:
             print(traceback.format_exc())
 
-    def send_ctrl(self, action):
+    def scaled_PID_FF(self, Kp, Ki, Kd, FF_gain, FF, error, error_sigma, error_diff, last_error):
+        error_sigma += error * self.dt
+        error_sigma = np.clip(error_sigma, -1, 1) ## clip error_sigma to 10%
+        ## innovation in error_derivative:
+        diff_innov = np.clip((error - last_error)/self.dt, -1, 1) - error_diff
+        ## smoothing error derivative:
+        error_diff += diff_innov * 0.5
+        PI = Kp * error + Ki * error_sigma + Kd * error_diff + FF * FF_gain
+        return PI, error_sigma, error_diff
+
+    def send_ctrl(self, action, speed_ctrl=False, speed_max = 1, Kp = 1, Ki =  1, Kd = 0, FF_gain = 1):
         st, th = -action[0], action[1]
+        if(speed_ctrl):
+            speed_err = th - (self.avg_wheelspeed/speed_max)
+            th, self.whspd_error_sigma, self.whspd_error_diff = self.scaled_PID_FF(Kp, Ki, Kd, FF_gain, th, speed_err, self.whspd_error_sigma, self.whspd_error_diff, self.last_whspd_error)
+            self.last_whspd_error = speed_err
+            th = np.clip(th, -1,1)
+            
         br = 0
         th_out = th
-        if th < 0:
+        if(th < 0):
             br = -th
             th_out = 0
-        if self.lockstep:
+        if(self.lockstep):
             self.bng.resume()
 
-        self.vehicle.control(throttle=th_out, brake=br, steering=st)
+        self.vehicle.control(throttle = th_out, brake = br, steering = st)
 
     def reset(self, start_pos = None):
         if(start_pos is None):
@@ -376,3 +414,9 @@ class beamng_interface():
         self.vehicle.teleport(pos=(start_pos[0], start_pos[1], start_pos[2]))# rot_quat= (start_quat[0], start_quat[1], start_quat[2], start_quat[3]) )
         self.vehicle.control(throttle = 0, brake = 0, steering = 0)
         self.flipped_over = False
+
+        self.avg_wheelspeed = 0
+        self.dt = 0.016
+        self.last_whspd_error = 0
+        self.whspd_error_sigma = 0
+        self.whspd_error_diff = 0
