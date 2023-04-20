@@ -72,7 +72,7 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
             goal_w=1,
             speed_w=1.5,
             roll_w=0,
-            lethal_w=0,
+            lethal_w=1,
             speed_target=10,
             critical_z=0.5,
             critical_FA=0.5,
@@ -85,8 +85,8 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
         # cst.save("costs.pt")
 
         ns = torch.zeros((2, 2), device=d, dtype=dtype)
-        ns[0, 0] = 0.5  # steering
-        ns[1, 1] = 0.5  # throttle/brake
+        ns[0, 0] = 1.0  # steering
+        ns[1, 1] = 1.0  # throttle/brake
 
         controller = MPPI(
             dynamics,
@@ -171,7 +171,7 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
                     1 / map_res,
                 )
                 
-                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = speed_max, Kp=0, Ki=0.0, Kd=0.0, FF_gain=0.4)
+                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = speed_max, Kp=0.5, Ki=0.05, Kd=0.0, FF_gain=0.4)
 
             except Exception:
                 print(traceback.format_exc())

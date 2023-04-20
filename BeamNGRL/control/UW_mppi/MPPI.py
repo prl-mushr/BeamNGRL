@@ -129,10 +129,7 @@ class MPPI(torch.nn.Module):
         ## compute the costs:
         self.compute_rollout_costs(state, perturbed_action)
         # # the dynamics propagation may have imposed constraints on the controls, so we find the actual noise used
-        noise = self.perturbed_actions - self.U
-        print("default:", self.noise)
-        print("adjusted:", noise)
-        # self.noise = self.perturbed_actions - self.U
+        self.noise = self.perturbed_actions - self.U
 
         action_cost = self.lambda_ * torch.matmul(self.noise, self.CTRL_NOISE_inv)
         ## action perturbation cost

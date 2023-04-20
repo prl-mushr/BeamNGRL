@@ -81,33 +81,16 @@ class SimpleCarCost(torch.nn.Module):
         wy = state[...,13]
         wz = state[...,14]
 
-        # I hate recomputing these values in the cost function but oh well, what can you do?
-        # img_X = ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
-        # img_Y = ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d)
-        
-        # normal = self.BEVmap_normal[img_Y, img_X]
-        ## this is one way of doing it:
-        # condition = normal[...,2] < self.critical_z  # Boolean mask
-        # state_cost = torch.masked_fill(state_cost, condition, torch.tensor(100.0, dtype=self.dtype)) ## lethal cost
-        ## this is another way of doing it:
-        # state_cost = torch.square(1/normal[...,2]) ## this is the cost function for the terrain. It is a function of the normal vector.
-
-        # potentially another way of doing this is to use the roll and pitch as a proxy for the normal vector since we already got those things
-        # this would let us just skip using the BEVmap entirely.
         state_cost = torch.square(1/torch.cos(roll)) + torch.square(1/torch.cos(pitch))
 
         vel_cost = torch.square( (self.speed_target - vx)/self.speed_target )
-        # condition = vx > self.speed_target
-        # vel_cost = torch.masked_fill(vel_cost, condition, torch.tensor(10000.0, dtype=self.dtype))
-        ## we could perhaps create a speed limit as well where we penalize exceeding the target speed.
-        # condition = vx > self.speed_target
-        # vel_cost = torch.masked_fill(vel_cost, condition, torch.tensor(100.0, dtype=self.dtype))
 
         force_angle = torch.atan2(ay, az)
         condition = torch.abs(force_angle) > self.critical_FA
         roll_cost = torch.masked_fill(force_angle, condition, torch.tensor(1000.0, dtype=self.dtype))
 
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
+
         running_cost = self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost
         cost_to_go = self.goal_w * terminal_cost
 
