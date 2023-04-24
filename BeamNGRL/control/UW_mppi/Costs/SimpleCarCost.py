@@ -11,8 +11,8 @@ class SimpleCarCost(torch.nn.Module):
         roll_w = 1,
         lethal_w = 1,
         speed_target = 10,
-        critical_z = 0.5,
-        critical_FA = 0.5,
+        critical_SA = 0.5,
+        critical_RI = 0.5,
         BEVmap_size=64,
         BEVmap_res=0.25,
         dtype=torch.float32,
@@ -37,9 +37,9 @@ class SimpleCarCost(torch.nn.Module):
 
         self.GRAVITY = torch.tensor(9.8, dtype=self.dtype).to(self.d)
 
-        self.critical_z = torch.tensor(critical_z, dtype=self.dtype).to(self.d)
+        self.critical_SA = torch.tensor(critical_SA, dtype=self.dtype).to(self.d)
         self.speed_target = torch.tensor(speed_target, dtype=self.dtype).to(self.d)
-        self.critical_FA = torch.tensor(critical_FA, dtype=self.dtype).to(self.d)
+        self.critical_RI = torch.tensor(critical_RI, dtype=self.dtype).to(self.d)
 
         self.lethal_w = torch.tensor(lethal_w, dtype=self.dtype).to(self.d)
         self.goal_w = torch.tensor(goal_w, dtype=self.dtype).to(self.d)
@@ -80,18 +80,21 @@ class SimpleCarCost(torch.nn.Module):
         wx = state[...,12]
         wy = state[...,13]
         wz = state[...,14]
+        
+        normalizer = 1/torch.tensor(float(state.shape[-1]), device = self.d, dtype = self.dtype)
+        
+        img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
+        img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
 
-        state_cost = torch.square(1/torch.cos(roll)) + torch.square(1/torch.cos(pitch))
+        state_cost = torch.square(vx/self.BEVmap_normal[img_Y, img_X, 2] / (self.critical_SA * self.speed_target) ) ## don't go fast over uneven terrain
 
-        vel_cost = torch.square( (self.speed_target - vx)/self.speed_target )
+        vel_cost = torch.square(torch.clamp( (vx - self.speed_target), 0, 4.0))
 
-        force_angle = torch.atan2(ay, az)
-        condition = torch.abs(force_angle) > self.critical_FA
-        roll_cost = torch.masked_fill(force_angle, condition, torch.tensor(1000.0, dtype=self.dtype))
+        roll_cost = torch.square(vx*(ay/az) / (self.critical_RI * self.speed_target ))
 
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 
-        running_cost = self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost
+        running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )
         cost_to_go = self.goal_w * terminal_cost
 
         ## for running cost mean over the 0th dimension (bins), which results in a KxT tensor. Then sum over the 1st dimension (time), which results in a [K] tensor.

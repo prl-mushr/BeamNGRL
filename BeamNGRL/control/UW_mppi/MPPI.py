@@ -1,7 +1,10 @@
 import torch
 import time
 
-
+'''
+1) points: use lowercase
+2) explicit variable names
+'''
 class MPPI(torch.nn.Module):
     """
     Model Predictive Path Integral control

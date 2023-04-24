@@ -94,9 +94,9 @@ class beamng_interface():
         self.vehicle.attach_sensor('electrics', self.electrics)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-        time.sleep(2)
+        # time.sleep(2)
         self.attach_accelerometer()
-        time.sleep(2)
+        # time.sleep(2)
         # self.attach_camera(name='camera')
         # time.sleep(2)
         # self.attach_lidar(name='lidar')
@@ -189,13 +189,16 @@ class beamng_interface():
 
     def compute_surface_normals(self):
         # Compute the gradient of the elevation map using the Sobel operator
-        dzdx = cv2.Sobel(self.BEV_heght, cv2.CV_32F, 1, 0, ksize=3)
-        dzdy = cv2.Sobel(self.BEV_heght, cv2.CV_32F, 0, 1, ksize=3)
-
+        # BEV_normal = cv2.GaussianBlur(self.BEV_heght, (3,3), 0)
+        # dzdx = cv2.Sobel(BEV_normal, cv2.CV_32F, 1, 0, ksize=3) * self.resolution
+        # dzdy = cv2.Sobel(BEV_normal, cv2.CV_32F, 0, 1, ksize=3) * self.resolution
+        BEV_normal = np.copy(self.BEV_heght)
+        dzdx = cv2.Sobel(BEV_normal, cv2.CV_32F, 1, 0, ksize=5) * self.resolution
+        dzdy = cv2.Sobel(BEV_normal, cv2.CV_32F, 0, 1, ksize=5) * self.resolution
         # Compute the normal vector as the cross product of the x and y gradients
         normal_x = -dzdx
         normal_y = -dzdy
-        normal_z = np.ones_like(self.BEV_heght)
+        normal_z = np.ones_like(BEV_normal)
         normals = np.stack([normal_x, normal_y, normal_z], axis=-1)
 
         # Normalize the normal vectors

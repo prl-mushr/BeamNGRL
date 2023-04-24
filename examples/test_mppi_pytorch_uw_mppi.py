@@ -6,49 +6,13 @@ import torch
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
-
-
-def visualization(states, pos, goal, costmap, resolution_inv):
-    goal -= pos
-    map_size = costmap.shape[0] // 2
-    goal_X = int((goal[0] * resolution_inv) + map_size)
-    goal_Y = int((goal[1] * resolution_inv) + map_size)
-    cv2.line(costmap, (map_size, map_size), (goal_X, goal_Y), (0, 1, 0), 1)
-    cv2.circle(costmap, (goal_X, goal_Y), int(resolution_inv * 0.2), (1, 0, 0), -1)
-    if states is not None:
-        print_states = states
-        x = print_states[:, :, :, 0].flatten()
-        y = print_states[:, :, :, 1].flatten()
-        X = np.array((x * resolution_inv) + map_size, dtype=np.int32)
-        Y = np.array((y * resolution_inv) + map_size, dtype=np.int32)
-        costmap[Y, X] = np.array([0, 0, 1])
-    costmap = cv2.resize(costmap, (500, 500), interpolation=cv2.INTER_AREA)
-    costmap = cv2.flip(costmap, 0)  # this is just for visualization
-    cv2.imshow("map", costmap)
-    cv2.waitKey(1)
-
-
-def update_goal(goal, pos, target_WP, current_wp_index, lookahead):
-    if goal is None:
-        if current_wp_index == 0:
-            return target_WP[current_wp_index, :2], False, current_wp_index
-        else:
-            print("bruh moment")
-            return pos, True, current_wp_index  ## terminate
-    else:
-        d = np.linalg.norm(goal - pos)
-        if d < lookahead and current_wp_index < len(target_WP) - 1:
-            current_wp_index += 1
-            return target_WP[current_wp_index, :2], False, current_wp_index  ## new goal
-        if current_wp_index == len(target_WP):
-            return pos, True, current_wp_index  # Terminal condition
-        else:
-            return goal, False, current_wp_index
+from BeamNGRL.utils.visualisation import costmap_vis
+from BeamNGRL.utils.planning import update_goal
 
 
 def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=None):
-    map_res = 0.1
-    map_size = 32  # 16 x 16 map
+    map_res = 0.25
+    map_size = 16  # 16 x 16 map
     speed_max = 17
 
     with torch.no_grad():
@@ -58,7 +22,7 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
 
         ## potentially these things should be loaded in from some config file? Will torchscript work with that?
         dynamics = SimpleCarDynamics(
-            wheelbase=0.5,
+            wheelbase=1.0,
             speed_max=speed_max,
             steering_max=0.5,
             dt=0.02,
@@ -70,12 +34,12 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
         )
         costs = SimpleCarCost(
             goal_w=1,
-            speed_w=1.5,
-            roll_w=0,
-            lethal_w=1,
-            speed_target=10,
-            critical_z=0.5,
-            critical_FA=0.5,
+            speed_w=0,
+            roll_w=0, ## weight on roll index, but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+            lethal_w=1, # weight on lethal stuff. Note that this is applied to a piecewise function which is = 1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+            speed_target=10, ## target speed in m/s
+            critical_SA=1/np.cos(0.5), # 0.5 is the critical slope angle, 1/cos(angle) is used for state cost evaluation
+            critical_RI=1.0, ## limiting ratio of lateral to vertical acceleration
             BEVmap_size=map_size,
             BEVmap_res=map_res,
         )
@@ -163,14 +127,14 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
                 action = np.clip(action, -1, 1)
                 dt = time.time() - now
                 
-                visualization(
+                costmap_vis(
                     controller.Dynamics.states.cpu().numpy(),
                     pos,
                     np.copy(goal),
-                    BEV_color,
+                    1/bng_interface.BEV_normal[:,:,2] * 0.1,
                     1 / map_res,
                 )
-                
+                action[1] = max(0, action[1])
                 bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = speed_max, Kp=0.5, Ki=0.05, Kd=0.0, FF_gain=0.4)
 
             except Exception:
@@ -181,8 +145,8 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 0.5])
+    start_point = np.array([-67, 336, 34.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-    map_name = "smallgrid"
+    map_name = "small_island"
     target_WP = np.load("WP_file_offroad.npy")
     main(map_name, start_point, start_quat, target_WP=target_WP)

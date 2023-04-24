@@ -4,7 +4,7 @@ from beamng_interface import *
 import traceback
 
 def main(map_name, start_pos, start_quat):
-    map_res = 0.05
+    map_res = 0.25
     map_size = 16 # 16 x 16 map
 
     bng_interface = get_beamng_default(
@@ -46,7 +46,7 @@ def main(map_name, start_pos, start_quat):
             cv2.imshow('color', BEV)
             BEV = cv2.resize(BEV_heght, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('height', BEV)
-            BEV = cv2.resize(BEV_normal, (500,500), interpolation= cv2.INTER_AREA)
+            BEV = cv2.resize(BEV_normal[:,:,1], (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
             ## you can now "encapsulate the BEV and state into whatever form of "observation" you want.
