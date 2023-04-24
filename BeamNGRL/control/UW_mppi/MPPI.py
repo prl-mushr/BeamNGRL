@@ -143,13 +143,12 @@ class MPPI(torch.nn.Module):
         self.cost_total = self.cost_total + perturbation_cost.to(self.d)
         return self.cost_total
 
-    def _compute_rollout_costs(self, _state, perturbed_actions):
+    def _compute_rollout_costs(self, state, actions):
         ## All the states are initialized as copies of the current state
         ## M bins per control traj, K control trajectories, T timesteps, NX states
-        states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
+        states = state.view(1, -1).repeat(self.M, self.K, self.T, 1)
         ## update all the states using the dynamics function
-        states = self.Dynamics.forward(states, perturbed_actions)
+        states = self.Dynamics.forward(states, actions)
         ## Evaluate costs on STATES with dimensions M x K x T x NX.
         ## Including the terminal costs in here is YOUR own responsibility!
         self.cost_total = self.Costs.forward(states)
-

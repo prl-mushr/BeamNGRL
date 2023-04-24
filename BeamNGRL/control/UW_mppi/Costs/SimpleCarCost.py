@@ -1,13 +1,11 @@
 import torch
 
 class SimpleCarCost(torch.nn.Module):
-    """
-	Class for Dynamics modelling
-    """
     def __init__(
         self,
         BEVmap_size=32,
         BEVmap_res=0.25,
+        dtype=torch.float32,
         device=torch.device("cuda"),
     ):
 
@@ -25,6 +23,7 @@ class SimpleCarCost(torch.nn.Module):
         self.NU = max(self.STEER.stop, self.THROTTLE.stop)
         self.NX = max(self.POS.stop, self.YAW.stop, self.VEL.stop, self.STEER.stop, self.THROTTLE.stop)
         self.d = device
+        self.dtype = dtype
 
         self.goal_state = torch.zeros(2).to(self.d)  # possible goal state
         self.BEVmap_size = torch.tensor(BEVmap_size).to(self.d)
@@ -38,6 +37,8 @@ class SimpleCarCost(torch.nn.Module):
         self.BEVmap_normal = torch.zeros_like(self.BEVmap)
         self.BEVmap_center = self.BEVmap_size * 0.5
         self.BEVmap_res_inv = 1.0 / self.BEVmap_res
+
+        self.max_speed = 5.0
 
     @torch.jit.export
     def update_maps(self, BEVmap, BEVmap_heght, BEVmap_segmt, BEVmap_color, BEVmap_normal):
@@ -56,14 +57,14 @@ class SimpleCarCost(torch.nn.Module):
 
         # print(f'\nCost: state shape: {state.shape}')
         pos = state[..., self.POS]
-        x = pos[..., [0]]
-        y = pos[..., [1]]
-        yaw = state[..., self.YAW]
-        vel = state[..., self.VEL]
-        
+        x = pos[..., 0]
+        y = pos[..., 1]
+        yaw = state[..., self.YAW.start]
+        vel = state[..., self.VEL.start]
+
         img_X = ((x + self.BEVmap_center) / self.BEVmap_res_inv).to(dtype=torch.long, device=self.d)
         img_Y = ((y + self.BEVmap_center) / self.BEVmap_res_inv).to(dtype=torch.long, device=self.d)
-        
+
         state_cost = self.BEVmap[img_Y, img_X]
         state_cost *= state_cost
         condition = state_cost >= 0.9  # Boolean mask
@@ -84,4 +85,3 @@ class SimpleCarCost(torch.nn.Module):
         cost_to_go = cost_to_go.mean(dim=0)
 
         return cost_to_come + cost_to_go
-    

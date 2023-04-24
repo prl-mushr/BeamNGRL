@@ -1,5 +1,15 @@
 import torch
 
+class CarState:
+  def __init__(self, pos=torch.zeros(2), yaw=0.0, vel=0.0, curvature=0.0, accel=0.0):
+    self.pos = pos
+    self.yaw = torch.tensor(yaw)
+    self.vel = torch.tensor(vel)
+    self.curvature = torch.tensor(curvature)
+    self.accel = torch.tensor(accel)
+
+  def vec(self):
+    return torch.hstack((self.pos, self.yaw, self.vel, self.curvature, self.accel))
 
 class SimpleCar(torch.nn.Module):
     """
@@ -26,7 +36,7 @@ class SimpleCar(torch.nn.Module):
         self.VEL = slice(3, 4)
         self.CURVATURE = slice(4, 5)
         self.ACCEL = slice(5, 6)
-        self.dtype = torch.float
+        self.dtype = dtype
 
         self.STEER = slice(0, 1)
         self.THROTTLE = slice(1, 2)
@@ -37,24 +47,23 @@ class SimpleCar(torch.nn.Module):
         self.throttle_to_accel = torch.tensor(10, device=device, dtype=dtype)
         self.curvature_max = torch.tensor(1, device=device, dtype=dtype)
 
-    def forward(self, state, perturbed_actions):
+    def forward(self, state, actions):
         pos = state[..., self.POS]
         x = pos[..., [0]]
         y = pos[..., [1]]
         yaw = state[..., self.YAW]
         vel = state[..., self.VEL]
 
-        steer = state[..., self.CURVATURE] + torch.cumsum(perturbed_actions[..., self.STEER].unsqueeze(dim=0) * self.dt, dim=-1)
-        accel = state[..., self.ACCEL] + torch.cumsum(perturbed_actions[..., self.THROTTLE].unsqueeze(dim=0) * self.dt, dim=-1)
+        steer = state[..., self.CURVATURE] + torch.cumsum(actions[..., self.STEER].unsqueeze(dim=0) * self.dt, dim=-1)
+        accel = state[..., self.ACCEL] + torch.cumsum(actions[..., self.THROTTLE].unsqueeze(dim=0) * self.dt, dim=-1)
 
         K = steer * self.curvature_max  # this is just a placeholder for curvature since steering correlates to curvature
-        
-        vel = vel + torch.cumsum(accel * self.throttle_to_accel * self.dt, dim=-1)
+
+        vel += torch.cumsum(accel * self.throttle_to_accel * self.dt, dim=-1)
         delta = vel * self.dt
 
         yaw = yaw + torch.cumsum(delta * K, dim=-1)  # this is what the yaw will become
-        x = x + torch.cumsum(delta * torch.cos(yaw), dim=-1)
-        y = y + torch.cumsum(delta * torch.sin(yaw), dim=-1)
+        x += torch.cumsum(delta * torch.cos(yaw), dim=-1)
+        y += torch.cumsum(delta * torch.sin(yaw), dim=-1)
 
-        return torch.stack((x, y, yaw, vel, steer, accel), dim=3).to(dtype=self.dtype)
-    
+        return torch.cat((x, y, yaw, vel, steer, accel), dim=3).to(dtype=self.dtype)
