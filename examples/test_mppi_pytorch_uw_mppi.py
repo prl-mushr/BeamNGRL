@@ -112,7 +112,6 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
                 state[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
 
                 # we use our previous control output as input for next cycle!
-
                 state[15:17] = action ## adhoc wheelspeed.
                 now = time.time()
                 delta_action = np.array(

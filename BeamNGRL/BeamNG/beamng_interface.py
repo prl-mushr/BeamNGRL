@@ -187,23 +187,21 @@ class beamng_interface():
 
         self.BEV_normal = self.compute_surface_normals()
 
+
     def compute_surface_normals(self):
         # Compute the gradient of the elevation map using the Sobel operator
-        # BEV_normal = cv2.GaussianBlur(self.BEV_heght, (3,3), 0)
-        # dzdx = cv2.Sobel(BEV_normal, cv2.CV_32F, 1, 0, ksize=3) * self.resolution
-        # dzdy = cv2.Sobel(BEV_normal, cv2.CV_32F, 0, 1, ksize=3) * self.resolution
         BEV_normal = np.copy(self.BEV_heght)
-        dzdx = cv2.Sobel(BEV_normal, cv2.CV_32F, 1, 0, ksize=5) * self.resolution
-        dzdy = cv2.Sobel(BEV_normal, cv2.CV_32F, 0, 1, ksize=5) * self.resolution
+        BEV_normal = cv2.resize(BEV_normal, (int(self.map_size_px[0]*4), int(self.map_size_px[0]*4)), cv2.INTER_AREA)
+        BEV_normal = cv2.GaussianBlur(BEV_normal, (3,3), 0)
+        normal_x = -cv2.Sobel(BEV_normal, cv2.CV_64F, 1, 0, ksize=3)
+        normal_y = -cv2.Sobel(BEV_normal, cv2.CV_64F, 0, 1, ksize=3)
         # Compute the normal vector as the cross product of the x and y gradients
-        normal_x = -dzdx
-        normal_y = -dzdy
         normal_z = np.ones_like(BEV_normal)
         normals = np.stack([normal_x, normal_y, normal_z], axis=-1)
-
         # Normalize the normal vectors
         norms = np.linalg.norm(normals, axis=-1, keepdims=True)
         normals = normals / norms
+        normals = cv2.resize(normals, (int(self.map_size_px[0]*2), int(self.map_size_px[0]*2)), cv2.INTER_AREA)
         return normals
 
     def rpy_from_quat(self, quat):

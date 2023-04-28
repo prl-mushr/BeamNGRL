@@ -122,8 +122,8 @@ class SimpleCarDynamics(torch.nn.Module):
         x = x + torch.cumsum(dS * cy, dim=-1)
         y = y + torch.cumsum(dS * sy, dim=-1)
 
-        img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
-        img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
+        img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
+        img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
         
         z = self.BEVmap_height[img_Y, img_X]
         # normal = self.BEVmap_normal[img_Y, img_X] ## normal is a unit vector

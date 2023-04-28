@@ -30,7 +30,6 @@ def main(map_name, start_pos, start_quat):
             state =  bng_interface.state
             pos = state[:3]  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
             ## if you just want position, you can also do pos = bng_interface.pos
-
             ## camera and depth currently unavailable on Ubuntu!
             # color, depth, segmt = bng_interface.color, bng_interface.depth, bng_interface.segmt
             # lidar_pts = bng_interface.lidar_pts

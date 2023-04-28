@@ -1,5 +1,14 @@
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
+ax.set_box_aspect([1,1,0.5]) # set the aspect ratio of the plot
+ax.view_init(elev=60, azim=-45) # set the viewpoint of the plot
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.set_title('Elevation map')
 
 def costmap_vis(states, pos, goal, costmap, resolution_inv):
     goal -= pos
@@ -27,3 +36,12 @@ def costmap_vis(states, pos, goal, costmap, resolution_inv):
     costmap = cv2.flip(costmap, 0)  # this is just for visualization
     cv2.imshow("map", costmap)
     cv2.waitKey(1)
+
+def elevation_map_vis(elev_map):
+    global ax
+    x, y = np.meshgrid(range(elev_map.shape[1]), range(elev_map.shape[0]))
+    ax.clear()
+    ax.plot_surface(x, y, elev_map, cmap='viridis', alpha=0.8, linewidth=0)
+    # Update the plot
+    plt.show(block=False)
+    plt.pause(0.001)
