@@ -20,3 +20,4 @@ def costmap_vis(states, pos, goal, costmap, resolution_inv):
     costmap = cv2.flip(costmap, 0)  # this is just for visualization
     cv2.imshow("map", costmap)
     cv2.waitKey(1)
+

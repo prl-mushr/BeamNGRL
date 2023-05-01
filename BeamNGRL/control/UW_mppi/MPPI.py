@@ -103,16 +103,15 @@ class MPPI(nn.Module):
         :returns: best actions
         """
 
-        # FIXME: shift operation should be after action selection
-        self.U = torch.roll(self.U, -1, dims=0)
-        self.U[-1] = self.u_final
-
         for i in range(self.num_optimizations):
             delta_action = self.optimize(state)
 
         action = delta_action*self.dt + self.last_action
         action = torch.clamp(action, -1, 1)
         self.last_action = torch.clone(action)
+
+        self.U = torch.roll(self.U, -1, dims=0)
+        self.U[-1] = self.u_final
         return action
 
     def optimize(self, state):

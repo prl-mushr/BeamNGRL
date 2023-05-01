@@ -1,5 +1,5 @@
 dataset:
-  dataset_path: '/media/dataset'
+  name: 'small_island_debug'
   augment: True
 
 network:

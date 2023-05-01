@@ -56,7 +56,7 @@ class MPPI(torch.nn.Module):
         :param U_init: (T x nu) initial control sequence; defaults to noise
         :param step_dependent_dynamics: whether the passed in dynamics needs horizon step passed in (as 3rd arg)
         :param rollout_samples: M, number of state trajectories to rollout for each control trajectory
-            (should be 1 for deterministic dynamics and more for networks that output a distribution)
+            (should be 1 for deterministic dynamics and more for models that output a distribution)
         :param rollout_var_cost: Cost attached to the variance of costs across trajectory rollouts
         :param rollout_var_discount: Discount of variance cost over control horizon
         :param sample_null_action: Whether to explicitly sample a null action (bad for starting in a local minima)
@@ -100,7 +100,7 @@ class MPPI(torch.nn.Module):
         self.sample_null_action = sample_null_action
         self.noise_abs_cost = noise_abs_cost
 
-        # handling dynamics networks that output a distribution (take multiple trajectory samples)
+        # handling dynamics models that output a distribution (take multiple trajectory samples)
         self.M = rollout_samples
         self.rollout_var_cost = rollout_var_cost
         self.rollout_var_discount = rollout_var_discount

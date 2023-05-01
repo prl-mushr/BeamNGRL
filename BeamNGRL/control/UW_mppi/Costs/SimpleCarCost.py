@@ -9,7 +9,7 @@ class SimpleCarCost(nn.Module):
     def __init__(
         self,
         max_speed=10.,
-        state_dim=6,
+        state_dim=7,
         map_size=32,
         map_res=0.25,
         device=torch.device("cuda"),
@@ -60,7 +60,7 @@ class SimpleCarCost(nn.Module):
 
         assert states.size(-1) == self.state_dim
 
-        x, y, yaw, vel, steer, accel = states.split(1, dim=-1)
+        x, y, yaw, vel, steer, accel_x, accel_y = states.split(1, dim=-1)
         
         img_X = ((x + self.map_center) / self.map_res).to(self.device, torch.long)
         img_Y = ((y + self.map_center) / self.map_res).to(self.device, torch.long)
@@ -83,16 +83,15 @@ class SimpleCarCost(nn.Module):
         running_cost += vel_cost.squeeze(-1)
 
         # Acceleration
-        ay = vel*yaw
-        # accel_cost = ay*ay
-        accel_cost = 0*ay
-        condition = accel_cost > 6
+        accel_cost = 0*accel_y
+        # condition = torch.abs(accel_y) > 6
+        condition = torch.abs(accel_y) > 15
         accel_cost = torch.masked_fill(
             accel_cost, condition, torch.tensor(1000., dtype=self.dtype))
         running_cost += accel_cost.squeeze(-1)
 
         # Goal distance (terminal)
-        xy_final = states[...,-1, :2]
+        xy_final = states[..., -1, :2]
         goal_cost = torch.linalg.norm(xy_final - self.goal_state.view(1, 1, 2), dim=-1)
         terminal_cost += goal_cost
 

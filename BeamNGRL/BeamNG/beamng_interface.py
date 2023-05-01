@@ -1,7 +1,7 @@
 import time
 from pyquaternion import Quaternion
 from beamngpy import BeamNGpy, Scenario, Vehicle
-from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer
+from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer
 import numpy as np
 import traceback
 import cv2
@@ -58,13 +58,15 @@ class beamng_interface():
         self.lidar_pts  = None
         self.Gravity    = np.array([0,0,9.81])
         self.state      = None
+        self.timestamp  = None
 
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
                       time_of_day=1200, hide_hud=False, fps=60):
         self.scenario = Scenario(scenario_name, name="test integration")
 
-        self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
+        self.vehicle = Vehicle(
+            'ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 
         self.start_pos = start_pos
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
@@ -77,6 +79,8 @@ class beamng_interface():
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
         self.vehicle.attach_sensor('electrics', self.electrics)
+        self.timer = Timer()
+        self.vehicle.attach_sensor('timer', self.timer)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
         time.sleep(2)
@@ -253,20 +257,33 @@ class beamng_interface():
         img = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
         return img
 
-    def attach_lidar(self, name, pos=(0,0,1.5), dir=(0,-1,0), up=(0,0,1), vertical_resolution=3, vertical_angle=26.9,
+    def attach_lidar(self, name, pos=(0,0,1.5), dir=(0,-1,0), up=(0,0,1),
+                     vertical_resolution=3, vertical_angle=26.9,
                      rays_per_second_per_scan=5000, update_frequency=10):
-        lidar = Lidar(name, self.bng, self.vehicle, pos = pos, dir=dir, up=up,requested_update_time=0.001, is_visualised=False,
-                        vertical_resolution=3, vertical_angle=5, rays_per_second=vertical_resolution*rays_per_second_per_scan,
-                        frequency=update_frequency, update_priority = 0,is_using_shared_memory=True)
+
+        lidar = Lidar(name, self.bng, self.vehicle,
+                      pos=pos, dir=dir, up=up,
+                      requested_update_time=0.001, is_visualised=False,
+                      vertical_resolution=3, vertical_angle=5,
+                      rays_per_second=vertical_resolution*rays_per_second_per_scan,
+                      frequency=update_frequency, update_priority=0,
+                      is_using_shared_memory=True)
+
         self.lidar_list.append(lidar)
         print("lidar attached")
 
-    def attach_camera(self, name, pos=(0,-2,1.4), dir=(0,-1,0), field_of_view_y=87, resolution=(640,480),
-                      depth=True, color=True, annotation=False, instance=False, near_far_planes=(1,60.0), update_frequency = 30, static=False):
-        camera = Camera(name, self.bng, self.vehicle, pos=pos, field_of_view_y=field_of_view_y, resolution=resolution, update_priority=0,
-                         is_render_colours=color, is_render_depth=depth, is_render_annotations=annotation,is_visualised=False,
-                         requested_update_time=0.01, near_far_planes=near_far_planes, is_using_shared_memory=True,
-                         is_render_instance=instance,  is_static=static)
+    def attach_camera(self, name, pos=(0,-2,1.4), dir=(0,-1,0),
+                      field_of_view_y=87, resolution=(640,480),
+                      depth=True, color=True, annotation=False, instance=False,
+                      near_far_planes=(1,60.0), update_frequency=30, static=False):
+
+        camera = Camera(
+            name, self.bng, self.vehicle, pos=pos, field_of_view_y=field_of_view_y,
+            resolution=resolution, update_priority=0, is_render_colours=color,
+            is_render_depth=depth, is_render_annotations=annotation,is_visualised=False,
+            requested_update_time=0.01, near_far_planes=near_far_planes,
+            is_using_shared_memory=True, is_render_instance=instance,  is_static=static)
+
         self.camera_list.append(camera)
         print("camera attached")
 
@@ -308,7 +325,7 @@ class beamng_interface():
 
     def state_poll(self):
         try:
-            if(self.state_init == False):
+            if self.state_init == False:
                 # self.camera_poll(0)
                 # self.lidar_poll(0)
                 self.Accelerometer_poll()
@@ -319,14 +336,16 @@ class beamng_interface():
                 print("beautiful day, __init__?")
                 time.sleep(0.02)
             else:
+                # FIXME: should use timestamp for this
                 dt = time.time() - self.now
                 self.now = time.time()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                if(self.lockstep):
+                if self.lockstep:
                     self.bng.pause()
+                self.timestamp = np.copy(self.vehicle.sensors['timer'].data['time'])
                 self.pos = np.copy(self.vehicle.state['pos'])
                 self.vel = np.copy(self.vehicle.state['vel'])
                 self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
@@ -353,7 +372,7 @@ class beamng_interface():
                 self.thbr = throttle - brake
                 self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
                 self.gen_BEVmap()
-                if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
+                if abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2:
                     self.flipped_over = True
         except Exception:
             print(traceback.format_exc())

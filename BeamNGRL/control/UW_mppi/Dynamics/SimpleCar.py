@@ -55,14 +55,16 @@ class SimpleCar(nn.Module):
         steer = state[..., self.STEER] + delta_steer
         throttle = state[..., self.THROTTLE] + delta_throttle
         curvature = torch.tan(steer * self.steering_max) / (self.lf + self.lr)
-
-        accel = throttle * self.wheelspeed_max
-        vel = vel + torch.cumsum(accel * self.dt, dim=2)
+        accel_x = throttle * self.wheelspeed_max
+        vel = vel + torch.cumsum(accel_x * self.dt, dim=2)
         delta = vel * self.dt
+
+        gz = vel * curvature
+        accel_y = vel * gz
 
         yaw = yaw + torch.cumsum(delta * curvature, dim=2)  # this is what the yaw will become
         x = x + torch.cumsum(delta * torch.cos(yaw), dim=2)
         y = y + torch.cumsum(delta * torch.sin(yaw), dim=2)
 
-        states = torch.cat((x, y, yaw, vel, steer, accel), dim=-1).to(**self.tn_args)
+        states = torch.cat((x, y, yaw, vel, steer, accel_x, accel_y), dim=-1).to(**self.tn_args)
         return states

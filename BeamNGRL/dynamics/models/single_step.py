@@ -6,21 +6,19 @@ import torch.nn.functional as F
 class BasicMLP(nn.Module):
     def __init__(
             self,
-            feat_in_size=0, # number of semantic features
+            input_size=1,
             hidden_depth=2,
             hidden_dim=512,
             output_dim=1,
-            final_activation=None,
             batch_norm=False,
             **kwargs,
     ):
         super().__init__()
 
-        self.feat_in_size = feat_in_size
-        self.final_activation = final_activation
+        self.input_size = input_size
 
         fc_layers = [
-            nn.Linear(self.feat_in_size, hidden_dim),
+            nn.Linear(input_size, hidden_dim),
             nn.ReLU(),
         ]
         for _ in range(hidden_depth):
@@ -29,7 +27,7 @@ class BasicMLP(nn.Module):
                 fc_layers += [nn.BatchNorm1d(hidden_dim)]
             fc_layers += [nn.ReLU()]
         fc_layers += [nn.Linear(hidden_dim, output_dim)]
-        fc_layers += [nn.ReLU]
+        fc_layers += [nn.ReLU()]
 
         self.main = nn.Sequential(*fc_layers)
 

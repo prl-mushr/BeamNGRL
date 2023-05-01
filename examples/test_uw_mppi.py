@@ -33,7 +33,7 @@ def main(map_name, start_point, start_quat, target_WP=None):
     ctrl_sigma[0,0] = 1.  # steering
     ctrl_sigma[1,1] = 1. # throttle/brake
     # ns[1,1] = 2.5 # throttle/brake
-    dt=0.04
+    dt = 0.04
 
     dyn_func = SimpleCar(
         dt=dt,
@@ -73,6 +73,7 @@ def main(map_name, start_point, start_quat, target_WP=None):
             # Velocity is in the body-frame
             bng_interface.state_poll()
             state = bng_interface.state
+
             pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
 
             goal, terminate, current_wp_index = update_goal(

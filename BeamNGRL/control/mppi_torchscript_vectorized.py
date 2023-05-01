@@ -56,7 +56,7 @@ class MPPI(torch.nn.Module):
         :param U_init: (T x nu) initial control sequence; defaults to noise
         :param step_dependent_dynamics: whether the passed in dynamics needs horizon step passed in (as 3rd arg)
         :param rollout_samples: M, number of state trajectories to rollout for each control trajectory
-            (should be 1 for deterministic dynamics and more for networks that output a distribution)
+            (should be 1 for deterministic dynamics and more for models that output a distribution)
         :param rollout_var_cost: Cost attached to the variance of costs across trajectory rollouts
         :param rollout_var_discount: Discount of variance cost over control horizon
         :param sample_null_action: Whether to explicitly sample a null action (bad for starting in a local minima)
@@ -99,7 +99,7 @@ class MPPI(torch.nn.Module):
         self.sample_null_action = sample_null_action
         self.noise_abs_cost = noise_abs_cost
 
-        # handling dynamics networks that output a distribution (take multiple trajectory samples)
+        # handling dynamics models that output a distribution (take multiple trajectory samples)
         self.M = rollout_samples
         self.rollout_var_cost = rollout_var_cost
         self.rollout_var_discount = rollout_var_discount
@@ -280,11 +280,9 @@ class MPPI(torch.nn.Module):
         accel_cost = ay*0
         condition = torch.abs(ay) > 6
         accel_cost = torch.masked_fill(accel_cost, condition, torch.tensor(1000.0, dtype=self.dtype))
-
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=2)
 
         return 2.0*state_cost + 1.5*vel_cost + torch.tensor(1.0,dtype=self.dtype)*accel_cost, terminal_cost
-
 
 if __name__ == '__main__':
     dtype = torch.float
