@@ -11,9 +11,10 @@ from BeamNGRL.utils.planning import update_goal
 
 
 def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=None):
-    map_res = 0.25
-    map_size = 16  # 16 x 16 map
-    speed_max = 17
+    map_res = 0.1
+    map_size = 48  # 16 x 16 map
+    speed_max = 20
+    dt = 0.03
 
     with torch.no_grad():
         ## BEGIN MPPI
@@ -22,23 +23,23 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
 
         ## potentially these things should be loaded in from some config file? Will torchscript work with that?
         dynamics = SimpleCarDynamics(
-            wheelbase=1.0,
+            wheelbase=2.6,
             speed_max=speed_max,
-            steering_max=0.5,
-            dt=0.02,
+            steering_max=0.6,
+            dt=dt,
             BEVmap_size=map_size,
             BEVmap_res=map_res,
-            ROLLOUTS=512,
+            ROLLOUTS=1024,
             TIMESTEPS=32,
             BINS=1,
         )
         costs = SimpleCarCost(
             goal_w=1,
-            speed_w=0,
+            speed_w=2,
             roll_w=0, ## weight on roll index, but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
             lethal_w=1, # weight on lethal stuff. Note that this is applied to a piecewise function which is = 1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
             speed_target=10, ## target speed in m/s
-            critical_SA=1/np.cos(0.5), # 0.5 is the critical slope angle, 1/cos(angle) is used for state cost evaluation
+            critical_SA=1/np.cos(0.3), # 0.5 is the critical slope angle, 1/cos(angle) is used for state cost evaluation
             critical_RI=1.0, ## limiting ratio of lateral to vertical acceleration
             BEVmap_size=map_size,
             BEVmap_res=map_res,
@@ -56,18 +57,18 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
             dynamics,
             costs,
             CTRL_NOISE=ns,
-            lambda_=0.1,
+            lambda_=0.01,
         )
 
         # controller = torch.jit.script(controller)
         # controller.eval()
         ## END MPPI
         bng_interface = get_beamng_default(
-            car_model='Short_Course_Truck',
+            car_model='RACER',
             start_pos=start_pos,
             start_quat=start_quat,
             map_name=map_name,
-            car_make='RG_RC',
+            car_make='sunburst',
             beamng_path=BNG_HOME,
             map_res=map_res,
             map_size=map_size
@@ -81,6 +82,7 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
         while True:
             try:
                 bng_interface.state_poll()
+                now = time.time()
                 # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
                 state = np.copy(bng_interface.state)
                 # state = np.zeros(17)
@@ -100,11 +102,13 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
                 BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=d, dtype=dtype)
                 BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=d, dtype=dtype)
                 BEV_center = torch.from_numpy(state[:3]).to(device=d, dtype=dtype)
+                BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=d, dtype=dtype)/255
+                BEV_path[torch.where(BEV_path > 0.9)] = 100.0
                 
                 BEV_color = bng_interface.BEV_color # this is just for visualization
 
                 controller.Dynamics.set_BEV(BEV_heght, BEV_normal, BEV_center)
-                controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_center)
+                controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
                 controller.Costs.set_goal(
                     torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=d, dtype=dtype)
                 )  # you can also do this asynchronously
@@ -113,7 +117,6 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
 
                 # we use our previous control output as input for next cycle!
                 state[15:17] = action ## adhoc wheelspeed.
-                now = time.time()
                 delta_action = np.array(
                     controller.forward(
                         torch.from_numpy(state).to(device=d, dtype=dtype)
@@ -121,20 +124,21 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
                     .cpu()
                     .numpy(),
                     dtype=np.float64,
-                )[0] * 0.02
+                )[0] * dt
                 action += delta_action
                 action = np.clip(action, -1, 1)
-                dt = time.time() - now
+                action[1] = np.clip(action[1], 0, 0.45)
+                dt_ = time.time() - now
                 
                 costmap_vis(
                     controller.Dynamics.states.cpu().numpy(),
                     pos,
                     np.copy(goal),
-                    1/bng_interface.BEV_normal[:,:,2] * 0.1,
+                    BEV_path.cpu().numpy(),
                     1 / map_res,
                 )
-                action[1] = max(0, action[1])
-                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = speed_max, Kp=0.5, Ki=0.05, Kd=0.0, FF_gain=0.4)
+                # print(action[1]*speed_max*3.6)
+                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.1)
 
             except Exception:
                 print(traceback.format_exc())
@@ -144,8 +148,8 @@ def main(map_name, start_pos, start_quat, BeamNG_dir="/home/stark/", target_WP=N
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 34.5])
+    start_point = np.array([-67, 336, 0.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-    map_name = "small_island"
+    map_name = "smallgrid"
     target_WP = np.load("WP_file_offroad.npy")
     main(map_name, start_point, start_quat, target_WP=target_WP)

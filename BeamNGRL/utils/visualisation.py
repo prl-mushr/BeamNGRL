@@ -22,15 +22,15 @@ def costmap_vis(states, pos, goal, costmap, resolution_inv):
             print_states = states
             x = print_states[:, :, :, 0].flatten()
             y = print_states[:, :, :, 1].flatten()
-            X = np.clip( np.array((x * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2)
-            Y = np.clip( np.array((y * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2)
+            X = np.clip( np.array((x * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2 - 1)
+            Y = np.clip( np.array((y * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2 - 1)
             costmap[Y, X] = 0
         else:
             print_states = states
             x = print_states[:, :, :, 0].flatten()
             y = print_states[:, :, :, 1].flatten()
-            X = np.clip( np.array((x * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2)
-            Y = np.clip( np.array((y * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2)
+            X = np.clip( np.array((x * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2 - 1)
+            Y = np.clip( np.array((y * resolution_inv) + map_size, dtype=np.int32), 0, map_size*2 - 1)
             costmap[Y, X] = np.array([0, 0, 0])
     costmap = cv2.resize(costmap, (500, 500), interpolation=cv2.INTER_AREA)
     costmap = cv2.flip(costmap, 0)  # this is just for visualization

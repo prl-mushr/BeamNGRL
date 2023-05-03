@@ -1,7 +1,7 @@
 import time
 from pyquaternion import Quaternion
 from beamngpy import BeamNGpy, Scenario, Vehicle
-from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer
+from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer
 import numpy as np
 import traceback
 import cv2
@@ -80,6 +80,7 @@ class beamng_interface():
         self.scenario = Scenario(scenario_name, name="test integration")
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
+        self.nominal_wheel_order = car_make != "RG_RC"
 
         self.start_pos = start_pos
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
@@ -91,7 +92,9 @@ class beamng_interface():
         # self.bng.set_steps_per_second(fps)  # Set simulator to 60hz temporal resolution
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
+        self.timer = Timer()
         self.vehicle.attach_sensor('electrics', self.electrics)
+        self.vehicle.attach_sensor('timer', self.timer)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
         # time.sleep(2)
@@ -331,19 +334,20 @@ class beamng_interface():
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.state_init = True
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
-                self.now = time.time()
+                self.timestamp = self.vehicle.sensors['timer']['time']
                 print("beautiful day, __init__?")
                 time.sleep(0.02)
             else:
-                self.dt = time.time() - self.now
-                self.now = time.time()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 if(self.lockstep):
                     self.bng.pause()
-                    self.dt = 0.016
+                
+                self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
+                self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
+
                 self.pos = np.copy(self.vehicle.state['pos'])
                 self.vel = np.copy(self.vehicle.state['vel'])
                 self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
@@ -365,10 +369,12 @@ class beamng_interface():
                 self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
                 self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
                 self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], -wheelspeed[2.0], -wheelspeed[3.0]])
-                
+                if(self.nominal_wheel_order):
+                    self.wheelspeed = np.array([-wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], -wheelspeed[3.0]]) ## on RG_RC it is ++--, on normal cars it is -++-
+                else:
+                    self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], -wheelspeed[2.0], -wheelspeed[3.0]])
                 innovation = (self.wheelspeed @ self.wheeldownforce)/np.sum(self.wheeldownforce) - self.avg_wheelspeed
-                self.avg_wheelspeed += innovation * 0.5 * self.dt/0.016
+                self.avg_wheelspeed += innovation * 0.9
 
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
@@ -398,7 +404,6 @@ class beamng_interface():
             th, self.whspd_error_sigma, self.whspd_error_diff = self.scaled_PID_FF(Kp, Ki, Kd, FF_gain, th, speed_err, self.whspd_error_sigma, self.whspd_error_diff, self.last_whspd_error)
             self.last_whspd_error = speed_err
             th = np.clip(th, -1,1)
-            
         br = 0
         th_out = th
         if(th < 0):

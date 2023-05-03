@@ -34,6 +34,7 @@ class SimpleCarCost(torch.nn.Module):
         self.BEVmap_height = torch.zeros_like(self.BEVmap)
         self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype).to(self.d)
         self.BEVmap_center = torch.zeros(3, dtype=self.dtype).to(self.d)
+        self.BEVmap_path = torch.zeros_like(self.BEVmap)
 
         self.GRAVITY = torch.tensor(9.8, dtype=self.dtype).to(self.d)
 
@@ -49,15 +50,15 @@ class SimpleCarCost(torch.nn.Module):
         self.goal_state = torch.zeros(2, device = self.d, dtype=self.dtype)
 
     @torch.jit.export
-    def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_center):
+    def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_path):
         '''
         BEVmap_height, BEVmap_normal are robot-centric elevation and normal maps.
-        BEV_center is the x,y,z coordinate at the center of the map. Technically this could just be x,y, but its easier to just remove it from all dims at once.
+        BEV_path is the x,y,z coordinate at the center of the map. Technically this could just be x,y, but its easier to just remove it from all dims at once.
         '''
         assert BEVmap_height.shape[0] == self.BEVmap_size_px
         self.BEVmap_height = BEVmap_height
         self.BEVmap_normal = BEVmap_normal
-        self.BEVmap_center = BEV_center  # translate the state into the center of the costmap.
+        self.BEVmap_path = BEV_path  # translate the state into the center of the costmap.
 
     @torch.jit.export
     def set_goal(self, goal_state):
@@ -86,12 +87,12 @@ class SimpleCarCost(torch.nn.Module):
         img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
         img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
 
-        state_cost = torch.square(vx/self.BEVmap_normal[img_Y, img_X, 2] / (self.critical_SA * self.speed_target) ) ## don't go fast over uneven terrain
+        # state_cost = torch.square(torch.clamp( ((vx/self.BEVmap_normal[img_Y, img_X, 2]) / (self.critical_SA * self.speed_target)) - 1, 0, 1) ) ## don't go fast over uneven terrain
+        state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
+        vel_cost = torch.square(torch.clamp((vx - self.speed_target)/self.speed_target, 0, 1))
 
-        vel_cost = torch.square(torch.clamp( (vx - self.speed_target), 0, 4.0))
-
-        roll_cost = torch.square(vx*(ay/az) / (self.critical_RI * self.speed_target ))
-
+        roll_cost = torch.clamp(torch.square((ay/az) / self.critical_RI ) - 1, 0, 1)
+        
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 
         running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )

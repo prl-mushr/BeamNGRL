@@ -99,9 +99,9 @@ class SimpleCarDynamics(torch.nn.Module):
 
         controls = torch.clamp(state[..., 15:17] + torch.cumsum(perturbed_actions.unsqueeze(dim=0) * self.dt, dim=-2), -1, 1) # last dimension is the NU channel!
 
-        controls[...,1] = torch.clamp(controls[...,1], 0,0.8) ## car can't go in reverse
+        controls[...,1] = torch.clamp(controls[...,1], 0,0.45) ## car can't go in reverse
 
-        perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/self.dt
+        perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/(self.dt)
 
         steer = controls[...,0]
         throttle = controls[...,1]
@@ -113,6 +113,9 @@ class SimpleCarDynamics(torch.nn.Module):
         dS = vx * self.dt
 
         wz = vx * K
+        ay = (vx * wz)
+        ay = torch.clamp(ay, -10, 10)
+        wz = ay/torch.clamp(vx,1,25)
 
         yaw = yaw + self.dt * torch.cumsum(wz, dim=2)  # this is what the yaw will become
         
@@ -126,27 +129,27 @@ class SimpleCarDynamics(torch.nn.Module):
         img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
         
         z = self.BEVmap_height[img_Y, img_X]
-        # normal = self.BEVmap_normal[img_Y, img_X] ## normal is a unit vector
+        normal = self.BEVmap_normal[img_Y, img_X] ## normal is a unit vector
 
-        # heading = torch.stack([cy, sy, torch.zeros_like(yaw)], dim=3) ## heading is a unit vector --ergo, all cross products will be unit vectors and don't need normalization
+        heading = torch.stack([cy, sy, torch.zeros_like(yaw)], dim=3) ## heading is a unit vector --ergo, all cross products will be unit vectors and don't need normalization
 
-        # # Calculate the cross product of the heading and normal vectors to get the vector perpendicular to both
-        # left = torch.cross(normal, heading)
-        # # Calculate the cross product of the right and normal vectors to get the vector perpendicular to both and facing upwards
-        # forward = torch.cross(left, normal)
-        # # Calculate the roll angle (rotation around the forward axis)
-        # roll = torch.asin(left[...,2])
-        # # Calculate the pitch angle (rotation around the right axis)
-        # pitch = -torch.asin(forward[...,2])
+        # Calculate the cross product of the heading and normal vectors to get the vector perpendicular to both
+        left = torch.cross(normal, heading)
+        # Calculate the cross product of the right and normal vectors to get the vector perpendicular to both and facing upwards
+        forward = torch.cross(left, normal)
+        # Calculate the roll angle (rotation around the forward axis)
+        roll = torch.asin(left[...,2])
+        # Calculate the pitch angle (rotation around the right axis)
+        pitch = -torch.asin(forward[...,2])
 
-        # wx[...,1:] = torch.diff(roll, dim=-1)/self.dt
-        # wy[...,1:] = torch.diff(pitch, dim=-1)/self.dt
+        wx[...,1:] = torch.diff(roll, dim=-1)/self.dt
+        wy[...,1:] = torch.diff(pitch, dim=-1)/self.dt
 
-        # vy = torch.zeros_like(vx)
-        # vz = torch.zeros_like(vx)
+        vy = torch.zeros_like(vx)
+        vz = torch.zeros_like(vx)
 
         # ax[...,:-1] = self.smoothing(torch.diff(vx, dim=-1)/self.dt)
-        ay = ( (vx * wz))# + self.GRAVITY * torch.sin(roll) ) ## this is the Y acceleration in the inertial frame as would be reported by an accelerometer
+        # ay = (vx * wz)# + self.GRAVITY * torch.sin(roll) )## this is the Y acceleration in the inertial frame as would be reported by an accelerometer
         # az = (-vx * wy) + self.GRAVITY * normal[...,2] ## this is the Z acc in the inertial frame as reported by an IMU
         # print(roll[0,0,0]*57.3, pitch[0,0,0]*57.3, normal[0,0,0])
         # pack all values: 
