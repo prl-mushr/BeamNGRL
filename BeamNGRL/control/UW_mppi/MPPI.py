@@ -5,6 +5,12 @@ import time
 1) points: use lowercase
 2) explicit variable names
 '''
+
+class Config:
+  def __init__(self, **kwargs):
+    for k, v in kwargs.items():
+      setattr(self, k, v)
+
 class MPPI(torch.nn.Module):
     """
     Model Predictive Path Integral control
@@ -16,24 +22,19 @@ class MPPI(torch.nn.Module):
         self,
         Dynamics,
         Costs,
+        config,
         CTRL_NOISE,
         CTRL_NOISE_MU=None,
         device="cuda:0",
-        lambda_=1.0,
         u_final=None,
         u_per_command=1,
-        num_optimizations=1,
-        Rollout_bins=1,
     ):
         """
         :param Dynamics: nn module (object) that provides a forward function for propagating the dynamics forward in time
         :param Costs: nn module (object) that provides a forward function for evaluating the costs of state trajectories
         :param NX: state dimension
         :param CTRL_NOISE: (nu x nu) control noise covariance (assume v_t ~ N(u_t, CTRL_NOISE))
-        :param N_SAMPLES: K, number of trajectories to sample
-        :param TIMESTEPS: T, length of each trajectory
         :param device: pytorch device
-        :param lambda_: temperature, positive scalar where larger values will allow more exploration
         :param u_init: (nu) what to initialize new end of trajectory control to be; defeaults to zero
         """
         super(MPPI, self).__init__()
@@ -42,13 +43,14 @@ class MPPI(torch.nn.Module):
 
         self.Dynamics = Dynamics
         self.Costs = Costs
-        
-        self.K = self.Dynamics.K
-        self.T = self.Dynamics.T
-        self.M = self.Dynamics.M
+        self.config = config
+
+        self.K = config.n_rollouts
+        self.T = config.n_timesteps
+        self.M = config.n_bins
         # dimensions of state and control
         self.nu = 1 if len(CTRL_NOISE.shape) == 0 else CTRL_NOISE.shape[0]
-        self.lambda_ = torch.tensor(lambda_).to(self.d).to(dtype=self.dtype)
+        self.temperature = torch.tensor(config.temperature).to(self.d).to(dtype=self.dtype)
         if CTRL_NOISE_MU is None:
             CTRL_NOISE_MU = torch.zeros(self.nu, dtype=self.dtype)
 
@@ -78,8 +80,6 @@ class MPPI(torch.nn.Module):
         self.cost_total = torch.zeros(self.K, device=self.d, dtype=self.dtype)
         self.cost_total_non_zero = torch.zeros(self.K, device=self.d, dtype=self.dtype)
         self.omega = torch.zeros(self.K, device=self.d, dtype=self.dtype)
-        self.num_optimizations = num_optimizations
-
 
     @torch.jit.export
     def reset(self, U=None):
@@ -99,7 +99,6 @@ class MPPI(torch.nn.Module):
         ## shift command 1 time step
         self.U = torch.roll(self.U, self.u_per_command, dims=0)
         self.U[-self.u_per_command : , :] = self.U[-self.u_per_command,:] # repeat last control
-        # for i in range(self.num_optimizations):
         self.optimize(state)
         return self.U[: self.u_per_command]
 
@@ -111,7 +110,7 @@ class MPPI(torch.nn.Module):
         self.compute_total_cost_batch(state)
 
         beta = torch.min(self.cost_total)
-        self.cost_total_non_zero = torch.exp((-1 / self.lambda_) * (self.cost_total - beta))
+        self.cost_total_non_zero = torch.exp((-1 / self.temperature) * (self.cost_total - beta))
 
         eta = torch.sum(self.cost_total_non_zero)
         self.omega = (1.0 / eta) * self.cost_total_non_zero
@@ -134,7 +133,7 @@ class MPPI(torch.nn.Module):
         # # the dynamics propagation may have imposed constraints on the controls, so we find the actual noise used
         self.noise = self.perturbed_actions - self.U
 
-        action_cost = self.lambda_ * torch.matmul(self.noise, self.CTRL_NOISE_inv)
+        action_cost = self.temperature * torch.matmul(self.noise, self.CTRL_NOISE_inv)
         ## action perturbation cost
         perturbation_cost = torch.sum(self.U * action_cost, dim=(1, 2))
         ## Evaluate total cost:
@@ -148,4 +147,4 @@ class MPPI(torch.nn.Module):
         states, self.perturbed_actions = self.Dynamics.forward(states, perturbed_actions)
         ## Evaluate costs on STATES with dimensions M x K x T x NX.
         ## Including the terminal costs in here is YOUR own responsibility!
-        self.cost_total = self.Costs.forward(states)
+        self.cost_total = self.Costs.compute(states, self.perturbed_actions)
