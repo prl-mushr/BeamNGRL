@@ -1,0 +1,16 @@
+raw_data_dir: 'manual_data/'
+# Total traj len = future + past + 1 (current)
+future_traj_len: 30
+past_traj_len: 30
+skip_frames: 5
+
+split:
+  train:
+    - 'train_small_island'
+  valid:
+    - 'valid_small_island'
+
+map:
+  width: 16 # in meters
+  height: 16
+  resolution: 0.05
