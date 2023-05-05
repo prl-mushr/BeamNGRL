@@ -16,6 +16,7 @@ class SimpleCarDynamics(torch.nn.Module):
         ROLLOUTS=512,
         TIMESTEPS=32,
         BINS=1,
+        BW = 4.0,
         dtype=torch.float32,
         device=torch.device("cuda"),
     ):
@@ -29,6 +30,7 @@ class SimpleCarDynamics(torch.nn.Module):
         self.dt = torch.tensor(dt, device=self.d, dtype=self.dtype)
         self.NU = 2
         self.NX = 17
+        self.BW = torch.tensor(BW, device=self.d, dtype=self.dtype)
 
         self.throttle_to_wheelspeed = torch.tensor(self.speed_max, device=self.d, dtype=self.dtype)
         self.curvature_max = torch.tensor(self.steering_max / self.wheelbase, device=self.d, dtype=self.dtype)
@@ -97,11 +99,11 @@ class SimpleCarDynamics(torch.nn.Module):
         wy = state[...,13]
         wz = state[...,14]
 
-        controls = torch.clamp(state[..., 15:17] + torch.cumsum(perturbed_actions.unsqueeze(dim=0) * self.dt, dim=-2), -1, 1) # last dimension is the NU channel!
+        controls = torch.clamp(state[..., 15:17] + self.BW*torch.cumsum(perturbed_actions.unsqueeze(dim=0) * self.dt, dim=-2), -1, 1) # last dimension is the NU channel!
 
-        controls[...,1] = torch.clamp(controls[...,1], 0,0.45) ## car can't go in reverse
+        controls[...,1] = torch.clamp(controls[...,1], 0,0.5) ## car can't go in reverse
 
-        perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/(self.dt)
+        perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/(self.dt * self.BW)
 
         steer = controls[...,0]
         throttle = controls[...,1]
@@ -114,7 +116,7 @@ class SimpleCarDynamics(torch.nn.Module):
 
         wz = vx * K
         ay = (vx * wz)
-        ay = torch.clamp(ay, -10, 10)
+        ay = torch.clamp(ay, -14, 14)
         wz = ay/torch.clamp(vx,1,25)
 
         yaw = yaw + self.dt * torch.cumsum(wz, dim=2)  # this is what the yaw will become
@@ -149,8 +151,8 @@ class SimpleCarDynamics(torch.nn.Module):
         vz = torch.zeros_like(vx)
 
         # ax[...,:-1] = self.smoothing(torch.diff(vx, dim=-1)/self.dt)
-        # ay = (vx * wz)# + self.GRAVITY * torch.sin(roll) )## this is the Y acceleration in the inertial frame as would be reported by an accelerometer
-        # az = (-vx * wy) + self.GRAVITY * normal[...,2] ## this is the Z acc in the inertial frame as reported by an IMU
+        ay = (vx * wz) + self.GRAVITY * torch.sin(roll) ## this is the Y acceleration in the inertial frame as would be reported by an accelerometer
+        az = (-vx * wy) + self.GRAVITY * normal[...,2] ## this is the Z acc in the inertial frame as reported by an IMU
         # print(roll[0,0,0]*57.3, pitch[0,0,0]*57.3, normal[0,0,0])
         # pack all values: 
         self.states = torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=3)
