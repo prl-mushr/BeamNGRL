@@ -6,20 +6,7 @@ import numpy as np
 import glob
 
 
-def forward_nets_sequential(nets, x):
-    """forward propagate network in sequential order"""
-    for module, _ in nets.items():
-        x = nets[module](x)
-    return x
-
 def load_model(dir, filename, step=None, load_to_cpu=False):
-    '''
-    :param model:
-    :param dir:
-    :param filename:
-    :param step: if None. Load the latest.
-    :return: the saved state dict
-    '''
     import torch
     path = os.path.join(dir, filename)
 
@@ -27,16 +14,17 @@ def load_model(dir, filename, step=None, load_to_cpu=False):
         if load_to_cpu:
             return torch.load(path, map_location=lambda storage, location: storage)
         else:
-            # print(path)
             return torch.load(path)
     else:
         print(path)
         raise Exception('Failed to load model')
 
+
 def save_model(state, filename):
     torch.save(state, filename)
 
-def _load_weights(model_file, net, net_opt):
+
+def load_weights(model_file, net, net_opt):
     state = load_model(os.path.dirname(model_file),
                        os.path.basename(model_file), load_to_cpu=True)
     net.load_state_dict(state['net'])
@@ -48,6 +36,7 @@ def _load_weights(model_file, net, net_opt):
                 opt_state[k] = v.to(device='cuda')
     return 0
 
+
 def _save_model(net, net_opt, epoch, global_args, model_file):
     print('\nSaving model to: ', model_file)
     state = {
@@ -58,23 +47,28 @@ def _save_model(net, net_opt, epoch, global_args, model_file):
     }
     save_model(state, model_file)
 
+
 def make_train(nets):
     for module in nets.values():
         module.train()
+
 
 def make_eval(nets):
     for module in nets.values():
         module.eval()
 
+
 def set_device(nets, device):
     for module in nets.values():
         module.to(device)
+
 
 def parameters(nets):
     params = []
     for net in nets.values():
         params += list(net.parameters())
     return params
+
 
 def module_grad_stats(module):
     headers = ['layer', 'max', 'min']
@@ -107,12 +101,14 @@ def module_weights_stats(module):
     ]
     return tabulate.tabulate(data, headers, tablefmt='psql')
 
+
 def get_gradient_magnitude(module):
     gradients = []
     for name, param in module.named_parameters():
         if param.grad is not None:
             gradients.append(abs(float(param.grad.mean())))
     return np.mean(gradients)
+
 
 def get_grad_mag(nets):
     stats = []

@@ -80,7 +80,6 @@ class beamng_interface():
         self.scenario = Scenario(scenario_name, name="test integration")
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
-        self.nominal_wheel_order = car_make != "RG_RC"
 
         self.start_pos = start_pos
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
@@ -369,12 +368,8 @@ class beamng_interface():
                 self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
                 self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
                 self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-                if(self.nominal_wheel_order):
-                    self.wheelspeed = np.array([-wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], -wheelspeed[3.0]]) ## on RG_RC it is ++--, on normal cars it is -++-
-                else:
-                    self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], -wheelspeed[2.0], -wheelspeed[3.0]])
-                innovation = (self.wheelspeed @ self.wheeldownforce)/np.sum(self.wheeldownforce) - self.avg_wheelspeed
-                self.avg_wheelspeed += innovation * 0.9
+                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
+                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
 
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
@@ -384,6 +379,7 @@ class beamng_interface():
                 self.gen_BEVmap()
                 if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
                     self.flipped_over = True
+
         except Exception:
             print(traceback.format_exc())
 
@@ -400,6 +396,7 @@ class beamng_interface():
     def send_ctrl(self, action, speed_ctrl=False, speed_max = 1, Kp = 1, Ki =  1, Kd = 0, FF_gain = 1):
         st, th = -action[0], action[1]
         if(speed_ctrl):
+            print(self.avg_wheelspeed)
             speed_err = th - (self.avg_wheelspeed/speed_max)
             th, self.whspd_error_sigma, self.whspd_error_diff = self.scaled_PID_FF(Kp, Ki, Kd, FF_gain, th, speed_err, self.whspd_error_sigma, self.whspd_error_diff, self.last_whspd_error)
             self.last_whspd_error = speed_err

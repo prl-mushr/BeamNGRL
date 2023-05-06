@@ -147,4 +147,4 @@ class MPPI(torch.nn.Module):
         states, self.perturbed_actions = self.Dynamics.forward(states, perturbed_actions)
         ## Evaluate costs on STATES with dimensions M x K x T x NX.
         ## Including the terminal costs in here is YOUR own responsibility!
-        self.cost_total = self.Costs.compute(states, self.perturbed_actions)
+        self.cost_total = self.Costs.forward(states)

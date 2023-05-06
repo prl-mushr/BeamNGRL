@@ -33,7 +33,6 @@ def main(map_name, start_pos, start_quat):
             ## camera and depth currently unavailable on Ubuntu!
             # color, depth, segmt = bng_interface.color, bng_interface.depth, bng_interface.segmt
             # lidar_pts = bng_interface.lidar_pts
-
             ## get robot_centric BEV (not rotated into robot frame)
             BEV_color = bng_interface.BEV_color
             BEV_heght = (bng_interface.BEV_heght + 2.0)/4.0  # note that BEV_heght (elevation) has a range of +/- 2 meters around the center of the elevation.

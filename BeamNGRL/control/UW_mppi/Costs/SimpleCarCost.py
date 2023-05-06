@@ -82,14 +82,15 @@ class SimpleCarCost(torch.nn.Module):
         wy = state[...,13]
         wz = state[...,14]
         
-        normalizer = 1/torch.tensor(float(state.shape[-1]), device = self.d, dtype = self.dtype)
+        normalizer = 1/torch.tensor(float(state.shape[-2]), device = self.d, dtype = self.dtype)
         
-        img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
-        img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size - 1)
+        img_X = torch.clamp( ((x + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
+        img_Y = torch.clamp( ((y + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
 
-        # state_cost = torch.square(torch.clamp( ((vx/self.BEVmap_normal[img_Y, img_X, 2]) / (self.critical_SA * self.speed_target)) - 1, 0, 1) ) ## don't go fast over uneven terrain
+        # state_cost = torch.square(torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) / (self.critical_SA)) - 1, 0, 10) ) ## don't go fast over uneven terrain
+        # state_cost = state_cost + torch.clamp(torch.square(self.BEVmap_height[img_Y, img_X]) - 0.09, 0, 10)
         state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
-        vel_cost = torch.square(torch.clamp((vx - self.speed_target)/self.speed_target, 0, 1))
+        vel_cost = torch.square((self.speed_target - vx)/self.speed_target)
 
         roll_cost = torch.clamp(torch.square((ay/az) / self.critical_RI ) - 1, 0, 1)
         
