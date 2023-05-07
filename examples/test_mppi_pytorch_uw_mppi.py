@@ -57,7 +57,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        bng_interface.set_lockstep(True)
+        # bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None

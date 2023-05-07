@@ -21,8 +21,8 @@ def collect_data(args):
         start_quat=np.array(args.start_quat),
     )
 
-    bng.set_lockstep(True)
-    start = time.time()
+    # bng.set_lockstep(True)
+    start = None
 
     timestamps = []
     state_data = []
@@ -41,7 +41,10 @@ def collect_data(args):
             state = bng.state
             ts = bng.timestamp
 
-            ## get robot_centric BEV (not rotated into robot frame)
+            if not start:
+                start = ts
+
+            # get robot_centric BEV (not rotated into robot frame)
             BEV_color = bng.BEV_color
             BEV_height = (bng.BEV_heght + 2.0)/4.0  # note that BEV_heght (elevation) has a range of +/- 2 meters around the center of the elevation.
             BEV_segmt = bng.BEV_segmt
@@ -56,7 +59,7 @@ def collect_data(args):
             path_data.append(BEV_path)
             normal_data.append(BEV_normal)
 
-            if time.time() - start > args.duration:
+            if ts - start > args.duration:
                 print("Saving data...")
                 np.save(output_path / "timestamps.npy", np.array(timestamps))
                 np.save(output_path / "state.npy", np.array(state_data))

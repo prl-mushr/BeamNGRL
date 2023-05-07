@@ -1,5 +1,6 @@
 import torch
 
+
 class SimpleCarDynamics(torch.nn.Module):
     """
     Class for Dynamics modelling
