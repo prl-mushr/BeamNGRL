@@ -1,0 +1,5 @@
+control_dim: 2
+noise_0: 1.0
+noise_1: 1.0
+scaled_dt: 0.04 ## this is dt * bandwidth of the physical actuators (in what units?)
+temperature: 0.02

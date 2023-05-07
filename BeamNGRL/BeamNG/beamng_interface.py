@@ -1,13 +1,18 @@
-import time
-from pyquaternion import Quaternion
-from beamngpy import BeamNGpy, Scenario, Vehicle
-from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer
-import numpy as np
-import traceback
 import cv2
-import BeamNGRL
+import torch
+import numpy as np
+from pyquaternion import Quaternion
+
+import traceback
+import time
 from pathlib import Path
 import os
+
+import BeamNGRL
+from BeamNGRL.utils.visualisation import Vis
+from beamngpy import BeamNGpy, Scenario, Vehicle
+from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer
+
 
 ROOT_PATH = Path(BeamNGRL.__file__).parent
 DATA_PATH = ROOT_PATH.parent / 'data'
@@ -48,12 +53,45 @@ def get_beamng_default(
 
     return bng
 
+## this is the equivalent of None pizza with left beef joke. Yes I'd like one beamng simulator without the beamng simulator.
+def get_beamng_nobeam(
+        Dynamics,
+        car_model='RACER',
+        start_pos=None,
+        start_quat=None,
+        map_name=None,
+        car_make='sunburst',
+        beamng_path=BNG_HOME,
+        map_res=0.05,
+        map_size=16, # 16 x 16 map
+        path_to_maps=DATA_PATH.__str__(),
+):
+
+    if(start_pos is None):
+        print("please provide a start pos! I can not spawn a car in the ether!")
+        exit()
+    if(start_quat is None):
+        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
+        exit()
+    if(map_name is None):
+        print("please provide a map_name! I can not spawn a car in the ether!")
+        exit()
+        
+    bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
+
+    bng.load_scenario(
+        scenario_name=map_name, car_make=car_make, car_model=car_model,
+        start_pos=start_pos, start_rot=start_quat,
+    )
+    bng.set_map_attributes(
+        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+    )
+
+    return bng
+
 
 class beamng_interface():
-    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256):
-        self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
-        # Launch BeamNG.tech
-        self.bng.open()
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None):
         self.lockstep   = False
         self.lidar_list = []
         self.camera_list = []
@@ -74,14 +112,28 @@ class beamng_interface():
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
 
+        self.use_beamng = use_beamng
+        if self.use_beamng:
+            self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
+            self.bng.open()
+        else:
+            self.dyn = dyn
+            self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
+            self.vis = Vis()
+
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
                       time_of_day=1200, hide_hud=False, fps=60):
+        self.start_pos = start_pos
+        if not self.use_beamng:
+            self.state[:3] = torch.from_numpy(start_pos)
+            self.state[3:6] = torch.from_numpy(self.rpy_from_quat(self.convert_beamng_to_REP103(start_rot)))
+            return
+
         self.scenario = Scenario(scenario_name, name="test integration")
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 
-        self.start_pos = start_pos
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
                              rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
         self.bng.set_tod(time_of_day/2400)
@@ -105,6 +157,7 @@ class beamng_interface():
         # time.sleep(2)
         self.state_poll()
         self.flipped_over = False
+
 
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps='', rotate=False):
         self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
@@ -325,63 +378,60 @@ class beamng_interface():
         self.lockstep = lockstep
 
     def state_poll(self):
-        try:
-            if(self.state_init == False):
-                # self.camera_poll(0)
-                # self.lidar_poll(0)
-                self.Accelerometer_poll()
-                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                self.state_init = True
-                self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
-                self.timestamp = self.vehicle.sensors['timer']['time']
-                print("beautiful day, __init__?")
-                time.sleep(0.02)
-            else:
-                # self.camera_poll(0)
-                # self.lidar_poll(0)
-                self.Accelerometer_poll()
-                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                if(self.lockstep):
-                    self.bng.pause()
-                
-                self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
-                self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
+        if(self.state_init == False):
+            # self.camera_poll(0)
+            # self.lidar_poll(0)
+            self.Accelerometer_poll()
+            self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+            self.state_init = True
+            self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
+            self.timestamp = self.vehicle.sensors['timer']['time']
+            print("beautiful day, __init__?")
+            time.sleep(0.02)
+        else:
+            # self.camera_poll(0)
+            # self.lidar_poll(0)
+            self.Accelerometer_poll()
+            self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+            if(self.lockstep):
+                self.bng.pause()
+            
+            self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
+            self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
 
-                self.pos = np.copy(self.vehicle.state['pos'])
-                self.vel = np.copy(self.vehicle.state['vel'])
-                self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
-                self.rpy = self.rpy_from_quat(self.quat)
-                self.Tnb, self.Tbn = self.calc_Transform(self.quat)
-                self.vel_wf = np.copy(self.vel)
-                self.vel = np.matmul(self.Tnb, self.vel)
-                diff = self.quat/self.last_quat
-                self.last_quat = self.quat
-                self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
+            self.pos = np.copy(self.vehicle.state['pos'])
+            self.vel = np.copy(self.vehicle.state['vel'])
+            self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
+            self.rpy = self.rpy_from_quat(self.quat)
+            self.Tnb, self.Tbn = self.calc_Transform(self.quat)
+            self.vel_wf = np.copy(self.vel)
+            self.vel = np.matmul(self.Tnb, self.vel)
+            diff = self.quat/self.last_quat
+            self.last_quat = self.quat
+            self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
 
-                ## wheel ordering is FR BR FL BL
-                wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
-                wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
-                wheelslip = self.vehicle.sensors['electrics']['wheelslip']
-                wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
-                wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
-                self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
-                self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
-                self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
-                self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
-                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
+            ## wheel ordering is FR BR FL BL
+            wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
+            wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
+            wheelslip = self.vehicle.sensors['electrics']['wheelslip']
+            wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
+            wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
+            self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
+            self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
+            self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
+            self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
+            self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
+            self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
 
-                self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
-                throttle = float(self.vehicle.sensors['electrics']['throttle'])
-                brake = float(self.vehicle.sensors['electrics']['brake'])
-                self.thbr = throttle - brake
-                self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
-                self.gen_BEVmap()
-                if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
-                    self.flipped_over = True
+            self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
+            throttle = float(self.vehicle.sensors['electrics']['throttle'])
+            brake = float(self.vehicle.sensors['electrics']['brake'])
+            self.thbr = throttle - brake
+            self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
+            self.gen_BEVmap()
+            if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
+                self.flipped_over = True
 
-        except Exception:
-            print(traceback.format_exc())
 
     def scaled_PID_FF(self, Kp, Ki, Kd, FF_gain, FF, error, error_sigma, error_diff, last_error):
         error_sigma += error * self.dt
@@ -423,3 +473,27 @@ class beamng_interface():
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
+
+
+    def step(self, action):
+        self.pos = self.state[:3].cpu().numpy()
+        self.gen_BEVmap()
+
+        BEV_heght = torch.from_numpy(self.BEV_heght).to(device=self.dyn.d, dtype=self.dyn.dtype)
+        BEV_normal = torch.from_numpy(self.BEV_normal).to(device=self.dyn.d, dtype=self.dyn.dtype)
+        self.dyn.set_BEV(BEV_heght, BEV_normal)
+
+        offset = torch.clone(self.state[:3])
+        self.state[:3] = 0
+        padded_state = self.state[None, None, None, :]
+        padded_action = action[None, None, None, :]
+
+        self.state = self.dyn.forward(padded_state, padded_action)
+        self.state = self.state.squeeze()
+        self.state[:3] += offset
+
+    def render(self, goal):
+        vis_state = self.state.cpu().numpy()
+        self.vis.setcar(pos=np.zeros(3), rpy=vis_state[3:6])
+        self.vis.setgoal(goal - vis_state[:2])
+        self.vis.set_terrain(self.BEV_heght, self.BEV_color, self.resolution, self.map_size)

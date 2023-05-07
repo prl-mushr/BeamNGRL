@@ -1,17 +1,17 @@
 import numpy as np
 import cv2
-from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import torch
+import yaml
+import os
+from pathlib import Path
+
+from BeamNGRL.BeamNG.beamng_interface import *
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
-from BeamNGRL.utils.visualisation import costmap_vis
 from BeamNGRL.utils.planning import update_goal
-import yaml
-import os
-from pathlib import Path
 
 def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/", target_WP=None):
     with open(config_path + 'MPPI_config.yaml') as f:
@@ -37,6 +37,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
 
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        dynamics_sim = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config) ## exactly the same but only used for stepping
         costs = SimpleCarCost(Cost_config, Map_config)
         sampling = Delta_Sampling(Sampling_config, MPPI_config)
 
@@ -47,7 +48,8 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             MPPI_config
         )
 
-        bng_interface = get_beamng_default(
+        bng_interface = get_beamng_nobeam(
+            dynamics_sim,
             car_model='RACER',
             start_pos=start_pos,
             start_quat=start_quat,
@@ -57,20 +59,18 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
-        action = np.zeros(2)
+        action_tensor = torch.zeros(2, device=d, dtype=dtype)
+        bng_interface.step(action_tensor) # step once to initialize everything
 
         while True:
             try:
-                bng_interface.state_poll()
-                now = time.time()
                 # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
-                state = np.copy(bng_interface.state)
+                state = torch.clone(bng_interface.state)
                 # state = np.zeros(17)
-                pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
+                pos = np.copy(state[:2].cpu().numpy())  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
                     goal, pos, target_WP, current_wp_index, 15
                 )
@@ -88,40 +88,18 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
                 controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                 controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
-                controller.Costs.set_goal(
-                    torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=d, dtype=dtype)
-                )  # you can also do this asynchronously
+                controller.Costs.set_goal( (torch.from_numpy(np.copy(goal))).to(device=d, dtype=dtype) - state[:2] )# you can also do this asynchronously
 
-                state[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
+                state[:3] = 0 
 
                 # we use our previous control output as input for next cycle!
-                state[15:17] = action ## adhoc wheelspeed.
-                action = np.array(
-                    controller.forward(
-                        torch.from_numpy(state).to(device=d, dtype=dtype)
-                    )
-                    .cpu()
-                    .numpy(),
-                    dtype=np.float64,
-                )[0]
-                action[1] = np.clip(action[1], 0, 0.5)
-                dt_ = time.time() - now
-                
-                costmap_vis(
-                    controller.Dynamics.states.cpu().numpy(),
-                    pos,
-                    np.copy(goal),
-                    # 1/bng_interface.BEV_normal[:,:,2]*0.1,
-                    BEV_path.cpu().numpy(),
-                    1 / map_res,
-                )
-
-                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                state[15:17] = action_tensor ## adhoc wheelspeed.
+                action_tensor = controller.forward(state)[0]
+                bng_interface.step(action_tensor)
+                bng_interface.render(goal)
 
             except Exception:
                 print(traceback.format_exc())
-
-        # bng_interface.bng.close()
 
 
 if __name__ == "__main__":

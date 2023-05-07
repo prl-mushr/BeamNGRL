@@ -6,15 +6,8 @@ class SimpleCarCost(torch.nn.Module):
     """
     def __init__(
         self,
-        goal_w = 1,
-        speed_w = 1,
-        roll_w = 1,
-        lethal_w = 1,
-        speed_target = 10,
-        critical_SA = 0.5,
-        critical_RI = 0.5,
-        BEVmap_size=64,
-        BEVmap_res=0.25,
+        Cost_config,
+        Map_config,
         dtype=torch.float32,
         device=torch.device("cuda"),
     ):
@@ -22,30 +15,26 @@ class SimpleCarCost(torch.nn.Module):
         super(SimpleCarCost, self).__init__()
         self.dtype = dtype
         self.d = device
-        ## I feel like "state" definitions like these should be shared across dynamics and cost, perhaps something to think about
-        ## like a class "CAR" that has all the state definitions and dynamics and cost functions as methods plus the bevmap stuff? then we can just pass that in?
 
-        self.NX = 17
+        self.critical_SA = torch.tensor(Cost_config["critical_SA"], dtype=self.dtype, device=self.d)
+        self.speed_target = torch.tensor(Cost_config["speed_target"], dtype=self.dtype, device=self.d)
+        self.critical_RI = torch.tensor(Cost_config["critical_RI"], dtype=self.dtype, device=self.d)
+        self.lethal_w = torch.tensor(Cost_config["lethal_w"], dtype=self.dtype, device=self.d)
+        self.goal_w = torch.tensor(Cost_config["goal_w"], dtype=self.dtype, device=self.d)
+        self.speed_w = torch.tensor(Cost_config["speed_w"], dtype=self.dtype, device=self.d)
+        self.roll_w = torch.tensor(Cost_config["roll_w"], dtype=self.dtype, device=self.d)
 
-        self.BEVmap_size = torch.tensor(BEVmap_size).to(self.d)
-        self.BEVmap_res = torch.tensor(BEVmap_res).to(self.d)
+        self.BEVmap_size = torch.tensor(Map_config["map_size"], dtype=self.dtype, device=self.d)
+        self.BEVmap_res = torch.tensor(Map_config["map_res"], dtype=self.dtype, device=self.d)
+
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.BEVmap = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item() )).to(self.d)
         self.BEVmap_height = torch.zeros_like(self.BEVmap)
-        self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype).to(self.d)
-        self.BEVmap_center = torch.zeros(3, dtype=self.dtype).to(self.d)
+        self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype, device=self.d)
+        self.BEVmap_center = torch.zeros(3, dtype=self.dtype, device=self.d)
         self.BEVmap_path = torch.zeros_like(self.BEVmap)
 
-        self.GRAVITY = torch.tensor(9.8, dtype=self.dtype).to(self.d)
-
-        self.critical_SA = torch.tensor(critical_SA, dtype=self.dtype).to(self.d)
-        self.speed_target = torch.tensor(speed_target, dtype=self.dtype).to(self.d)
-        self.critical_RI = torch.tensor(critical_RI, dtype=self.dtype).to(self.d)
-
-        self.lethal_w = torch.tensor(lethal_w, dtype=self.dtype).to(self.d)
-        self.goal_w = torch.tensor(goal_w, dtype=self.dtype).to(self.d)
-        self.speed_w = torch.tensor(speed_w, dtype=self.dtype).to(self.d)
-        self.roll_w = torch.tensor(roll_w, dtype=self.dtype).to(self.d)
+        self.GRAVITY = torch.tensor(9.8, dtype=self.dtype, device=self.d)
 
         self.goal_state = torch.zeros(2, device = self.d, dtype=self.dtype)
 
@@ -64,7 +53,7 @@ class SimpleCarCost(torch.nn.Module):
     def set_goal(self, goal_state):
         self.goal_state = goal_state[:2]
 
-    def forward(self, state):
+    def forward(self, state, controls):
         # unpack all values we can remove the stuff we don't need later
         x = state[..., 0] 
         y = state[..., 1]

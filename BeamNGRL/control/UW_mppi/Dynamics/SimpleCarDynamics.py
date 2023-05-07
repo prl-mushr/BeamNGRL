@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 
 class SimpleCarDynamics(torch.nn.Module):
     """
@@ -7,16 +6,9 @@ class SimpleCarDynamics(torch.nn.Module):
     """
     def __init__(
         self,
-        wheelbase = 0.5,
-        speed_max = 17,
-        steering_max = 1,
-        dt = 0.02,
-        BEVmap_size=64,
-        BEVmap_res=0.25,
-        ROLLOUTS=512,
-        TIMESTEPS=32,
-        BINS=1,
-        BW = 4.0,
+        Dynamics_config,
+        Map_config,
+        MPPI_config,
         dtype=torch.float32,
         device=torch.device("cuda"),
     ):
@@ -24,49 +16,33 @@ class SimpleCarDynamics(torch.nn.Module):
         super(SimpleCarDynamics, self).__init__()
         self.dtype = dtype
         self.d = device
-        self.wheelbase = torch.tensor(wheelbase, device=self.d, dtype=self.dtype)
-        self.speed_max = torch.tensor(speed_max, device=self.d, dtype=self.dtype)
-        self.steering_max = torch.tensor(steering_max, device=self.d, dtype=self.dtype)
-        self.dt = torch.tensor(dt, device=self.d, dtype=self.dtype)
-        self.NU = 2
-        self.NX = 17
-        self.BW = torch.tensor(BW, device=self.d, dtype=self.dtype)
 
-        self.throttle_to_wheelspeed = torch.tensor(self.speed_max, device=self.d, dtype=self.dtype)
+        self.wheelbase = torch.tensor(Dynamics_config["wheelbase"], device=self.d, dtype=self.dtype)
+        self.throttle_to_wheelspeed = torch.tensor(Dynamics_config["throttle_to_wheelspeed"], device=self.d, dtype=self.dtype)
+        self.steering_max = torch.tensor(Dynamics_config["steering_max"], device=self.d, dtype=self.dtype)
+        self.dt = torch.tensor(Dynamics_config["dt"], device=self.d, dtype=self.dtype)
+        self.K = MPPI_config["ROLLOUTS"]
+        self.T = MPPI_config["TIMESTEPS"]
+        self.M = MPPI_config["BINS"]
+        self.BEVmap_size = torch.tensor(Map_config["map_size"], dtype=self.dtype, device=self.d)
+        self.BEVmap_res = torch.tensor(Map_config["map_res"], dtype=self.dtype, device=self.d)
+
         self.curvature_max = torch.tensor(self.steering_max / self.wheelbase, device=self.d, dtype=self.dtype)
 
-        self.BEVmap_size = torch.tensor(BEVmap_size).to(self.d)
-        self.BEVmap_res = torch.tensor(BEVmap_res).to(self.d)
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.BEVmap = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item() )).to(self.d)
         self.BEVmap_height = torch.zeros_like(self.BEVmap)
         self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype).to(self.d)
-        self.BEVmap_center = torch.zeros(3, dtype=self.dtype).to(self.d)
 
         self.GRAVITY = torch.tensor(9.8, dtype=self.dtype).to(self.d)
         
-        self.K = ROLLOUTS
-        self.T = TIMESTEPS
-        self.M = BINS
+        self.NX = 17
         
         self.states = torch.zeros((self.M, self.K, self.T, self.NX), dtype=self.dtype).to(self.d)
 
-        sigma = torch.tensor(1, dtype=self.dtype, device=self.d)
-        filter_size = 7
-        kernel = torch.zeros(filter_size, dtype=self.dtype, device=self.d)
-        m = filter_size//2
-        for x in range(-m, m+1):
-            X = torch.tensor(x, dtype=self.dtype)
-            x1 = 2*torch.pi*(sigma**2)
-            x2 = torch.exp(-(X**2)/(2* sigma**2))
-            kernel[x+m] = (1/x1)*x2
-
-        self.smoothing = nn.Conv1d(self.K, self.K, kernel_size=filter_size, padding=filter_size//2, bias=False).to(self.d)
-        self.smoothing.weight.data[:, :, :] = kernel.view(1, 1, -1).repeat(self.K, self.K, 1).to(self.d)
-
 
     @torch.jit.export
-    def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_center):
+    def set_BEV(self, BEVmap_height, BEVmap_normal):
         '''
         BEVmap_height, BEVmap_normal are robot-centric elevation and normal maps.
         BEV_center is the x,y,z coordinate at the center of the map. Technically this could just be x,y, but its easier to just remove it from all dims at once.
@@ -74,14 +50,13 @@ class SimpleCarDynamics(torch.nn.Module):
         assert BEVmap_height.shape[0] == self.BEVmap_size_px
         self.BEVmap_height = BEVmap_height
         self.BEVmap_normal = BEVmap_normal
-        self.BEVmap_center = BEV_center  # translate the state into the center of the costmap.
 
     @torch.jit.export
     def get_states(self):
         return self.states
 
     ## remember, this function is called only once! If you have a single-step dynamics function, you will need to roll it out inside this function.
-    def forward(self, state, perturbed_actions):
+    def forward(self, state, controls):
         # unpack all values:
         x = state[..., 0]
         y = state[..., 1]
@@ -98,12 +73,6 @@ class SimpleCarDynamics(torch.nn.Module):
         wx = state[...,12]
         wy = state[...,13]
         wz = state[...,14]
-
-        controls = torch.clamp(state[..., 15:17] + self.BW*torch.cumsum(perturbed_actions.unsqueeze(dim=0) * self.dt, dim=-2), -1, 1) # last dimension is the NU channel!
-
-        controls[...,1] = torch.clamp(controls[...,1], 0,0.5) ## car can't go in reverse
-
-        perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/(self.dt * self.BW)
 
         steer = controls[...,0]
         throttle = controls[...,1]
@@ -150,10 +119,10 @@ class SimpleCarDynamics(torch.nn.Module):
         vy = torch.zeros_like(vx)
         vz = torch.zeros_like(vx)
 
-        # ax[...,:-1] = self.smoothing(torch.diff(vx, dim=-1)/self.dt)
+        # ax[...,:-1] = torch.diff(vx, dim=-1)/self.dt
         ay = (vx * wz) + self.GRAVITY * torch.sin(roll) ## this is the Y acceleration in the inertial frame as would be reported by an accelerometer
         az = (-vx * wy) + self.GRAVITY * normal[...,2] ## this is the Z acc in the inertial frame as reported by an IMU
         # print(roll[0,0,0]*57.3, pitch[0,0,0]*57.3, normal[0,0,0])
         # pack all values: 
         self.states = torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=3)
-        return self.states, perturbed_actions
+        return self.states

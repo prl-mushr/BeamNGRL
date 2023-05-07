@@ -1,14 +1,10 @@
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
+import meshcat
+import meshcat.geometry as g
+import meshcat.transformations as tf
+from scipy.spatial import Delaunay
 
-fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
-ax.set_box_aspect([1,1,0.5]) # set the aspect ratio of the plot
-ax.view_init(elev=60, azim=-45) # set the viewpoint of the plot
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title('Elevation map')
 
 def costmap_vis(states, pos, goal, costmap, resolution_inv):
     goal -= pos
@@ -45,3 +41,46 @@ def elevation_map_vis(elev_map):
     # Update the plot
     plt.show(block=False)
     plt.pause(0.001)
+
+class Vis:
+    def __init__(self):
+    # x y z ? (m)
+        self.car = g.Box((1.0, 0.5, 0.3))
+        # radius (m)
+        self.goal = g.Sphere(0.2)
+
+        self.vis = meshcat.Visualizer().open()
+
+        self.vis['car'].set_object(self.car)
+        self.vis['goal'].set_object(self.goal, g.MeshBasicMaterial(color=0xaaffaa))
+
+    def setcar(self, pos, rpy):
+        self.vis['car'].set_transform(
+            tf.compose_matrix(
+                angles=(rpy[0], rpy[1], rpy[2]), 
+                translate=(pos[0], pos[1], pos[2]))
+            )
+
+    def setgoal(self, pos):
+        self.vis['goal'].set_transform(tf.translation_matrix((pos[0], pos[1], 0.0)))
+
+    def set_terrain(self, height_map, map_res, map_size):
+        # Compute the x and y coordinates of the vertices
+        x_coords, y_coords = np.meshgrid(
+                                        np.arange(0, height_map.shape[1]*map_res, map_res) - map_size,
+                                        np.arange(0, height_map.shape[0]*map_res, map_res) - map_size
+                                        )
+        vertices = np.column_stack((
+            x_coords.flatten(),
+            y_coords.flatten(),
+            height_map.flatten()
+        ))
+        points = np.column_stack((
+            x_coords.flatten(),
+            y_coords.flatten()
+        ))
+        tri = Delaunay(points)
+        self.vis["terrain"].set_object(meshcat.geometry.TriangularMeshGeometry(
+            vertices=vertices,
+            faces=tri.simplices,
+        ))

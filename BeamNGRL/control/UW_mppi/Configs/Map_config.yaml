@@ -1,0 +1,7 @@
+map_size: 32
+map_res: 0.25
+layers:
+  color: 3
+  elevation: 1
+  semantics: 3
+  costmap: 1
