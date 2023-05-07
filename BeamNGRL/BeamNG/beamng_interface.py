@@ -496,4 +496,4 @@ class beamng_interface():
         vis_state = self.state.cpu().numpy()
         self.vis.setcar(pos=np.zeros(3), rpy=vis_state[3:6])
         self.vis.setgoal(goal - vis_state[:2])
-        self.vis.set_terrain(self.BEV_heght, self.BEV_color, self.resolution, self.map_size)
+        self.vis.set_terrain(self.BEV_heght, self.resolution, self.map_size)
