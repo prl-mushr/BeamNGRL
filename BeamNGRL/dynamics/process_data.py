@@ -196,8 +196,8 @@ def generate_dataset(args):
                 traj_states[:, :3] = traj_states[:, :3] - base_frame[:3]
 
                 # Verify trajectory does not exceed map limits
-                # mode = 'default'
-                mode = 'radius'
+                mode = 'default'
+                # mode = 'radius'
                 traj_img_proj, in_range = project_traj_to_map(
                     traj_states, grid_size, map_res, mode)
                 if any(~in_range):
