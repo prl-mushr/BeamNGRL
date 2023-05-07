@@ -23,7 +23,7 @@ def get_dataloaders(args, config):
         shuffle=args.shuffle,
         aug=spec['augment'],
         dataset_path=dataset_path,
-        map_cfg=data_cfg['map']
+        map_cfg=data_cfg['map'],
     )
     return train_loader, valid_loader, data_cfg
 
