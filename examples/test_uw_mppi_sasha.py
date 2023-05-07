@@ -3,9 +3,9 @@ import numpy as np
 from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import torch
-from BeamNGRL.control.UW_mppi.MPPI import MPPI
-from BeamNGRL.control.UW_mppi.Dynamics.SimpleCar import SimpleCar
-from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
+from BeamNGRL.control.UW_mppi_sasha.MPPI import MPPI
+from BeamNGRL.control.UW_mppi_sasha.Dynamics.SimpleCar import SimpleCar
+from BeamNGRL.control.UW_mppi_sasha.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.utils.visualisation import costmap_vis
 from BeamNGRL.utils.planning import update_goal
 
