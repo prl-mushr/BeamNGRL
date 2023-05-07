@@ -3,14 +3,20 @@ import cv2
 from beamng_interface import *
 import traceback
 
-def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
-    map_res = 0.05
+def main(map_name, start_pos, start_quat):
+    map_res = 0.25
     map_size = 16 # 16 x 16 map
 
-    bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)
-    bng_interface.load_scenario(scenario_name=map_name, car_make='RG_RC', car_model='Short_Course_Truck',
-                                start_pos=start_point, start_rot=start_quat)
-    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/', rotate=False)
+    bng_interface = get_beamng_default(
+        car_model='RACER',
+        start_pos=start_pos,
+        start_quat=start_quat,
+        map_name=map_name,
+        car_make='sunburst',
+        beamng_path=BNG_HOME,
+        map_res=map_res,
+        map_size=map_size
+        )
     # set lock-step to true if you want the simulator to pause while you calculate the controls:
     # this will make the overall simulation slower since it takes some time to communicate the pause/resume command + whatever time you take to compute controls
 
@@ -24,11 +30,9 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
             state =  bng_interface.state
             pos = state[:3]  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
             ## if you just want position, you can also do pos = bng_interface.pos
-
             ## camera and depth currently unavailable on Ubuntu!
             # color, depth, segmt = bng_interface.color, bng_interface.depth, bng_interface.segmt
             # lidar_pts = bng_interface.lidar_pts
-
             ## get robot_centric BEV (not rotated into robot frame)
             BEV_color = bng_interface.BEV_color
             BEV_heght = (bng_interface.BEV_heght + 2.0)/4.0  # note that BEV_heght (elevation) has a range of +/- 2 meters around the center of the elevation.
@@ -40,7 +44,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/stark/'):
             cv2.imshow('color', BEV)
             BEV = cv2.resize(BEV_heght, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('height', BEV)
-            BEV = cv2.resize(BEV_normal, (500,500), interpolation= cv2.INTER_AREA)
+            BEV = cv2.resize(BEV_normal[:,:,1], (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
             ## you can now "encapsulate the BEV and state into whatever form of "observation" you want.

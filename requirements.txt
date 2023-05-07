@@ -1,0 +1,9 @@
+pyyaml
+torch
+torchvision
+meshcat
+pyquaternion
+numpy
+opencv-python
+matplotlib
+scipy
