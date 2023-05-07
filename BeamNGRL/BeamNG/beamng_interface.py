@@ -446,7 +446,6 @@ class beamng_interface():
     def send_ctrl(self, action, speed_ctrl=False, speed_max = 1, Kp = 1, Ki =  1, Kd = 0, FF_gain = 1):
         st, th = -action[0], action[1]
         if(speed_ctrl):
-            print(self.avg_wheelspeed)
             speed_err = th - (self.avg_wheelspeed/speed_max)
             th, self.whspd_error_sigma, self.whspd_error_diff = self.scaled_PID_FF(Kp, Ki, Kd, FF_gain, th, speed_err, self.whspd_error_sigma, self.whspd_error_diff, self.last_whspd_error)
             self.last_whspd_error = speed_err
