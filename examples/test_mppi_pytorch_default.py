@@ -69,5 +69,6 @@ if __name__ == '__main__':
     # start_quat = np.array([0, 0, 0.3826834, 0.9238795])
     start_quat = np.array([0, 0, 1, 1.])
     map_name = "small_island"
-    target_WP = np.load('WP_file_offroad.npy')
+    waypoint_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/utils/waypoint_files/"
+    target_WP = np.load(waypoint_path+"WP_file_offroad.npy")
     main(map_name,start_point, start_quat, target_WP=target_WP)

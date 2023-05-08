@@ -11,7 +11,7 @@ import os
 import BeamNGRL
 from BeamNGRL.utils.visualisation import Vis
 from beamngpy import BeamNGpy, Scenario, Vehicle
-from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer
+from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer, Damage
 
 
 ROOT_PATH = Path(BeamNGRL.__file__).parent
@@ -144,8 +144,10 @@ class beamng_interface():
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
         self.timer = Timer()
+        self.damage = Damage()
         self.vehicle.attach_sensor('electrics', self.electrics)
         self.vehicle.attach_sensor('timer', self.timer)
+        self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
         # time.sleep(2)
@@ -398,7 +400,7 @@ class beamng_interface():
             
             self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
             self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
-
+            self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
             self.pos = np.copy(self.vehicle.state['pos'])
             self.vel = np.copy(self.vehicle.state['vel'])
             self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))

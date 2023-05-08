@@ -107,6 +107,7 @@ if __name__ == "__main__":
     start_point = np.array([-67, 336, 0.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
     map_name = "smallgrid"
-    target_WP = np.load("WP_file_offroad.npy")
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
+    waypoint_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/utils/waypoint_files/"
+    target_WP = np.load(waypoint_path+"WP_file_offroad.npy")
     main(map_name, start_point, start_quat, config_path, target_WP=target_WP)
