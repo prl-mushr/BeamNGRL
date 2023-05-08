@@ -4,6 +4,7 @@ import os
 from typing import Dict, Tuple, Union
 
 
+
 def to_np(data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
     if isinstance(data, torch.Tensor):
         data = data.detach().cpu().numpy()
@@ -59,26 +60,27 @@ def load_timestamps(file_name: str, file_path: os.PathLike) -> np.ndarray:
 def get_kinematic_traj(file_name: str, file_path: os.PathLike,
                        timestamps: np.ndarray) -> np.ndarray:
     states_arr = np.load(file_path / file_name, allow_pickle=True)
-    pos = states_arr[:, 0:3] # xyz
-    rot = states_arr[:, 3:6] # rpy
-    lin_vel = states_arr[:, 6:9] # xyz
-    lin_accel = states_arr[:, 9:12] # xyz
+    pos = states_arr[:, 0:3] # xyz world frame
+    rot = states_arr[:, 3:6] # rpy world frame
+    lin_vel = states_arr[:, 6:9] # xyz inertial frame
+    lin_accel = states_arr[:, 9:12] # xyz inertial-frame
 
-    # Finite-difference for angular vels
+    # Finite-difference for angular vels (world frame)
     dt = timestamps[1:] - timestamps[:-1]
     ang_vel = (rot[1:] - rot[:-1]) / dt[:, None]
     ang_vel = np.concatenate((ang_vel, ang_vel[[-1], :]), axis=0) # Copy last value
 
-    # Finite-difference for angular accels
-    ang_accel = (ang_vel[1:] - ang_vel[:-1]) / dt[:, None]
-    ang_accel = np.concatenate((ang_accel, ang_accel[[-1], :]), axis=0) # Copy last value
+    # Finite-difference for angular accels (world frame)
+    # ang_accel = (ang_vel[1:] - ang_vel[:-1]) / dt[:, None]
+    # ang_accel = np.concatenate((ang_accel, ang_accel[[-1], :]), axis=0) # Copy last value
 
     # World-frame trajectory
     trajectory = np.concatenate(
-        (pos, rot, lin_vel, ang_vel, lin_accel, ang_accel),
+        (pos, rot, lin_vel, lin_accel, ang_vel),
         axis=-1)
 
     return trajectory
+
 
 
 def get_controls(file_name: str, file_path: os.PathLike) -> np.ndarray:

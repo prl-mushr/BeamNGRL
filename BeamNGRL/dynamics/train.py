@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from utils import network_utils as nu
-from utils.exp_utils import get_dataloaders, build_nets, init_exp_dir
+from utils.exp_utils import get_dataloaders, build_nets, get_loss_func, init_exp_dir
 import argparse
 import yaml
 from BeamNGRL import *
@@ -13,11 +13,12 @@ from BeamNGRL import *
 def train(
         network,
         optimizer,
+        loss_func,
         train_loader,
         valid_loader,
         exp_path,
         args,
-        loss_func=None
+        device=None,
 ):
 
     writer = SummaryWriter(log_dir=os.path.join(exp_path))
@@ -35,17 +36,33 @@ def train(
         if args.start_from != -1:
             start = args.start_from
         else:
-            start = 0
+            start = 1
 
         for epoch in range(start, args.n_epochs + 1):
-            if epoch > 1:
+            # if epoch > 1:
+            if epoch > 0:
                 network.train()
                 train_average_loss = []
 
-                for i, traj_data in enumerate(tqdm(train_loader)):
+                for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(train_loader)):
+
+                    # Set device
+                    states_tn = states_tn.to(device)
+                    controls_tn = controls_tn.to(device)
+                    ctx_tn_dict = {k: tn.to(device) for k, tn in ctx_tn_dict.items()}
+
                     optimizer.zero_grad()
-                    pred = network(traj_data)
-                    loss = loss_func(pred, traj_data)
+
+                    pred = network(
+                        states_tn,
+                        controls_tn,
+                        ctx_tn_dict,
+                    )
+
+                    targets = network.process_targets(states_tn)
+
+                    loss = loss_func(pred, targets)
+
                     loss.backward()
                     optimizer.step()
 
@@ -56,6 +73,8 @@ def train(
                         len(train_loader) * epoch + i)
                     writer.add_scalar('Train/gradient', grad_mag,
                         len(train_loader) * epoch + i)
+
+                    # TODO: Visualization
 
                 train_average_loss = np.asarray(train_average_loss).mean()
                 writer.add_scalar('Train/Loss', train_average_loss, epoch)
@@ -81,6 +100,8 @@ def train(
                     test_avg_loss.append(test_batch_loss.cpu().numpy())
                     writer.add_scalar('Valid/batchLoss', test_batch_loss,
                         len(valid_loader) * epoch + i)
+
+                    # TODO: Visualization
 
                 test_loss = np.asarray(test_avg_loss).mean()
                 writer.add_scalar('Valid/Loss', test_loss, epoch)
@@ -134,21 +155,25 @@ if __name__ == "__main__":
     config = yaml.load(open(DYN_EXP_CONFIG / args.config).read(), Loader=yaml.SafeLoader)
 
     # Dataloaders
-    train_loader, valid_loader, data_cfg = get_dataloaders(args, config)
+    train_loader, valid_loader, stats, data_cfg = get_dataloaders(args, config)
 
     # Model init.
     net, net_opt = build_nets(
         config, tensor_args['device'],
-        model_weight_file=args.finetune, data_cfg=data_cfg,
+        model_weight_file=args.finetune, data_stats=stats, data_cfg=data_cfg,
     )
+
+    loss_func = get_loss_func(config)
 
     # Experiment init.
     exp_path = init_exp_dir(config, args)
 
     train(
         net, net_opt,
+        loss_func,
         train_loader,
         valid_loader,
         exp_path,
         args,
+        tensor_args['device']
     )

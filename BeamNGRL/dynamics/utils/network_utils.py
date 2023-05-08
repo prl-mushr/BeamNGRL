@@ -4,6 +4,52 @@ import tabulate
 import torch.nn as nn
 import numpy as np
 import glob
+from typing import List
+
+
+# states:
+#  0: x,    1: y,    2: z,     (wf)
+#  3: r,    4: p,    5: th,    (wf)
+#  6: vx,   7: vy,   8: vz,    (bf)
+#  9: ax,   10: ay,  11: az,   (bf)
+#  12: dr,  13: dp,  14: dth   (wf)
+#  15: ddr, 16: ddp, 17: ddth, (wf)
+
+state_map = {
+    'x':        (lambda arr: arr[..., [0]]),
+    'y':        (lambda arr: arr[..., [1]]),
+    'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
+    'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
+    'vx':       (lambda arr: arr[..., [6]]),
+    'thdot':    (lambda arr: arr[..., [14]]),
+    'ay':       (lambda arr: arr[..., [10]]),
+    'az':       (lambda arr: arr[..., [11]]),
+}
+
+ctrl_map = {
+    'steer':    (lambda arr: arr[..., [0]]),
+    'throttle': (lambda arr: arr[..., [1]]),
+}
+
+
+def get_state_features(
+        states: torch.Tensor,
+        feat_list: List,
+):
+    state_feats = []
+    for f in feat_list:
+        state_feats.append(state_map[f](states))
+    return torch.cat(state_feats, dim=-1)
+
+
+def get_ctrl_features(
+        controls: torch.Tensor,
+        feat_list: List,
+):
+    ctrl_feats = []
+    for f in feat_list:
+        ctrl_feats.append(ctrl_map[f](controls))
+    return torch.cat(ctrl_feats, dim=-1)
 
 
 def load_model(dir, filename, step=None, load_to_cpu=False):

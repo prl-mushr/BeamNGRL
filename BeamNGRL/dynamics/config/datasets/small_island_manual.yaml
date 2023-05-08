@@ -1,7 +1,7 @@
 raw_data_dir: 'manual_data/'
 # Total traj len = future + past + 1 (current)
-future_traj_len: 20
-past_traj_len: 20
+future_traj_len: 30
+past_traj_len: 30
 skip_frames: 5
 
 split:
