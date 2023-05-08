@@ -8,6 +8,7 @@ from utils.exp_utils import get_dataloaders, build_nets, get_loss_func, init_exp
 import argparse
 import yaml
 from BeamNGRL import *
+from typing import Dict
 
 
 def train(
@@ -18,7 +19,7 @@ def train(
         valid_loader,
         exp_path,
         args,
-        device=None,
+        tn_args: Dict = None,
 ):
 
     writer = SummaryWriter(log_dir=os.path.join(exp_path))
@@ -47,10 +48,9 @@ def train(
                 for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(train_loader)):
 
                     # Set device
-                    states_tn = states_tn.to(device)
-                    controls_tn = controls_tn.to(device)
-                    ctx_tn_dict = {k: tn.to(device) for k, tn in ctx_tn_dict.items()}
-
+                    states_tn = states_tn.to(**tn_args)
+                    controls_tn = controls_tn.to(**tn_args)
+                    ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
                     optimizer.zero_grad()
 
                     pred = network(
@@ -92,10 +92,23 @@ def train(
                 network.eval()
                 test_avg_loss = []
 
-                for i, traj_data in enumerate(tqdm(valid_loader)):
+                for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(valid_loader)):
+
                     with torch.no_grad():
-                        pred = network(traj_data)
-                        test_batch_loss = loss_func(pred, traj_data)
+                        # Set device
+                        states_tn = states_tn.to(**tn_args)
+                        controls_tn = controls_tn.to(**tn_args)
+                        ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
+
+                        pred = network(
+                            states_tn,
+                            controls_tn,
+                            ctx_tn_dict,
+                        )
+
+                        targets = network.process_targets(states_tn)
+
+                        test_batch_loss = loss_func(pred, targets)
 
                     test_avg_loss.append(test_batch_loss.cpu().numpy())
                     writer.add_scalar('Valid/batchLoss', test_batch_loss,
@@ -139,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument('--start_from', type=int, required=False, default=-1, help='epoch to start from')
     parser.add_argument('--valid_interval', type=int, required=False, default=1, help='model grad/weights log interval')
     parser.add_argument('--skip_valid_eval', action='store_true', help='skip computation of validation error.')
-    parser.add_argument('--save_each_epoch', type=bool, required=False, default=True, help='Save model after each epoch.')
+    parser.add_argument('--save_each_epoch', type=bool, required=False, default=False, help='Save model after each epoch.')
     args = parser.parse_args()
 
     # Set torch params
@@ -159,7 +172,7 @@ if __name__ == "__main__":
 
     # Model init.
     net, net_opt = build_nets(
-        config, tensor_args['device'],
+        config, tensor_args,
         model_weight_file=args.finetune, data_stats=stats, data_cfg=data_cfg,
     )
 
@@ -175,5 +188,5 @@ if __name__ == "__main__":
         valid_loader,
         exp_path,
         args,
-        tensor_args['device']
+        tensor_args,
     )

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from base import DynamicsBase
+from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 
 

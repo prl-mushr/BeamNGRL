@@ -10,35 +10,42 @@ class Standardizer(nn.Module):
 
     def __init__(
             self,
-            input_stats: Dict,
             state_feats: List,
             ctrl_feats: List,
+            input_stats: Dict = None,
     ):
         super().__init__()
 
         self.state_feats = state_feats
         self.ctrl_feats = ctrl_feats
 
-        self.state_mean = None
-        self.state_std = None
-        self.ctrl_mean = None
-        self.ctrl_std = None
+        state_mean, state_std, ctrl_mean, ctrl_std = None, None, None, None
+        if input_stats is not None:
+            (state_mean,
+             state_std,
+             ctrl_mean,
+             ctrl_std,) = self.get_stats(input_stats, state_feats, ctrl_feats)
 
-        self.init_stats(input_stats)
+        self.register_buffer('state_mean', state_mean)
+        self.register_buffer('state_std', state_std)
+        self.register_buffer('ctrl_mean', ctrl_mean)
+        self.register_buffer('ctrl_std', ctrl_std)
 
-    def init_stats(self, input_stats, state_feats, ctrl_feats):
-        self.state_mean = get_state_features(input_stats['mean:state'], state_feats)
-        self.state_std = get_state_features(input_stats['std:state'], state_feats)
+    def get_stats(self, input_stats, state_feats, ctrl_feats):
+        state_mean = get_state_features(input_stats['mean:state'], state_feats)
+        state_std = get_state_features(input_stats['std:state'], state_feats)
 
-        self.ctrl_mean = get_ctrl_features(input_stats['mean:ctrl'], ctrl_feats)
-        self.ctrl_std = get_ctrl_features(input_stats['std:ctrl'], ctrl_feats)
+        ctrl_mean = get_ctrl_features(input_stats['mean:control'], ctrl_feats)
+        ctrl_std = get_ctrl_features(input_stats['std:control'], ctrl_feats)
 
         # Handle feats not in stats
         for f in ['sin_th', 'cos_th']:
             if f in state_feats:
                 idx = state_feats.index(f)
-                self.state_mean[..., idx] = 0.
-                self.state_std[..., idx] = 1.
+                state_mean[..., idx] = 0.
+                state_std[..., idx] = 1.
+
+        return state_mean, state_std, ctrl_mean, ctrl_std
 
     def normalize_state(self, states: torch.Tensor):
         return (states - self.state_mean) / self.state_std
@@ -52,24 +59,30 @@ class Standardizer(nn.Module):
     def unnormalize_ctrl(self, ctrls: torch.Tensor):
         return ctrls * self.ctrl_std + self.ctrl_mean
 
+    def forward(self, states, controls):
+        states = self.normalize_state(states)
+        controls = self.normalize_ctrl(controls)
+        return states, controls
+
 
 class DynamicsBase(ABC, nn.Module):
 
     def __init__(
             self,
-            state_feats: List,
-            ctrl_feats: List,
+            state_feat: List,
+            ctrl_feat: List,
             input_stats: Dict,
+            **kwargs,
     ):
         super().__init__()
 
-        self.state_dim = len(state_feats)
-        self.ctrl_dim = len(ctrl_feats)
+        self.state_dim = len(state_feat)
+        self.ctrl_dim = len(ctrl_feat)
 
-        self.state_feat_list = state_feats
-        self.ctrl_feat_list = ctrl_feats
+        self.state_feat_list = state_feat
+        self.ctrl_feat_list = ctrl_feat
 
-        self.standardizer = Standardizer(input_stats, state_feats, ctrl_feats)
+        self.standardizer = Standardizer(state_feat, ctrl_feat, input_stats)
 
     def process_targets(self, states: torch.Tensor):
         states = get_state_features(states, self.state_feat_list)
@@ -80,8 +93,7 @@ class DynamicsBase(ABC, nn.Module):
         states = get_state_features(states, self.state_feat_list)
         controls = get_ctrl_features(controls, self.ctrl_feat_list)
 
-        states = self.standardizer.normalize_state(states)
-        controls = self.standardizer.normalize_ctrl(controls)
+        states, controls = self.standardizer(states, controls)
 
         return states, controls
 

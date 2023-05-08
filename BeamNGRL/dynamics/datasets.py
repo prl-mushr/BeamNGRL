@@ -20,12 +20,13 @@ def get_datasets(
     state_feat: List = None,
     control_feat: List = None,
     state_input_key: str = None,
-    ctrl_input_key: str = None,
+    control_input_key: str = None,
     ctx_input_keys: List = None,
 ):
 
     # get dataset stats
-    dataset_stats = np.load(dataset_path / 'input_stats.npy', allow_pickle=True)
+    dataset_stats = np.load(dataset_path / 'input_stats.npy', allow_pickle=True).item()
+    dataset_stats_tn = {k: from_np(arr) for k, arr in dataset_stats.items()}
 
     grid_size = map_cfg['width'] // map_cfg['resolution']
 
@@ -37,7 +38,7 @@ def get_datasets(
         state_feat=state_feat,
         control_feat=control_feat,
         state_input_key=state_input_key,
-        ctrl_input_key=ctrl_input_key,
+        ctrl_input_key=control_input_key,
         ctx_input_keys=ctx_input_keys,
     )
 
@@ -48,7 +49,7 @@ def get_datasets(
         state_feat=state_feat,
         control_feat=control_feat,
         state_input_key=state_input_key,
-        ctrl_input_key=ctrl_input_key,
+        ctrl_input_key=control_input_key,
         ctx_input_keys=ctx_input_keys,
     )
 
@@ -58,7 +59,7 @@ def get_datasets(
     valid_loader = DataLoader(
             valid_ds, batch_size=bs, num_workers=1, shuffle=shuffle)
 
-    return train_loader, valid_loader, dataset_stats
+    return train_loader, valid_loader, dataset_stats_tn
 
 
 class DynamicsDataset(Dataset):

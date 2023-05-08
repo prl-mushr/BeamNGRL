@@ -10,7 +10,7 @@ def to_np(data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         data = data.detach().cpu().numpy()
     return data
 
-def from_np(data, device):
+def from_np(data, device = torch.device('cpu')):
     if isinstance(data, np.ndarray):
         data = torch.from_numpy(data).to(device)
     elif isinstance(data, torch.Tensor):

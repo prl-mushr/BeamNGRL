@@ -6,7 +6,7 @@ dataset:
   ctx_input_keys: ['state']
 
 network:
-  state_feat: ['x', 'y', 'sin_th', 'cos_th', 'vx', 'thdot' 'ay', 'az']
+  state_feat: ['x', 'y', 'sin_th', 'cos_th', 'vx', 'thdot', 'ay', 'az']
   control_feat: ['steer', 'throttle']
 
   class: BasicMLP
