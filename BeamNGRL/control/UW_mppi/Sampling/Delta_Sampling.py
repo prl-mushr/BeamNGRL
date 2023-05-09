@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class Delta_Sampling(torch.nn.Module):
     """
     Class for Dynamics modelling

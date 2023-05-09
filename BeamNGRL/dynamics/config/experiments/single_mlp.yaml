@@ -1,13 +1,24 @@
 dataset:
-  name: 'small_island_debug'
-  augment: True
+  name: 'small_grid_debug'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['state']
 
 network:
+  state_feat: ['x', 'y', 'sin_th', 'cos_th', 'vx', 'thdot', 'ay', 'az']
+  control_feat: ['steer', 'throttle']
+
   class: BasicMLP
   net_kwargs:
-    hidden_depth: 2
+    hidden_depth: 1
     hidden_dim: 256
     batch_norm: True
+
   opt: Adam
   opt_kwargs:
     lr: 1.0e-4
+
+loss: StatePredMSE
+
+

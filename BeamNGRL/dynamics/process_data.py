@@ -8,6 +8,7 @@ import gc
 from utils.dataset_utils import *
 from utils.vis_utils import *
 from BeamNGRL import *
+from collections import defaultdict
 
 
 def calc_data_stats(dataset_path):
@@ -39,16 +40,16 @@ def calc_data_stats(dataset_path):
 
     print(f'\nCalc. bev stats...')
 
-    bev_stats = {
-        'mean:bev_elev': [],
-        'std:bev_elev': [],
-    }
+    bev_stats = defaultdict(list)
 
-    elev_input_files = get_files(out_dir, "train/bev_elev")
-    for fn in tqdm.tqdm(elev_input_files):
-        elev_map = np.load(fn)
-        bev_stats['mean:bev_elev'].append(elev_map.mean())
-        bev_stats['std:bev_elev'].append(elev_map.std())
+    def get_bev_stats(type):
+        bev_input_files = get_files(out_dir, f"train/bev_{type}")
+        for fn in tqdm.tqdm(bev_input_files):
+            bev_map = np.load(fn)
+            bev_stats[f'mean:bev_{type}'].append(bev_map.mean())
+            bev_stats[f'std:bev_{type}'].append(bev_map.std())
+
+    [get_bev_stats(t) for t in ['color', 'elev', 'normal']]
 
     bev_stats = {k: np.array(v).mean() for k, v in bev_stats.items()}
     for name, value in bev_stats.items():
@@ -195,7 +196,10 @@ def generate_dataset(args):
                 traj_states[:, :3] = traj_states[:, :3] - base_frame[:3]
 
                 # Verify trajectory does not exceed map limits
-                traj_img_proj, in_range = project_traj_to_map(traj_states, grid_size, map_res)
+                # mode = 'default'
+                mode = 'radius'
+                traj_img_proj, in_range = project_traj_to_map(
+                    traj_states, grid_size, map_res, mode)
                 if any(~in_range):
                     print(f'\nTrajectory exceeds map limits. Skipping...')
                     continue
