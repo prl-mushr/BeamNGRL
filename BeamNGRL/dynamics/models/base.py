@@ -6,7 +6,7 @@ from typing import Dict, List
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 
 
-class Standardizer(nn.Module):
+class Normalizer(nn.Module):
 
     def __init__(
             self,
@@ -76,20 +76,24 @@ class DynamicsBase(ABC, nn.Module):
         self.state_feat_list = state_feat
         self.ctrl_feat_list = ctrl_feat
 
-        self.standardizer = Standardizer(state_feat, ctrl_feat, input_stats)
+        self.normalizer = Normalizer(state_feat, ctrl_feat, input_stats)
 
     def process_targets(self, states: torch.Tensor):
         states = get_state_features(states, self.state_feat_list)
-        states = self.standardizer.normalize_state(states)
+        states = self.normalizer.normalize_state(states)
         return states
 
     def process_input(self, states: torch.Tensor, controls: torch.Tensor):
         states = get_state_features(states, self.state_feat_list)
         controls = get_ctrl_features(controls, self.ctrl_feat_list)
 
-        states, controls = self.standardizer(states, controls)
+        states, controls = self.normalizer(states, controls)
 
         return states, controls
+
+    def process_output(self, states: torch.Tensor):
+        states = self.normalizer.unnormalize_state(states)
+        return states
 
     def forward(
             self,
@@ -110,17 +114,19 @@ class DynamicsBase(ABC, nn.Module):
 
     def rollout(
             self,
-            state_init: torch.Tensor,
+            states_init: torch.Tensor,
             control_seq: torch.Tensor,
             ctx_data: Dict,
     ):
 
-        assert state_init.size(0) == control_seq.size(0)
-        state_init, control_seq = self.process_input(state_init, control_seq)
+        assert states_init.size(0) == control_seq.size(0)
+        states_init, control_seq = self.process_input(states_init, control_seq)
 
-        state_seq = self._rollout(state_init, control_seq, ctx_data)
+        states_pred = self._rollout(states_init, control_seq, ctx_data)
 
-        return state_seq
+        states_pred = self.process_output(states_pred)
+
+        return states_pred
 
     @abstractmethod
     def _forward(

@@ -12,21 +12,30 @@ from typing import List
 #  3: r,    4: p,    5: th,    (wf)
 #  6: vx,   7: vy,   8: vz,    (bf)
 #  9: ax,   10: ay,  11: az,   (bf)
-#  12: dr,  13: dp,  14: dth   (wf)
-#  15: ddr, 16: ddp, 17: ddth, (wf)
+#  12: wx,  13: wy,  14: wz    (bf)
 
-state_map = {
+state_feat_map = {
     'x':        (lambda arr: arr[..., [0]]),
     'y':        (lambda arr: arr[..., [1]]),
-    'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
-    'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
+    'z':        (lambda arr: arr[..., [2]]),
+    'r':        (lambda arr: arr[..., [3]]),
+    'p':        (lambda arr: arr[..., [4]]),
+    'th':       (lambda arr: arr[..., [5]]),
     'vx':       (lambda arr: arr[..., [6]]),
-    'thdot':    (lambda arr: arr[..., [14]]),
+    'vy':       (lambda arr: arr[..., [7]]),
+    'vz':       (lambda arr: arr[..., [8]]),
+    'ax':       (lambda arr: arr[..., [9]]),
     'ay':       (lambda arr: arr[..., [10]]),
     'az':       (lambda arr: arr[..., [11]]),
+    'wx':       (lambda arr: arr[..., [12]]),
+    'wy':       (lambda arr: arr[..., [13]]),
+    'wz':       (lambda arr: arr[..., [14]]),
+
+    'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
+    'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
 }
 
-ctrl_map = {
+ctrl_feat_map = {
     'steer':    (lambda arr: arr[..., [0]]),
     'throttle': (lambda arr: arr[..., [1]]),
 }
@@ -38,7 +47,7 @@ def get_state_features(
 ):
     state_feats = []
     for f in feat_list:
-        state_feats.append(state_map[f](states))
+        state_feats.append(state_feat_map[f](states))
     return torch.cat(state_feats, dim=-1)
 
 
@@ -48,7 +57,7 @@ def get_ctrl_features(
 ):
     ctrl_feats = []
     for f in feat_list:
-        ctrl_feats.append(ctrl_map[f](controls))
+        ctrl_feats.append(ctrl_feat_map[f](controls))
     return torch.cat(ctrl_feats, dim=-1)
 
 
@@ -73,8 +82,7 @@ def save_model(state, filename):
 def load_weights(model_file, net, net_opt=None):
     state = load_model(os.path.dirname(model_file),
                        os.path.basename(model_file), load_to_cpu=True)
-    # print(state['net'].keys())
-    print(net.parameters)
+
     net.load_state_dict(state['net'])
     if net_opt is not None:
         net_opt.load_state_dict(state['optim'])

@@ -169,7 +169,7 @@ def generate_dataset(args):
 
             # Gather data
             timestamps = load_timestamps('timestamps.npy', sequence_path)
-            states_seq = get_kinematic_traj('state.npy', sequence_path, timestamps)
+            states_seq = get_state_trajectory('state.npy', sequence_path, timestamps)
             controls_seq = get_controls('state.npy', sequence_path)
             bev_color_seq = load_bev_map('bev_color.npy', sequence_path)
             bev_elev_seq = load_bev_map('bev_elev.npy', sequence_path)

@@ -6,14 +6,14 @@ dataset:
   ctx_input_keys: ['state']
 
 network:
-  state_feat: ['x', 'y', 'sin_th', 'cos_th', 'vx', 'thdot', 'ay', 'az']
+  state_feat: ['x', 'y', 'th', 'vx', 'wy', 'ay', 'az']
   control_feat: ['steer', 'throttle']
 
   class: BasicMLP
   net_kwargs:
     hidden_depth: 1
     hidden_dim: 256
-    batch_norm: True
+    batch_norm: False
 
   opt: Adam
   opt_kwargs:
