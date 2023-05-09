@@ -8,6 +8,7 @@ import BeamNGRL.dynamics.utils.network_utils as nu
 from BeamNGRL import *
 import torch
 
+
 def get_data_config(config):
     dataset_path = DATASETS_PATH / config['dataset']['name']
     dataset_config_path = dataset_path / 'config.yaml'
@@ -30,7 +31,7 @@ def get_dataloaders(args, config):
     return train_loader, valid_loader, data_stats, data_cfg
 
 
-def build_nets(config, tn_args, model_weight_file=None, data_stats=None, data_cfg=None):
+def build_nets(config, tn_args, model_weight_file=None, data_stats=None):
     spec = config['network']
     net_class = getattr(models, spec['class'])
     net_args = spec.get('net_kwargs', {})
@@ -38,17 +39,17 @@ def build_nets(config, tn_args, model_weight_file=None, data_stats=None, data_cf
         state_feat=spec['state_feat'],
         ctrl_feat=spec['control_feat'],
         input_stats=data_stats,
-        data_cfg=data_cfg,
         **net_args,
     ).to(**tn_args)
 
     opt = None
-    if spec['opt'] != 'none':
+    if spec.get('opt') is not None:
         opt = getattr(optim, spec['opt'])(net.parameters(), **spec['opt_kwargs'])
-
 
     if model_weight_file is not None:
         nu.load_weights(model_weight_file, net, opt)
+
+    print(net.standardizer)
 
     return net, opt
 

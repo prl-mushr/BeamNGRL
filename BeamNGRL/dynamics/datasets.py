@@ -6,7 +6,7 @@ import cv2
 from glob import glob
 from PIL import Image
 from BeamNGRL import *
-from utils.dataset_utils import from_np
+from .utils.dataset_utils import from_np
 from collections import defaultdict
 from typing import List
 

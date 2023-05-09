@@ -70,16 +70,19 @@ def save_model(state, filename):
     torch.save(state, filename)
 
 
-def load_weights(model_file, net, net_opt):
+def load_weights(model_file, net, net_opt=None):
     state = load_model(os.path.dirname(model_file),
                        os.path.basename(model_file), load_to_cpu=True)
+    # print(state['net'].keys())
+    print(net.parameters)
     net.load_state_dict(state['net'])
-    net_opt.load_state_dict(state['optim'])
-    # Move the parameters stored in the optimizer into gpu
-    for opt_state in net_opt.state.values():
-        for k, v in opt_state.items():
-            if torch.is_tensor(v):
-                opt_state[k] = v.to(device='cuda')
+    if net_opt is not None:
+        net_opt.load_state_dict(state['optim'])
+        # Move the parameters stored in the optimizer into gpu
+        for opt_state in net_opt.state.values():
+            for k, v in opt_state.items():
+                if torch.is_tensor(v):
+                    opt_state[k] = v.to(device='cuda')
     return 0
 
 

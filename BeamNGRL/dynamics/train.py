@@ -173,7 +173,8 @@ if __name__ == "__main__":
     # Model init.
     net, net_opt = build_nets(
         config, tensor_args,
-        model_weight_file=args.finetune, data_stats=stats, data_cfg=data_cfg,
+        model_weight_file=args.finetune,
+        data_stats=stats,
     )
 
     loss_func = get_loss_func(config)

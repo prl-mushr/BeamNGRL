@@ -19,33 +19,27 @@ class Standardizer(nn.Module):
         self.state_feats = state_feats
         self.ctrl_feats = ctrl_feats
 
-        state_mean, state_std, ctrl_mean, ctrl_std = None, None, None, None
-        if input_stats is not None:
-            (state_mean,
-             state_std,
-             ctrl_mean,
-             ctrl_std,) = self.get_stats(input_stats, state_feats, ctrl_feats)
+        self.register_buffer('state_mean', torch.zeros(len(state_feats)))
+        self.register_buffer('state_std', torch.ones(len(state_feats)))
+        self.register_buffer('ctrl_mean', torch.zeros(len(ctrl_feats)))
+        self.register_buffer('ctrl_std', torch.ones(len(ctrl_feats)))
 
-        self.register_buffer('state_mean', state_mean)
-        self.register_buffer('state_std', state_std)
-        self.register_buffer('ctrl_mean', ctrl_mean)
-        self.register_buffer('ctrl_std', ctrl_std)
+        if input_stats is not None:
+            self.get_stats(input_stats, state_feats, ctrl_feats)
 
     def get_stats(self, input_stats, state_feats, ctrl_feats):
-        state_mean = get_state_features(input_stats['mean:state'], state_feats)
-        state_std = get_state_features(input_stats['std:state'], state_feats)
+        self.state_mean = get_state_features(input_stats['mean:state'], state_feats)
+        self.state_std = get_state_features(input_stats['std:state'], state_feats)
 
-        ctrl_mean = get_ctrl_features(input_stats['mean:control'], ctrl_feats)
-        ctrl_std = get_ctrl_features(input_stats['std:control'], ctrl_feats)
+        self.ctrl_mean = get_ctrl_features(input_stats['mean:control'], ctrl_feats)
+        self.ctrl_std = get_ctrl_features(input_stats['std:control'], ctrl_feats)
 
         # Handle feats not in stats
         for f in ['sin_th', 'cos_th']:
             if f in state_feats:
                 idx = state_feats.index(f)
-                state_mean[..., idx] = 0.
-                state_std[..., idx] = 1.
-
-        return state_mean, state_std, ctrl_mean, ctrl_std
+                self.state_mean[..., idx] = 0.
+                self.state_std[..., idx] = 1.
 
     def normalize_state(self, states: torch.Tensor):
         return (states - self.state_mean) / self.state_std
