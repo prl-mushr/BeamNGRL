@@ -53,6 +53,45 @@ def get_beamng_default(
 
     return bng
 
+def get_beamng_remote(
+        car_model='RACER',
+        start_pos=None,
+        start_quat=None,
+        map_name=None,
+        car_make='sunburst',
+        beamng_path=BNG_HOME,
+        map_res=0.05,
+        map_size=16, # 16 x 16 map
+        path_to_maps=DATA_PATH.__str__(),
+        remote=True,
+        host_IP=None,
+):
+
+    if(host_IP is None):
+        print("please provide a host IP!")
+        exit()
+    if(start_pos is None):
+        print("please provide a start pos! I can not spawn a car in the ether!")
+        exit()
+    if(start_quat is None):
+        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
+        exit()
+    if(map_name is None):
+        print("please provide a map_name! I can not spawn a car in the ether!")
+        exit()
+        
+    bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP)
+
+    bng.load_scenario(
+        scenario_name=map_name, car_make=car_make, car_model=car_model,
+        start_pos=start_pos, start_rot=start_quat,
+    )
+    bng.set_map_attributes(
+        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+    )
+
+    return bng
+
 ## this is the equivalent of None pizza with left beef joke. Yes I'd like one beamng simulator without the beamng simulator.
 def get_beamng_nobeam(
         Dynamics,
@@ -91,7 +130,7 @@ def get_beamng_nobeam(
 
 
 class beamng_interface():
-    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None):
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None):
         self.lockstep   = False
         self.lidar_list = []
         self.camera_list = []
@@ -106,6 +145,7 @@ class beamng_interface():
         self.lidar_pts  = None
         self.Gravity    = np.array([0,0,9.81])
         self.state      = None
+        self.BEV_center = np.zeros(3)
         self.avg_wheelspeed = 0
         self.dt = 0.016
         self.last_whspd_error = 0
@@ -114,8 +154,12 @@ class beamng_interface():
 
         self.use_beamng = use_beamng
         if self.use_beamng:
-            self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
-            self.bng.open()
+            if(remote==True and host_IP is not None):
+                self.bng = BeamNGpy(host_IP, 64256, remote=True)
+                self.bng.open(launch=False, deploy=False)
+            else:
+                self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
+                self.bng.open()
         else:
             self.dyn = dyn
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
@@ -239,7 +283,9 @@ class beamng_interface():
         self.BEV_color = cv2.inpaint(self.BEV_color, mask, 3,cv2.INPAINT_TELEA)
         self.BEV_segmt = cv2.inpaint(self.BEV_segmt, mask, 3,cv2.INPAINT_TELEA)
         self.BEV_heght = cv2.inpaint(self.BEV_heght, mask, 1,cv2.INPAINT_TELEA)
-        self.BEV_heght -= self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
+        self.BEV_center[:2] = self.pos[:2]
+        self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
+        self.BEV_heght -= self.BEV_center[2]
         self.BEV_heght = np.clip(self.BEV_heght, -2.0, 2.0)
 
         self.BEV_normal = self.compute_surface_normals()
@@ -369,7 +415,7 @@ class beamng_interface():
             self.A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
             g_bf = np.matmul(self.Tnb, self.Gravity)
             if( np.all(self.A) == 0):
-                self.A = self.last_A
+                self.A = self.last_A - g_bf
             else:
                 self.last_A = self.A
             self.A += g_bf
@@ -391,10 +437,13 @@ class beamng_interface():
             print("beautiful day, __init__?")
             time.sleep(0.02)
         else:
+            if(self.lockstep):
+                self.bng.resume()
+                time.sleep(0.001)
             # self.camera_poll(0)
-            # self.lidar_poll(0)
-            self.Accelerometer_poll()
+            # self.lidar_poll(0)                
             self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+            self.Accelerometer_poll()
             if(self.lockstep):
                 self.bng.pause()
             
@@ -457,8 +506,6 @@ class beamng_interface():
         if(th < 0):
             br = -th
             th_out = 0
-        if(self.lockstep):
-            self.bng.resume()
 
         self.vehicle.control(throttle = th_out, brake = br, steering = st)
 

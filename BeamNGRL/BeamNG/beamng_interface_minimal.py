@@ -29,6 +29,7 @@ def main(map_name, start_pos, start_quat):
             # state information follows ROS REP103 standards (so basically ROS standards): world refernce frame for (x,y,z) is east-north-up(ENU). Body frame ref is front-left-up(FLU)
             state =  bng_interface.state
             pos = state[:3]  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
+            print(state[11])
             ## if you just want position, you can also do pos = bng_interface.pos
             ## camera and depth currently unavailable on Ubuntu!
             # color, depth, segmt = bng_interface.color, bng_interface.depth, bng_interface.segmt

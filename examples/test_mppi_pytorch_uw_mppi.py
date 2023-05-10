@@ -57,7 +57,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        # bng_interface.set_lockstep(True)
+        bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
@@ -85,6 +85,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=d, dtype=dtype)
                 BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=d, dtype=dtype)/255
                 BEV_color = bng_interface.BEV_color # this is just for visualization
+                BEV_center = bng_interface.BEV_center
 
                 controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                 controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
@@ -92,7 +93,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                     torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=d, dtype=dtype)
                 )  # you can also do this asynchronously
 
-                state[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
+                state[:3] -= BEV_center 
 
                 # we use our previous control output as input for next cycle!
                 state[15:17] = action ## adhoc wheelspeed.
