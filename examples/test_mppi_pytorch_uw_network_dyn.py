@@ -4,7 +4,7 @@ from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import torch
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
-from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics
+from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
 from BeamNGRL.utils.visualisation import costmap_vis
@@ -12,12 +12,14 @@ from BeamNGRL.utils.planning import update_goal
 import yaml
 import os
 from pathlib import Path
+from BeamNGRL import *
 
 def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/", target_WP=None):
+
     with open(config_path + 'MPPI_config.yaml') as f:
         MPPI_config = yaml.safe_load(f)
 
-    with open(config_path + 'Dynamics_config.yaml') as f:
+    with open(config_path + 'Network_Dynamics_config.yaml') as f:
         Dynamics_config = yaml.safe_load(f)
 
     with open(config_path + 'Cost_config.yaml') as f:
@@ -32,10 +34,16 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     map_res = Map_config["map_res"]
     dtype = torch.float
     d = torch.device("cuda")
-    
+
+    model_weights_path = LOGS_PATH / 'small_grid_debug' / 'best_82.pth'
+
     with torch.no_grad():
 
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        dynamics = SimpleCarNetworkDyn(
+            Dynamics_config, Map_config, MPPI_config,
+            model_weights_path=model_weights_path,
+        )
+
         costs = SimpleCarCost(Cost_config, Map_config)
         sampling = Delta_Sampling(Sampling_config, MPPI_config)
 
@@ -56,7 +64,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        bng_interface.set_lockstep(True)
+        # bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
