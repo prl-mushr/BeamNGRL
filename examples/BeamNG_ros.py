@@ -13,42 +13,54 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from rosgraph_msgs.msg import Clock
 import tf
+from mavros_msgs.msg import State, RCIn, ManualControl
+from vesc_msgs.msg import VescStateStamped
 
 class BeamNGROS:
     def __init__(self, map_name, start_pos, start_quat, config_path):
         with open(config_path + 'Map_config.yaml') as f:
             Map_config = yaml.safe_load(f)
         self.bng_interface = get_beamng_remote(
-            car_model='RACER',
+            car_model='Short_Course_Truck',
             start_pos=start_pos,
             start_quat=start_quat,
             map_name=map_name,
-            car_make='sunburst',
+            car_make='RG_RC',
             beamng_path=BNG_HOME,
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"],
             host_IP='10.18.171.121'
         )
-        self.max_speed = 20
+        self.max_speed = 23.0
         self.max_steer = 0.5
         self.map_res = Map_config["map_res"]
         self.map_size = Map_config["map_size"]
         self.map_size_px = int(self.map_size / self.map_res)
         self.camera_pos = np.array([0.15, 0, 0.1])
+        self.erpm_gain = 3500
+        self.ctrl = np.zeros(2, dtype=np.float64)
 
         self.bng_interface.set_lockstep(True)
         # set up publisher for gridmap and vehicle state
         self.gridmap_pub = rospy.Publisher("/elevation_mapping/elevation_map_raw", GridMap, queue_size=1)
         # set up odom publisher
-        self.odom_pub = rospy.Publisher('odom', Odometry, queue_size=1)
+        self.odom_pub = rospy.Publisher('/mavros/local_position/odom', Odometry, queue_size=1)
         # set up imu publisher
-        self.imu_pub = rospy.Publisher('imu', Imu, queue_size=1)
+        self.imu_pub = rospy.Publisher('/mavros/imu/data_raw', Imu, queue_size=1)
         # set up clock publisher
         self.clock_pub = rospy.Publisher('clock', Clock, queue_size=10)
+        # set up rc publisher
+        self.rc_pub = rospy.Publisher('/mavros/rc/in', RCIn, queue_size=1)
+        # set up state publisher
+        self.state_pub = rospy.Publisher('/mavros/state', State, queue_size=1)
+        # set up vesc state publisher
+        self.vesc_state_pub = rospy.Publisher('/sensors/core', VescStateStamped, queue_size=1)
         # set up transform broadcaster:
         self.tf_broadcaster = tf.TransformBroadcaster()
         # set up control subscriber AckermannDriveStamped
-        self.control_sub = rospy.Subscriber('hound/control', AckermannDriveStamped, self.control_callback)
+        self.control_sub = rospy.Subscriber('pass/control', AckermannDriveStamped, self.control_callback)
+        # set up mavros control sub:
+        self.mavros_control_sub = rospy.Subscriber('/mavros/manual_control/send', ManualControl, self.mavros_control_callback)
     
         self.main_thread()
     
@@ -64,6 +76,31 @@ class BeamNGROS:
             BEV_color = self.bng_interface.BEV_color
             self.publish_gridmap(BEV_heght, BEV_segmt, BEV_color, timestamp, state)
             self.publish_clock(timestamp)
+            self.publish_hound_specific(timestamp, self.bng_interface.avg_wheelspeed)
+            self.bng_interface.send_ctrl(self.ctrl, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
+
+    def publish_hound_specific(self, timestamp, avg_wheelspeed):
+        # publish dummy rc message and state message:
+        rc_msg = RCIn()
+        rc_msg.header.stamp = timestamp
+        rc_msg.channels = [1500, 1500, 1000, 1500, 2000, 1500, 1500, 1500]
+        self.rc_pub.publish(rc_msg)
+
+        state_msg = State()
+        state_msg.header.stamp = timestamp
+        state_msg.connected = True
+        state_msg.armed = True
+        state_msg.guided = True
+        state_msg.mode = "OFFBOARD"
+        state_msg.system_status = 4
+        self.state_pub.publish(state_msg)
+
+        vesc_state_msg = VescStateStamped()
+        vesc_state_msg.header.stamp = timestamp
+        vesc_state_msg.state.speed = avg_wheelspeed * self.erpm_gain
+        vesc_state_msg.state.voltage_input = 14.8
+        self.vesc_state_pub.publish(vesc_state_msg)
+
 
     def publish_state(self, state, timestamp):
         orientation_quat = Quaternion(*quaternion_from_euler(state[3], state[4], state[5]))
@@ -125,11 +162,15 @@ class BeamNGROS:
         grid_map.info.pose.position.x = state[0]
         grid_map.info.pose.position.y = state[1]
         grid_map.info.pose.position.z = 0
+        grid_map.info.pose.orientation.x = 0
+        grid_map.info.pose.orientation.y = 0
+        grid_map.info.pose.orientation.z = 0
+        grid_map.info.pose.orientation.w = 1
         grid_map.layers=["elevation", "segmentation", "color"]
         grid_map.basic_layers=["elevation"]
 
         # add the elevation layer:
-        matrix = BEV_heght
+        matrix = cv2.flip(BEV_heght.T, -1)
         data_array = Float32MultiArray()
         data_array.layout.dim.append(MultiArrayDimension("column_index", matrix.shape[1], matrix.shape[0]*matrix.shape[1]))
         data_array.layout.dim.append(MultiArrayDimension("row_index", matrix.shape[0], matrix.shape[0]))
@@ -137,7 +178,9 @@ class BeamNGROS:
         grid_map.data.append(data_array)
 
         # add the segmentation layer:
-        matrix = BEV_segmt
+        matrix = cv2.flip(np.transpose(BEV_segmt, axes=[1,0,2]), -1)
+        matrix = matrix.astype(np.float32)
+        matrix /= 255.0
         data_array = Float32MultiArray()
         data_array.layout.dim.append(MultiArrayDimension("column_index", matrix.shape[1], matrix.shape[0]*matrix.shape[1]))
         data_array.layout.dim.append(MultiArrayDimension("row_index", matrix.shape[0], matrix.shape[0]))
@@ -145,7 +188,9 @@ class BeamNGROS:
         grid_map.data.append(data_array)
 
         # add the color layer:
-        matrix = BEV_color
+        matrix = cv2.flip(np.transpose(BEV_color, axes=[1,0,2]), -1)
+        matrix = matrix.astype(np.float32)
+        matrix /= 255.0
         data_array = Float32MultiArray()
         data_array.layout.dim.append(MultiArrayDimension("column_index", matrix.shape[1], matrix.shape[0]*matrix.shape[1]))
         data_array.layout.dim.append(MultiArrayDimension("row_index", matrix.shape[0], matrix.shape[0]))
@@ -165,6 +210,13 @@ class BeamNGROS:
         ctrl[0] = msg.drive.steering_angle/self.max_steer
         ctrl[1] = msg.drive.speed/self.max_speed
         self.bng_interface.send_ctrl(ctrl, speed_ctrl=True, speed_max = self.max_speed, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
+    
+    def mavros_control_callback(self, msg):
+        ## we only update the controls here, the actual control is done in the step function because beamng needs to be updated in the same thread
+        self.ctrl[0] = msg.y/1000.0
+        self.ctrl[1] = msg.z/1000.0
+
+
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2

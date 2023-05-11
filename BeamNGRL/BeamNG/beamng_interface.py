@@ -184,7 +184,7 @@ class beamng_interface():
         self.scenario.make(self.bng)
         if(hide_hud):
             self.bng.hide_hud()
-        # self.bng.set_steps_per_second(fps)  # Set simulator to 60hz temporal resolution
+        # self.bng.set_steps_per_second(60)  # Set simulator to 60hz temporal resolution
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
         self.timer = Timer()
@@ -426,62 +426,65 @@ class beamng_interface():
         self.lockstep = lockstep
 
     def state_poll(self):
-        if(self.state_init == False):
-            # self.camera_poll(0)
-            # self.lidar_poll(0)
-            self.Accelerometer_poll()
-            self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-            self.state_init = True
-            self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
-            self.timestamp = self.vehicle.sensors['timer']['time']
-            print("beautiful day, __init__?")
-            time.sleep(0.02)
-        else:
-            if(self.lockstep):
-                self.bng.resume()
-                time.sleep(0.001)
-            # self.camera_poll(0)
-            # self.lidar_poll(0)                
-            self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-            self.Accelerometer_poll()
-            if(self.lockstep):
-                self.bng.pause()
-            
-            self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
-            self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
-            self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
-            self.pos = np.copy(self.vehicle.state['pos'])
-            self.vel = np.copy(self.vehicle.state['vel'])
-            self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
-            self.rpy = self.rpy_from_quat(self.quat)
-            self.Tnb, self.Tbn = self.calc_Transform(self.quat)
-            self.vel_wf = np.copy(self.vel)
-            self.vel = np.matmul(self.Tnb, self.vel)
-            diff = self.quat/self.last_quat
-            self.last_quat = self.quat
-            self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
+        try:
+            if(self.state_init == False):
+                # self.camera_poll(0)
+                # self.lidar_poll(0)
+                self.Accelerometer_poll()
+                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.state_init = True
+                self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
+                self.timestamp = self.vehicle.sensors['timer']['time']
+                print("beautiful day, __init__?")
+                time.sleep(0.02)
+            else:
+                if(self.lockstep):
+                    self.bng.resume()
+                    time.sleep(0.001)
+                # self.camera_poll(0)
+                # self.lidar_poll(0)                
+                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.Accelerometer_poll()
+                if(self.lockstep):
+                    self.bng.pause()
+                
+                self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
+                self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
+                self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
+                self.pos = np.copy(self.vehicle.state['pos'])
+                self.vel = np.copy(self.vehicle.state['vel'])
+                self.quat = self.convert_beamng_to_REP103(np.copy(self.vehicle.state['rotation']))
+                self.rpy = self.rpy_from_quat(self.quat)
+                self.Tnb, self.Tbn = self.calc_Transform(self.quat)
+                self.vel_wf = np.copy(self.vel)
+                self.vel = np.matmul(self.Tnb, self.vel)
+                diff = self.quat/self.last_quat
+                self.last_quat = self.quat
+                self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
 
-            ## wheel ordering is FR BR FL BL
-            wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
-            wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
-            wheelslip = self.vehicle.sensors['electrics']['wheelslip']
-            wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
-            wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
-            self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
-            self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
-            self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
-            self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-            self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
-            self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
+                ## wheel ordering is FR BR FL BL
+                wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
+                wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
+                wheelslip = self.vehicle.sensors['electrics']['wheelslip']
+                wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
+                wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
+                self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
+                self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
+                self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
+                self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
+                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
+                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
 
-            self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
-            throttle = float(self.vehicle.sensors['electrics']['throttle'])
-            brake = float(self.vehicle.sensors['electrics']['brake'])
-            self.thbr = throttle - brake
-            self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
-            self.gen_BEVmap()
-            if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
-                self.flipped_over = True
+                self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
+                throttle = float(self.vehicle.sensors['electrics']['throttle'])
+                brake = float(self.vehicle.sensors['electrics']['brake'])
+                self.thbr = throttle - brake
+                self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
+                self.gen_BEVmap()
+                if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
+                    self.flipped_over = True
+        except Exception:
+            print(traceback.format_exc())
 
 
     def scaled_PID_FF(self, Kp, Ki, Kd, FF_gain, FF, error, error_sigma, error_diff, last_error):
