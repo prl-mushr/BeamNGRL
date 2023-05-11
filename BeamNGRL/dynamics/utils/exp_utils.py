@@ -49,8 +49,6 @@ def build_nets(config, tn_args, model_weight_file=None, data_stats=None):
     if model_weight_file is not None:
         nu.load_weights(model_weight_file, net, opt)
 
-    print(net.standardizer)
-
     return net, opt
 
 

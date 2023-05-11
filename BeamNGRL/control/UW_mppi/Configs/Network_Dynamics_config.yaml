@@ -1,0 +1,14 @@
+wheelbase: 2.6
+throttle_to_wheelspeed: 20.0
+steering_max: 0.6
+dt: 0.02
+
+network:
+  state_feat: ['x', 'y', 'th', 'vx', 'wy', 'ay', 'az']
+  control_feat: ['steer', 'throttle']
+
+  class: BasicMLP
+  net_kwargs:
+    hidden_depth: 1
+    hidden_dim: 256
+    batch_norm: False

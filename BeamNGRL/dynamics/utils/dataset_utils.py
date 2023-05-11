@@ -10,12 +10,14 @@ def to_np(data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         data = data.detach().cpu().numpy()
     return data
 
+
 def from_np(data, device = torch.device('cpu')):
     if isinstance(data, np.ndarray):
         data = torch.from_numpy(data).to(device)
     elif isinstance(data, torch.Tensor):
         data = data.to(device)
     return data
+
 
 def recursive_glob(rootdir=".", suffix=""):
     return [
@@ -57,29 +59,11 @@ def load_timestamps(file_name: str, file_path: os.PathLike) -> np.ndarray:
     return timestamp_arr
 
 
-def get_kinematic_traj(file_name: str, file_path: os.PathLike,
-                       timestamps: np.ndarray) -> np.ndarray:
-    states_arr = np.load(file_path / file_name, allow_pickle=True)
-    pos = states_arr[:, 0:3] # xyz world frame
-    rot = states_arr[:, 3:6] # rpy world frame
-    lin_vel = states_arr[:, 6:9] # xyz inertial frame
-    lin_accel = states_arr[:, 9:12] # xyz inertial-frame
+def get_state_trajectory(file_name: str, file_path: os.PathLike,
+                         timestamps: np.ndarray) -> np.ndarray:
 
-    # Finite-difference for angular vels (world frame)
-    dt = timestamps[1:] - timestamps[:-1]
-    ang_vel = (rot[1:] - rot[:-1]) / dt[:, None]
-    ang_vel = np.concatenate((ang_vel, ang_vel[[-1], :]), axis=0) # Copy last value
-
-    # Finite-difference for angular accels (world frame)
-    # ang_accel = (ang_vel[1:] - ang_vel[:-1]) / dt[:, None]
-    # ang_accel = np.concatenate((ang_accel, ang_accel[[-1], :]), axis=0) # Copy last value
-
-    # World-frame trajectory
-    trajectory = np.concatenate(
-        (pos, rot, lin_vel, lin_accel, ang_vel),
-        axis=-1)
-
-    return trajectory
+    states_traj = np.load(file_path / file_name, allow_pickle=True)
+    return states_traj
 
 
 

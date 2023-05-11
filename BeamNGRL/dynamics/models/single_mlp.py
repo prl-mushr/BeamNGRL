@@ -52,27 +52,30 @@ class BasicMLP(DynamicsBase):
 
     def _rollout(
             self,
-            state,
-            input_ctrl_seq,
+            states,
+            controls,
             ctx_data,
     ):
 
-        horizon = input_ctrl_seq.size(1)
+        b, n, horizon, d = states.shape
+        b, n, horizon, d_c = controls.shape
 
-        # Initialize input state sequence
-        b = state.size(0)
-        device = state.device
-        input_state_seq = torch.zeros((b, horizon + 1, self.state_dim)).to(device)
-        input_state_seq[:, 0] = state
+        states = states.view(-1, horizon, d)
+        controls = controls.view(-1, horizon, d_c)
 
-        for t in range(horizon):
+        horizon = controls.size(1)
+
+        for t in range(horizon - 1):
             next_state = self._forward(
-                input_state_seq[:, [t]],
-                input_ctrl_seq[:, [t]],
+                states[:, [t]],
+                controls[:, [t]],
                 ctx_data,
             )  # B x 1 x D
-            next_state = next_state.detach()
-            input_state_seq[:, t+1] = next_state
 
-        pred_seq = input_state_seq[:, 1:]   # next-state predictions only
-        return pred_seq
+            next_state = next_state.detach()
+            states[:, [t+1]] = next_state
+
+        pred_states = states
+        pred_states = pred_states.reshape(b, n, horizon, d)
+
+        return pred_states
