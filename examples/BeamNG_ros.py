@@ -15,9 +15,11 @@ from rosgraph_msgs.msg import Clock
 import tf
 from mavros_msgs.msg import State, RCIn, ManualControl
 from vesc_msgs.msg import VescStateStamped
+from nav_msgs.msg import Path as navPath
+from geometry_msgs.msg import PoseStamped
 
 class BeamNGROS:
-    def __init__(self, map_name, start_pos, start_quat, config_path):
+    def __init__(self, map_name, start_pos, start_quat, config_path, target_WP=None):
         with open(config_path + 'Map_config.yaml') as f:
             Map_config = yaml.safe_load(f)
         self.bng_interface = get_beamng_remote(
@@ -61,7 +63,11 @@ class BeamNGROS:
         self.control_sub = rospy.Subscriber('pass/control', AckermannDriveStamped, self.control_callback)
         # set up mavros control sub:
         self.mavros_control_sub = rospy.Subscriber('/mavros/manual_control/send', ManualControl, self.mavros_control_callback)
-    
+        # set up path publisher that latches:
+        self.path_pub = rospy.Publisher('/path', navPath, queue_size=1, latch=True)
+        self.target_WP = target_WP
+        self.publish_path()
+
         self.main_thread()
     
     def main_thread(self):
@@ -216,6 +222,20 @@ class BeamNGROS:
         self.ctrl[0] = msg.y/1000.0
         self.ctrl[1] = msg.z/1000.0
 
+    def publish_path(self):
+        path_msg = navPath()
+        path_msg.header.frame_id = "map"
+        path_msg.header.stamp = rospy.Time.now()
+        # publish every 20th point from target_WP
+        for i in range(0, len(self.target_WP), 20):
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.header.stamp = rospy.Time.now()
+            pose.pose.position.x = self.target_WP[i,0]
+            pose.pose.position.y = self.target_WP[i,1]
+            pose.pose.position.z = self.target_WP[i,2]
+            path_msg.poses.append(pose)
+        self.path_pub.publish(path_msg)
 
 
 if __name__ == "__main__":
@@ -227,5 +247,7 @@ if __name__ == "__main__":
     rospy.init_node('BeamNGROS', anonymous=True)
     #initialize the BeamNGROS class:
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
-    bingchilling = BeamNGROS(map_name, start_point, start_quat, config_path)
+    waypoint_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/utils/waypoint_files/"
+    target_WP = np.load(waypoint_path+"WP_file_offroad.npy")
+    bingchilling = BeamNGROS(map_name, start_point, start_quat, config_path, target_WP=target_WP)
     #start the beamng interface:
