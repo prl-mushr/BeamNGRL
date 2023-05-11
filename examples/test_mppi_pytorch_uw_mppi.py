@@ -69,7 +69,6 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 now = time.time()
                 # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
                 state = np.copy(bng_interface.state)
-                print(state)
                 # state = np.zeros(17)
                 pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
