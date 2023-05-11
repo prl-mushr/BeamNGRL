@@ -1,24 +1,22 @@
-import numpy as np
-from BeamNGRL.BeamNG.beamng_interface import get_beamng_default
+from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import torch
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
-from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics
+from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
 from BeamNGRL.utils.visualisation import costmap_vis
 from BeamNGRL.utils.planning import update_goal
 import yaml
 import os
-from pathlib import Path
-import time
+from BeamNGRL import *
 
 
 def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/", target_WP=None):
     with open(config_path + 'MPPI_config.yaml') as f:
         MPPI_config = yaml.safe_load(f)
 
-    with open(config_path + 'Dynamics_config.yaml') as f:
+    with open(config_path + 'Network_Dynamics_config.yaml') as f:
         Dynamics_config = yaml.safe_load(f)
 
     with open(config_path + 'Cost_config.yaml') as f:
@@ -32,19 +30,29 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
     map_res = Map_config["map_res"]
     dtype = torch.float
-    d = torch.device("cuda")
-    
+
+    device = torch.device("cuda")
+    # device = torch.device("cpu")
+
+    model_weights_path = LOGS_PATH / 'small_grid_debug' / 'best_57.pth'
+
     with torch.no_grad():
 
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        costs = SimpleCarCost(Cost_config, Map_config)
-        sampling = Delta_Sampling(Sampling_config, MPPI_config)
+        dynamics = SimpleCarNetworkDyn(
+            Dynamics_config, Map_config, MPPI_config,
+            model_weights_path=model_weights_path,
+            device=device,
+        )
+
+        costs = SimpleCarCost(Cost_config, Map_config, device=device)
+        sampling = Delta_Sampling(Sampling_config, MPPI_config, device=device)
 
         controller = MPPI(
             dynamics,
             costs,
             sampling,
-            MPPI_config
+            MPPI_config,
+            device,
         )
 
         bng_interface = get_beamng_default(
@@ -53,10 +61,11 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             start_quat=start_quat,
             map_name=map_name,
             car_make='sunburst',
+            beamng_path=BNG_HOME,
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        bng_interface.set_lockstep(True)
+        # bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
@@ -80,15 +89,15 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                     time.sleep(5)
                     exit()
                 ## get robot_centric BEV (not rotated into robot frame)
-                BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=d, dtype=dtype)
-                BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=d, dtype=dtype)
-                BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=d, dtype=dtype)/255
+                BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
+                BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
+                BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255
                 BEV_color = bng_interface.BEV_color # this is just for visualization
 
                 controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                 controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
                 controller.Costs.set_goal(
-                    torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=d, dtype=dtype)
+                    torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype)
                 )  # you can also do this asynchronously
 
                 state[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
@@ -97,7 +106,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 state[15:17] = action ## adhoc wheelspeed.
                 action = np.array(
                     controller.forward(
-                        torch.from_numpy(state).to(device=d, dtype=dtype)
+                        torch.from_numpy(state).to(device=device, dtype=dtype)
                     )
                     .cpu()
                     .numpy(),

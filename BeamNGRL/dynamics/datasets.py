@@ -97,7 +97,6 @@ class DynamicsDataset(Dataset):
         self.ctrl_input_key = ctrl_input_key
         self.ctx_input_keys = ctx_input_keys
 
-
     def add_data(self, basepath):
 
         self.bev_list = [

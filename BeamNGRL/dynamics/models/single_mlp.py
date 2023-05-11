@@ -75,7 +75,7 @@ class BasicMLP(DynamicsBase):
             next_state = next_state.detach()
             states[:, [t+1]] = next_state
 
-        pred_states = states   # next-state predictions only
+        pred_states = states
         pred_states = pred_states.reshape(b, n, horizon, d)
 
         return pred_states

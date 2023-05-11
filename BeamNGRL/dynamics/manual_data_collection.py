@@ -1,7 +1,7 @@
 from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import argparse
-import datetime
+from datetime import datetime
 from BeamNGRL import *
 
 

@@ -10,12 +10,14 @@ def to_np(data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         data = data.detach().cpu().numpy()
     return data
 
+
 def from_np(data, device = torch.device('cpu')):
     if isinstance(data, np.ndarray):
         data = torch.from_numpy(data).to(device)
     elif isinstance(data, torch.Tensor):
         data = data.to(device)
     return data
+
 
 def recursive_glob(rootdir=".", suffix=""):
     return [
