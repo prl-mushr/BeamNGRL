@@ -135,7 +135,8 @@ class beamng_interface():
         self.lidar_list = []
         self.camera_list = []
         self.state_init = False
-        self.last_A     = np.zeros(3)
+        self.A = np.array([0,0,9.81])
+        self.last_A     = np.copy(self.A)
         self.quat       = np.array([1,0,0,0])
         self.Tnb, self.Tbn = self.calc_Transform(self.quat)
         self.depth      = None
@@ -411,13 +412,11 @@ class beamng_interface():
     def Accelerometer_poll(self):
         try:
             acc = self.accel.poll()
-            self.A = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
+            temp_acc = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
             g_bf = np.matmul(self.Tnb, self.Gravity)
-            if( np.all(self.A) == 0):
-                self.A = self.last_A - g_bf
-            else:
+            if( np.all(temp_acc) != 0):
                 self.last_A = self.A
-            self.A += g_bf
+                self.A = temp_acc + g_bf
         except Exception:
             print(traceback.format_exc())
 
