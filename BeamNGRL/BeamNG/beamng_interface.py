@@ -457,6 +457,7 @@ class beamng_interface():
                 diff = self.quat/self.last_quat
                 self.last_quat = self.quat
                 self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
+                self.G = np.matmul(self.Tnb, self.G)
 
                 ## wheel ordering is FR BR FL BL
                 wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
