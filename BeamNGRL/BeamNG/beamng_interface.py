@@ -184,7 +184,6 @@ class beamng_interface():
         self.scenario.make(self.bng)
         if(hide_hud):
             self.bng.hide_hud()
-        # self.bng.set_steps_per_second(60)  # Set simulator to 60hz temporal resolution
         # Create an Electrics sensor and attach it to the vehicle
         self.electrics = Electrics()
         self.timer = Timer()
@@ -412,7 +411,7 @@ class beamng_interface():
     def Accelerometer_poll(self):
         try:
             acc = self.accel.poll()
-            self.A = np.array([acc['axis1'], acc['axis3'], acc['axis2']])
+            self.A = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
             g_bf = np.matmul(self.Tnb, self.Gravity)
             if( np.all(self.A) == 0):
                 self.A = self.last_A - g_bf
@@ -440,14 +439,12 @@ class beamng_interface():
             else:
                 if(self.lockstep):
                     self.bng.resume()
-                    time.sleep(0.001)
+                    time.sleep(0.02) ## 50Hz
+                    self.bng.pause()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)                
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.Accelerometer_poll()
-                if(self.lockstep):
-                    self.bng.pause()
-                
                 self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
