@@ -11,13 +11,16 @@ This module is intended for:
 Manual data collection example:
 ```bash
 python manual_data_collection.py --output_dir train_smallgrid_manual --map_name smallgrid --duration 10 --start_pos -67 336 0.
+python manual_data_collection.py --output_dir valid_smallgrid_manual --map_name smallgrid --duration 10 --start_pos -67 336 0.
 ```
 Data will be stored under `$PKG_Path/data/manual_data` by default.
 
 MPPI-based data collection example:
 ```bash
 python mppi_data_collection.py  --output_dir train_smallgrid --map_name smallgrid --duration 100
+python mppi_data_collection.py  --output_dir valid_smallgrid --map_name smallgrid --duration 30
 ```
+
 Data will be stored under `$PKG_Path/data/mppi_data` by default.
 
 
