@@ -34,12 +34,17 @@ class Normalizer(nn.Module):
         self.ctrl_mean = get_ctrl_features(input_stats['mean:control'], ctrl_feats)
         self.ctrl_std = get_ctrl_features(input_stats['std:control'], ctrl_feats)
 
-        # Handle feats not in stats
+        # Handle features not in data stats
         for f in ['sin_th', 'cos_th']:
             if f in state_feats:
                 idx = state_feats.index(f)
                 self.state_mean[..., idx] = 0.
                 self.state_std[..., idx] = 1.
+        for f in ['dvx_dt', 'dvx_dt']:
+            if f in state_feats:
+                idx = state_feats.index(f)
+                self.state_mean[..., idx] /= self.dt
+                self.state_std[..., idx] /= self.dt
 
     def normalize_state(self, states: torch.Tensor):
         return (states - self.state_mean) / self.state_std
@@ -66,6 +71,7 @@ class DynamicsBase(ABC, nn.Module):
             state_feat: List,
             ctrl_feat: List,
             input_stats: Dict,
+            use_normalizer: True,
             **kwargs,
     ):
         super().__init__()
@@ -76,23 +82,26 @@ class DynamicsBase(ABC, nn.Module):
         self.state_feat_list = state_feat
         self.ctrl_feat_list = ctrl_feat
 
-        self.normalizer = Normalizer(state_feat, ctrl_feat, input_stats)
+        self.normalizer = None
+        if use_normalizer:
+            self.normalizer = Normalizer(state_feat, ctrl_feat, input_stats)
 
     def process_targets(self, states: torch.Tensor):
         states = get_state_features(states, self.state_feat_list)
-        states = self.normalizer.normalize_state(states)
+        if self.normalizer:
+            states = self.normalizer.normalize_state(states)
         return states
 
     def process_input(self, states: torch.Tensor, controls: torch.Tensor):
         states = get_state_features(states, self.state_feat_list)
         controls = get_ctrl_features(controls, self.ctrl_feat_list)
-
-        states, controls = self.normalizer(states, controls)
-
+        if self.normalizer:
+            states, controls = self.normalizer(states, controls)
         return states, controls
 
     def process_output(self, states: torch.Tensor):
-        states = self.normalizer.unnormalize_state(states)
+        if self.normalizer:
+            states = self.normalizer.unnormalize_state(states)
         return states
 
     def forward(
@@ -102,15 +111,13 @@ class DynamicsBase(ABC, nn.Module):
             ctx_data: Dict,
     ):
 
-        states, controls = self.process_input(states, controls)
-
-        state_preds = self._forward(
+        state_feat_preds = self._forward(
             states,
             controls,
             ctx_data,
         )
 
-        return state_preds
+        return state_feat_preds
 
     def rollout(
             self,
@@ -120,7 +127,6 @@ class DynamicsBase(ABC, nn.Module):
     ):
 
         assert states_init.size(0) == control_seq.size(0)
-        states_init, control_seq = self.process_input(states_init, control_seq)
 
         states_pred = self._rollout(states_init, control_seq, ctx_data)
 
@@ -131,8 +137,8 @@ class DynamicsBase(ABC, nn.Module):
     @abstractmethod
     def _forward(
             self,
-            input_state_seq,
-            input_ctrl_seq,
+            state_feats,
+            ctrl_feats,
             ctx_data,
     ):
         pass
@@ -140,8 +146,8 @@ class DynamicsBase(ABC, nn.Module):
     @abstractmethod
     def _rollout(
             self,
-            state,
-            control_seq,
+            state_feat,
+            ctrl_feats,
             ctx_data,
     ):
         pass

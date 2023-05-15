@@ -38,6 +38,7 @@ def build_nets(config, tn_args, model_weight_file=None, data_stats=None):
     net = net_class(
         state_feat=spec['state_feat'],
         ctrl_feat=spec['control_feat'],
+        use_normalizer=spec['use_normalizer'],
         input_stats=data_stats,
         **net_args,
     ).to(**tn_args)

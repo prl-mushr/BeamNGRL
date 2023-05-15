@@ -14,6 +14,24 @@ from typing import List
 #  9: ax,   10: ay,  11: az,   (bf)
 #  12: wx,  13: wy,  14: wz    (bf)
 
+state_idx_map = {
+    'x':  0,
+    'y':  1,
+    'z':  2,
+    'r':  3,
+    'p':  4,
+    'th': 5,
+    'vx': 6,
+    'vy': 7,
+    'vz': 8,
+    'ax': 9,
+    'ay': 10,
+    'az': 11,
+    'wx': 12,
+    'wy': 13,
+    'wz': 14,
+}
+
 state_feat_map = {
     'x':        (lambda arr: arr[..., [0]]),
     'y':        (lambda arr: arr[..., [1]]),
@@ -31,6 +49,9 @@ state_feat_map = {
     'wy':       (lambda arr: arr[..., [13]]),
     'wz':       (lambda arr: arr[..., [14]]),
 
+    'dvx_dt':       (lambda arr: arr[..., 1:, [6]] - arr[..., :-1, [6]]),
+    'dvy_dt':       (lambda arr: arr[..., 1:, [7]] - arr[..., :-1, [7]]),
+
     'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
     'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
 }
@@ -41,13 +62,27 @@ ctrl_feat_map = {
 }
 
 
+def get_feat_index_tn(
+        feat_list: List,
+):
+    idx_list = []
+    for feat in feat_list:
+        idx_list += [int(state_idx_map[feat])]
+    return torch.LongTensor(idx_list)
+
+
 def get_state_features(
         states: torch.Tensor,
         feat_list: List,
+        dt: float = None,
 ):
     state_feats = []
     for f in feat_list:
-        state_feats.append(state_feat_map[f](states))
+        feat = state_feat_map[f](states)
+        if f in ['dvx_dt', 'dvx_dt']:
+            feat = torch.cat((feat, feat[:, [-1], :]), dim=-1) # repeat last entry
+            feat = feat / dt
+        state_feats.append(feat)
     return torch.cat(state_feats, dim=-1)
 
 

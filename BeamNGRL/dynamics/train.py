@@ -59,9 +59,10 @@ def train(
                         ctx_tn_dict,
                     )
 
-                    targets = network.process_targets(states_tn)
+                    # targets = network.process_targets(states_tn)
+                    # loss = loss_func(pred, targets)
 
-                    loss = loss_func(pred, targets)
+                    loss = loss_func(pred, states_tn)
 
                     loss.backward()
                     optimizer.step()

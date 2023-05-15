@@ -18,3 +18,12 @@ class StatePredMSE(Loss):
     def loss(self, state_preds, state_targets):
         mse = F.mse_loss(state_preds, state_targets)
         return mse
+
+
+class NextStatePredMSE(Loss):
+
+    def loss(self, next_state_preds, next_state_targets):
+        next_state_preds = next_state_preds[:, :-1] # no label for last prediction
+        next_state_targets = next_state_targets[:, 1:] # first entry is an input.
+        mse = F.mse_loss(next_state_preds, next_state_targets)
+        return mse
