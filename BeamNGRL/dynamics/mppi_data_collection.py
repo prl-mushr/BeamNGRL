@@ -46,7 +46,8 @@ def collect_mppi_data(args):
     with open(MPPI_CONFIG_PTH / 'Map_config.yaml') as f:
         Map_config = yaml.safe_load(f)
 
-    target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
+    # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
+    target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
 
     map_res = Map_config["map_res"]
     dtype = torch.float

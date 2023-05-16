@@ -34,7 +34,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     device = torch.device("cuda")
     # device = torch.device("cpu")
 
-    model_weights_path = LOGS_PATH / 'small_grid_debug' / 'best_57.pth'
+    model_weights_path = LOGS_PATH / 'small_grid_mppi' / 'epoch_75.pth'
 
     with torch.no_grad():
 
@@ -137,6 +137,9 @@ if __name__ == "__main__":
     start_point = np.array([-67, 336, 0.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
     map_name = "smallgrid"
-    target_WP = np.load("WP_file_offroad.npy")
+    # target_WP = np.load("WP_file_offroad.npy")
+    # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
+    target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
+
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
     main(map_name, start_point, start_quat, config_path, target_WP=target_WP)

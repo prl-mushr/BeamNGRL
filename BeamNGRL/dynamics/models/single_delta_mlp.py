@@ -3,6 +3,7 @@ import torch.nn as nn
 from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
+from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 
 
 class DeltaMLP(DynamicsBase):
@@ -12,11 +13,8 @@ class DeltaMLP(DynamicsBase):
             hidden_depth=2,
             hidden_dim=512,
             batch_norm=False,
-            dt=None,
             **kwargs,
     ):
-
-        self.dt = dt
 
         super().__init__(**kwargs)
 
@@ -51,7 +49,14 @@ class DeltaMLP(DynamicsBase):
         b, h, _ = states.shape
 
         # Get input features
-        state_feats, ctrl_feats = self.process_input(states, controls)
+        # state_feats, ctrl_feats = self.process_input(states, controls)
+
+        if self.normalizer:
+            states, controls = self.normalizer(states, controls)
+
+        state_feats = get_state_features(states, self.state_feat_list)
+        ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
+
         state_feats = state_feats.view(-1, self.state_dim)
         ctrl_feats = ctrl_feats.view(-1, self.ctrl_dim)
 
@@ -62,13 +67,13 @@ class DeltaMLP(DynamicsBase):
         x_out = x_out.reshape(b, h, -1)
 
         # Populate delta tensor
+        state_feat_idx = self.state_feat_idx.expand(b, h, -1)
         delta_states = torch.zeros_like(states)
-        delta_states = delta_states.scatter_(-1, self.state_feat_idx, x_out)
+        delta_states = delta_states.scatter_(-1, state_feat_idx, x_out)
 
         states_next = states + delta_states
 
         return states_next
-
 
     def _rollout(
             self,

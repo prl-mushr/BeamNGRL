@@ -61,10 +61,9 @@ def load_timestamps(file_name: str, file_path: os.PathLike) -> np.ndarray:
 
 def get_state_trajectory(file_name: str, file_path: os.PathLike,
                          timestamps: np.ndarray) -> np.ndarray:
-
     states_traj = np.load(file_path / file_name, allow_pickle=True)
+    states_traj = states_traj[..., :15]
     return states_traj
-
 
 
 def get_controls(file_name: str, file_path: os.PathLike) -> np.ndarray:
