@@ -80,7 +80,7 @@ def train(
                 train_average_loss = np.asarray(train_average_loss).mean()
                 writer.add_scalar('Train/Loss', train_average_loss, epoch)
 
-            if args.save_each_epoch:
+            if epoch % args.save_each_n_epochs == 0:
                 nu._save_model(
                     network,
                     optimizer,
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument('--start_from', type=int, required=False, default=-1, help='epoch to start from')
     parser.add_argument('--valid_interval', type=int, required=False, default=1, help='model grad/weights log interval')
     parser.add_argument('--skip_valid_eval', action='store_true', help='skip computation of validation error.')
-    parser.add_argument('--save_each_epoch', type=bool, required=False, default=False, help='Save model after each epoch.')
+    parser.add_argument('--save_each_n_epochs', type=int, required=False, default=9e99, help='Save model after each epoch.')
     args = parser.parse_args()
 
     # Set torch params

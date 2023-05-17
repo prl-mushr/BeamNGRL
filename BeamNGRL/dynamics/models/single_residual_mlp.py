@@ -72,7 +72,6 @@ class ResidualMLP(DynamicsBase):
 
         # states[..., 14] = states[..., 6]*torch.tan(controls[..., 0] * 0.5)/2.6
 
-
         state_feats = get_state_features(states, self.state_feat_list)
         ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
 
