@@ -21,7 +21,7 @@ def collect_data(args):
         start_quat=np.array(args.start_quat),
     )
 
-    # bng.set_lockstep(True)
+    bng.set_lockstep(True)
     start = None
 
     timestamps = []

@@ -34,7 +34,8 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     device = torch.device("cuda")
     # device = torch.device("cpu")
 
-    model_weights_path = LOGS_PATH / 'small_grid_mppi' / 'epoch_75.pth'
+    model_weights_path = LOGS_PATH / 'small_grid' / 'best_292.pth'
+    print(model_weights_path)
 
     with torch.no_grad():
 
@@ -65,7 +66,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_res=Map_config["map_res"],
             map_size=Map_config["map_size"]
         )
-        # bng_interface.set_lockstep(True)
+        bng_interface.set_lockstep(True)
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
@@ -114,6 +115,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 )[0]
                 action[1] = np.clip(action[1], 0, 0.5)
                 dt_ = time.time() - now
+                print(dt_)
                 
                 costmap_vis(
                     controller.Dynamics.states.cpu().numpy(),
@@ -141,5 +143,5 @@ if __name__ == "__main__":
     # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
     target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
 
-    config_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
+    config_path = str(ROOT_PATH) + "/control/UW_mppi/Configs/"
     main(map_name, start_point, start_quat, config_path, target_WP=target_WP)

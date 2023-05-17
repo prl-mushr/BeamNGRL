@@ -60,7 +60,7 @@ class Delta_Sampling(torch.nn.Module):
         perturbed_actions = U + self.noise
 
         controls = torch.clamp(state[..., 15:17] + (self.scaled_dt)*torch.cumsum(perturbed_actions.unsqueeze(dim=0), dim=-2), -1, 1)
-        controls[...,1] = torch.clamp(controls[...,1], 0,0.5) ## car can't go in reverse, can't have more than 50 % speed
+        controls[...,1] = torch.clamp(controls[...,1], 0, 0.5) ## car can't go in reverse, can't have more than 50 % speed
 
         perturbed_actions[:,1:,:] = torch.diff(controls - state[...,15:17], dim=-2).squeeze(dim=0)/(self.scaled_dt)
 
