@@ -10,13 +10,15 @@ This module is intended for:
 
 Manual data collection example:
 ```bash
-python manual_data_collection.py --output_dir train_smallgrid_manual --map_name smallgrid --duration 10 --start_pos -67 336 0.
+python manual_data_collection.py --output_dir train_smallgrid_manual --map_name smallgrid --duration 60 --start_pos -67 336 0.
+python manual_data_collection.py --output_dir valid_smallgrid_manual --map_name smallgrid --duration 60 --start_pos -67 336 0.
 ```
 Data will be stored under `$PKG_Path/data/manual_data` by default.
 
 MPPI-based data collection example:
 ```bash
 python mppi_data_collection.py  --output_dir train_smallgrid --map_name smallgrid --duration 100
+python mppi_data_collection.py  --output_dir valid_smallgrid --map_name smallgrid --duration 100
 ```
 Data will be stored under `$PKG_Path/data/mppi_data` by default.
 
@@ -42,9 +44,9 @@ split:
     - 'valid_smallgrid'
 
 map:
-  width: 16 # in meters
-  height: 16
-  resolution: 0.05
+  width: 32 # in meters
+  height: 32
+  resolution: 0.25 ## match the parameters actually used!
 
 ```
 
@@ -56,7 +58,7 @@ Run data processing as follows, passing the config file and output directory as 
 python process_data.py --cfg small_grid_mppi --output_dir small_grid_mppi --save_vis True
 ```
 
-Datasets will be stored under `$PKG_Path/data/mppi_data` by default.
+Datasets will be stored under `$PKG_Path/datasets/` by default.
 
 
 ## Model Definition

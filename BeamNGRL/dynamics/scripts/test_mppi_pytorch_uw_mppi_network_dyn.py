@@ -34,7 +34,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     device = torch.device("cuda")
     # device = torch.device("cpu")
 
-    model_weights_path = LOGS_PATH / 'small_grid' / 'best_292.pth'
+    model_weights_path = LOGS_PATH / 'small_grid' / 'best_252.pth'
     print(model_weights_path)
 
     with torch.no_grad():

@@ -1,7 +1,7 @@
 goal_w: 0.5 ## weight on the terminal goal cost
 speed_w: 1 ## weight with which target speed will be tracked
 roll_w: 2 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
-lethal_w: 10 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+lethal_w: 4 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
 speed_target: 10.0 ## target speed in m/s
 critical_SA: 2.0 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
 critical_RI: 0.5 ## limiting ratio of lateral to vertical acceleration
