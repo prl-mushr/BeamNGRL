@@ -65,12 +65,11 @@ class ResidualMLP(DynamicsBase):
         # which are "affected" by the accelerations and rotations, including those accelerations which 
         # we can "sort of predict" (ay, az)
 
-        # states[..., 6] = controls[..., 1]*20.0 + states[..., 9]*0.02
-        states[..., 6] = states[..., 6] + states[..., 9]*0.02
+        states[..., 6] = controls[..., 1]*20.0 + states[..., 9]*0.02
+        # states[..., 6] = states[..., 6] + states[..., 9]*0.02
         states[..., 7] = states[..., 7] + states[..., 10]*0.02
         states[..., 8] = states[..., 8] + (states[..., 11] - 9.81)*0.02
-
-        # states[..., 14] = states[..., 6]*torch.tan(controls[..., 0] * 0.5)/2.6
+        states[..., 14] = states[..., 6]*torch.tan(controls[..., 0] * 0.5)/2.6
 
 
         state_feats = get_state_features(states, self.state_feat_list)
