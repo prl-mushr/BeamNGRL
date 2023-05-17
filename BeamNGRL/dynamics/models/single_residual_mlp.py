@@ -50,27 +50,38 @@ class ResidualMLP(DynamicsBase):
 
         # Get input features
         # state_feats, ctrl_feats = self.process_input(states, controls)
-
+        # do I even need normalization? hmmmmmmmmmmmm
         if self.normalizer:
             states, controls = self.normalizer(states, controls)
 
-        (x, y, z,
-         r, p, th,
-         vx, vy, vz,
-         ax, ay, az,
-         wx, wy, wz) = states.split(1, dim=-1)
+        # (x, y, z,
+        #  r, p, th,
+        #  vx, vy, vz,
+        #  ax, ay, az,
+        #  wx, wy, wz) = states.split(1, dim=-1)
+        
+        # we propagate the state forward assuming "null" controls, and let the network figure out the 
+        # effect of controls on accelerations and rotations. We thus only propagate those states 
+        # which are "affected" by the accelerations and rotations, including those accelerations which 
+        # we can "sort of predict" (ay, az)
+
+        # states[..., 6] = controls[..., 1]*20.0 + states[..., 9]*0.02
+        states[..., 6] = states[..., 6] + states[..., 9]*0.02
+        states[..., 7] = states[..., 7] + states[..., 10]*0.02
+        states[..., 8] = states[..., 8] + (states[..., 11] - 9.81)*0.02
+
+        # states[..., 14] = states[..., 6]*torch.tan(controls[..., 0] * 0.5)/2.6
+
+
+        state_feats = get_state_features(states, self.state_feat_list)
+        ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
+
+        state_feats = state_feats.view(-1, self.state_dim)
+        ctrl_feats = ctrl_feats.view(-1, self.ctrl_dim)
 
         #===================================================
-        # TODO: define nominal kinematic model HERE.
-        # concatenate input states into state_feats.
-        # This should match list in experiment config file.
 
-        state_feats = None
-
-        #===================================================
-
-        x = torch.cat((state_feats, controls), dim=-1)
-
+        x = torch.cat((state_feats, ctrl_feats), dim=-1)
         x_out = self.main(x)
 
         x_out = x_out.reshape(b, h, -1)

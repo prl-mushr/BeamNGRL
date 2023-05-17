@@ -6,20 +6,20 @@ dataset:
   ctx_input_keys: []
 
 network:
-  state_feat: ['x', 'y', 'th', 'vx', 'ay', 'az']
+  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
 #  use_normalizer: True
   use_normalizer: False
 
   class: ResidualMLP
   net_kwargs:
-    hidden_depth: 1
+    hidden_depth: 2
     hidden_dim: 256
     batch_norm: True
 
   opt: Adam
   opt_kwargs:
-    lr: 1.0e-4
+    lr: 1.0e-3
 
 loss: NextStatePredMSE
 

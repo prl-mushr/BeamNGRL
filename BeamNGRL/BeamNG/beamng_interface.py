@@ -152,6 +152,7 @@ class beamng_interface():
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
+        self.burn_time=0.05
 
         self.use_beamng = use_beamng
         if self.use_beamng:

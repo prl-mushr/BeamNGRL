@@ -88,17 +88,34 @@ class SimpleCarNetworkDyn(torch.nn.Module):
 
         steer = controls[..., 0]
         throttle = controls[..., 1]
-
         states_pred = self.dyn_model.rollout(state, controls, ctx_data={})
-
-        x, y, th, vx, wy, ay, az = states_pred.split(1, dim=-1)
-        x = x.squeeze(-1)
-        y = y.squeeze(-1)
-        yaw = th.squeeze(-1)
+        _,_,_,_,_,_,vx, vy, vz, ax, ay, az, wx, wy, wz,_,_ = states_pred.split(1, dim=-1)
+        ## squeeze all the singleton dimensions for all the states
         vx = vx.squeeze(-1)
-        wy = wy.squeeze(-1)
+        vy = vy.squeeze(-1)
+        vz = vz.squeeze(-1)
+        ax = ax.squeeze(-1)
         ay = ay.squeeze(-1)
         az = az.squeeze(-1)
+        wx = wx.squeeze(-1)
+        wy = wy.squeeze(-1)
+        wz = wz.squeeze(-1)
+
+        roll = roll + torch.cumsum(wx*0.02, dim=-1)
+        pitch = pitch + torch.cumsum(wy*0.02, dim=-1)
+        yaw = yaw + torch.cumsum(wz*0.02, dim=-1)
+        
+        cy = torch.cos(yaw)
+        sy = torch.sin(yaw)
+        cp = torch.cos(pitch)
+        sp = torch.sin(pitch)
+        cr = torch.cos(roll)
+        sr = torch.sin(roll)
+        ct = torch.sqrt(cp*cp + cr*cr)
+
+        x = x + 0.02*torch.cumsum(( vx*cp*cy + vy*(sr*sp*cy - cr*sy) + vz*(cr*sp*cy + sr*sy) ), dim=-1)
+        y = y + 0.02*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
+        z = z + 0.02*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
 
         self.states = torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=3)
 
