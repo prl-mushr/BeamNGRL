@@ -7,18 +7,22 @@ from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_f
 from .normalizers import FeatureNormalizer, StateNormalizer
 
 
-class BasicMLP(DynamicsBase):
+class DeltaMLP2(DynamicsBase):
 
     def __init__(
             self,
             hidden_depth=2,
             hidden_dim=512,
             batch_norm=False,
+            dt=0.02,
             input_stats: Dict=None,
             use_normalizer=True,
             **kwargs,
     ):
+
         super().__init__(**kwargs)
+
+        self.dt = dt
 
         feat_idx_tn = get_feat_index_tn(self.state_feat_list)
 
@@ -64,7 +68,23 @@ class BasicMLP(DynamicsBase):
 
         x_out = self.main(x)
 
-        state_feats_next = x_out.reshape(b, h, -1)
+        x_out = x_out.reshape(b, h, -1)
+
+        dvx, dvy, dvz, dax, day, daz, dwx, dwy, dwz = x_out.split(1, dim=-1)
+
+        state_feats_next = state_feats.clone().detach()
+
+        state_feats_next[..., [0]] = state_feats[..., [0]] + dvx
+        state_feats_next[..., [1]] = state_feats[..., [1]] + dvy
+        state_feats_next[..., [2]] = state_feats[..., [2]] + dvz
+
+        state_feats_next[..., [3]] = state_feats[..., [3]] + dax
+        state_feats_next[..., [4]] = state_feats[..., [4]] + day
+        state_feats_next[..., [5]] = state_feats[..., [5]] + daz
+
+        state_feats_next[..., [6]] = state_feats[..., [6]] + dwx
+        state_feats_next[..., [7]] = state_feats[..., [7]] + dwy
+        state_feats_next[..., [8]] = state_feats[..., [8]] + dwz
 
         return state_feats_next
 
@@ -99,21 +119,21 @@ class BasicMLP(DynamicsBase):
         pred_states = pred_states.reshape(b, n, horizon, d)
 
         return pred_states
-
-    def process_targets(self, states: torch.Tensor):
-        state_feats = get_state_features(states, self.state_feat_list)
-        if self.normalizer:
-            state_feats = self.normalizer.normalize_state(state_feats)
-        return state_feats
-
-    def process_input(self, states: torch.Tensor, controls: torch.Tensor):
-        state_feats = get_state_features(states, self.state_feat_list)
-        ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
-        if self.normalizer:
-            state_feats, ctrl_feats = self.normalizer(state_feats, ctrl_feats)
-        return state_feats, ctrl_feats
-
-    def process_output(self, state_feats: torch.Tensor):
-        if self.normalizer:
-            state_feats = self.normalizer.unnormalize_state(state_feats)
-        return state_feats
+    #
+    # def process_targets(self, states: torch.Tensor):
+    #     state_feats = get_state_features(states, self.state_feat_list)
+    #     if self.normalizer:
+    #         state_feats = self.normalizer.normalize_state(state_feats)
+    #     return state_feats
+    #
+    # def process_input(self, states: torch.Tensor, controls: torch.Tensor):
+    #     state_feats = get_state_features(states, self.state_feat_list)
+    #     ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
+    #     if self.normalizer:
+    #         state_feats, ctrl_feats = self.normalizer(state_feats, ctrl_feats)
+    #     return state_feats, ctrl_feats
+    #
+    # def process_output(self, state_feats: torch.Tensor):
+    #     if self.normalizer:
+    #         state_feats = self.normalizer.unnormalize_state(state_feats)
+    #     return state_feats

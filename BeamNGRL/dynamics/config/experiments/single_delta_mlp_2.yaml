@@ -10,15 +10,15 @@ network:
   control_feat: ['steer', 'throttle']
   use_normalizer: True
 
-  class: BasicMLP
+  class: DeltaMLP2
   net_kwargs:
-    hidden_depth: 3
-    hidden_dim: 128
-    batch_norm: False
+    hidden_depth: 1
+    hidden_dim: 256
+    batch_norm: True
 
   opt: Adam
   opt_kwargs:
-    lr: 1.0e-4
+    lr: 1.0e-3
 
 loss: NextStatePredMSE
 
