@@ -76,29 +76,31 @@ dataset:
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
-  ctx_input_keys: ['state']
+  ctx_input_keys: []
 
 network:
-  state_feat: ['x', 'y', 'th', 'vx', 'wy', 'ay', 'az']
+  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
+#  use_normalizer: True
+  use_normalizer: False
 
-  class: BasicMLP
+  class: ResidualMLP
   net_kwargs:
     hidden_depth: 1
     hidden_dim: 256
-    batch_norm: False
+    batch_norm: True
 
   opt: Adam
   opt_kwargs:
-    lr: 1.0e-4
+    lr: 1.0e-3
 
-loss: StatePredMSE
+loss: NextStatePredMSE
 ```
 
 Run the `train.py` script, passing the config file name and output directory.
 
 ```bash
-python train.py --config single_mlp.yaml --output small_grid --n_epochs 100
+python train.py --config single_residual_mlp.yaml --output small_grid --n_epochs 300
 ```
 
 Model files and output will be stored under the `$PKG_Path/logs` directory by default.
@@ -111,4 +113,33 @@ tensorboard --logdir='./logs'
 ## Inference (WIP)
 
 See examples under `scripts` for running trained models in-the-loop with the MPPI controller.
+make sure your "Network_Dynamics_config.yaml" in UW_mppi/Configs matches what you're using for training!
+```yaml
+wheelbase: 2.6
+throttle_to_wheelspeed: 20.0
+steering_max: 0.6
+dt: 0.02
+
+# network:
+#   state_feat: ['x', 'y', 'th', 'vx', 'wy', 'ay', 'az']
+#   control_feat: ['steer', 'throttle']
+
+#   class: BasicMLP
+#   net_kwargs:
+#     hidden_depth: 1
+#     hidden_dim: 256
+#     batch_norm: False
+
+network:
+  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
+  control_feat: ['steer', 'throttle']
+#  use_normalizer: True
+  use_normalizer: False
+
+  class: ResidualMLP
+  net_kwargs:
+    hidden_depth: 1
+    hidden_dim: 256
+    batch_norm: True
+```
 

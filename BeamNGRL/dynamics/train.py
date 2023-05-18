@@ -31,7 +31,7 @@ def train(
                 args.epochs,
                 last_epoch=args.start_from,
         )
-
+    torch.autograd.set_detect_anomaly(True)
     best_loss = np.inf
     try:
         if args.start_from != -1:
