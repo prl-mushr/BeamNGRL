@@ -22,6 +22,13 @@ python mppi_data_collection.py  --output_dir valid_smallgrid --map_name smallgri
 ```
 Data will be stored under `$PKG_Path/data/mppi_data` by default.
 
+sinusoidal-input data collection example:
+```bash
+python sinusoidal_data_collection.py  --output_dir train_smallgrid --map_name smallgrid --duration 100
+python sinusoidal_data_collection.py  --output_dir valid_smallgrid --map_name smallgrid --duration 100
+```
+Data will be stored under `$PKG_Path/data/mppi_data` by default.
+
 
 ## Dataset processing
 
@@ -49,6 +56,27 @@ map:
   resolution: 0.25 ## match the parameters actually used!
 
 ```
+OR if you're using the sinusoidal data collection:
+```
+raw_data_dir: 'sinu_data/'
+# Total traj len = future + past + 1 (current)
+future_traj_len: 50
+past_traj_len: 50
+skip_frames: 5
+
+split:
+  train:
+    - 'train_smallgrid'
+  valid:
+    - 'valid_smallgrid'
+
+map:
+  width: 32 # in meters
+  height: 32
+  resolution: 16 ## make the map useless. Save 4 pixels
+
+```
+
 
 where multipled sequences can be specified to create training/validation datasets.
 
@@ -56,6 +84,11 @@ where multipled sequences can be specified to create training/validation dataset
 Run data processing as follows, passing the config file and output directory as arugments:
 ```bash
 python process_data.py --cfg small_grid_mppi --output_dir small_grid_mppi --save_vis True
+```
+
+for the automated data generation:
+```bash
+python process_data.py --cfg small_grid_sinu --output_dir small_grid_sinu --save_vis True
 ```
 
 Datasets will be stored under `$PKG_Path/datasets/` by default.

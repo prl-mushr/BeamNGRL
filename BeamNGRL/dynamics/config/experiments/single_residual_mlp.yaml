@@ -1,5 +1,5 @@
 dataset:
-  name: 'small_grid_mppi'
+  name: 'small_grid_sinu'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -13,7 +13,7 @@ network:
 
   class: ResidualMLP
   net_kwargs:
-    hidden_depth: 1
+    hidden_depth: 2
     hidden_dim: 256
     batch_norm: True
 

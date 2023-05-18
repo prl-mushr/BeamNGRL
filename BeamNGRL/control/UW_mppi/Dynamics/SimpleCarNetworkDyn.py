@@ -91,7 +91,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         states_pred = self.dyn_model.rollout(state, controls, ctx_data={})
         _,_,_,_,_,_,vx, vy, vz, ax, ay, az, wx, wy, wz = states_pred.split(1, dim=-1)
         ## squeeze all the singleton dimensions for all the states
-        vx = vx.squeeze(-1) + controls[..., 1]*20
+        vx = vx.squeeze(-1) # + controls[..., 1]*20
         vy = vy.squeeze(-1)
         vz = vz.squeeze(-1)
         ax = ax.squeeze(-1)
@@ -99,7 +99,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         az = az.squeeze(-1)
         wx = wx.squeeze(-1)
         wy = wy.squeeze(-1)
-        wz = vx*torch.tan(controls[..., 0] * 0.5)/2.6
+        wz = wz.squeeze(-1) #vx*torch.tan(controls[..., 0] * 0.5)/2.6
 
         roll = roll + torch.cumsum(wx*0.02, dim=-1)
         pitch = pitch + torch.cumsum(wy*0.02, dim=-1)
