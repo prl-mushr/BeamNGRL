@@ -55,9 +55,6 @@ class ResidualMLP(DynamicsBase):
         for i in range(h - 1):
             vawU = torch.cat((states_next[..., i,6:15], controls[..., i,:]), dim=-1)
             states_next[..., i+1, 6:15] = self.main(vawU) # vaw_next = f(v,a,w,U)
-
-        #===================================================
-
         return states_next
 
     def _rollout(

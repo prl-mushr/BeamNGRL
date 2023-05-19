@@ -13,14 +13,35 @@ dt: 0.02
 #     hidden_dim: 256
 #     batch_norm: False
 
+#network:
+#  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
+#  control_feat: ['steer', 'throttle']
+#  use_normalizer: False
+#
+#  class: ResidualMLP
+#  net_kwargs:
+#    hidden_depth: 1
+#    hidden_dim: 256
+#    batch_norm: True
+
 network:
   state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
-  # use_normalizer: True
-  use_normalizer: False
+  use_normalizer: True
 
-  class: ResidualMLP
+  class: DeltaMLP2
   net_kwargs:
     hidden_depth: 2
     hidden_dim: 256
     batch_norm: True
+
+
+#network:
+#  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
+#  control_feat: ['steer', 'throttle']
+#  use_normalizer: True
+#  class: BasicMLP
+#  net_kwargs:
+#    hidden_depth: 3
+#    hidden_dim: 128
+#    batch_norm: False

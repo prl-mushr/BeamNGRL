@@ -103,5 +103,7 @@ class DeltaMLP(DynamicsBase):
         pred_states = states
         pred_states = pred_states.reshape(b, n, horizon, d)
 
+        pred_states = self.process_output(pred_states)
+
         return pred_states
 

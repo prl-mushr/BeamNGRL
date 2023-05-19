@@ -34,7 +34,11 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     device = torch.device("cuda")
     # device = torch.device("cpu")
 
-    model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
+    # model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
+    # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
+    model_weights_path = LOGS_PATH / 'small_grid_delta_2' / 'epoch_1000.pth'
+    # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
+
     print(model_weights_path)
 
     with torch.no_grad():
@@ -115,7 +119,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 )[0]
                 action[1] = np.clip(action[1], 0, 0.5)
                 dt_ = time.time() - now
-                print(dt_)
+                # print(dt_)
                 
                 costmap_vis(
                     controller.Dynamics.states.cpu().numpy(),

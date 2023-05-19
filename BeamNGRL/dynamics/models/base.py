@@ -7,20 +7,12 @@ from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_f
 from .normalizers import FeatureNormalizer, StateNormalizer
 
 
-state_feat_list_full = ['x', 'y', 'z',
-                       'r', 'p', 'th',
-                       'vx', 'vy', 'vz',
-                       'ax', 'ay', 'az',
-                       'wx', 'wy', 'wz',]
-
 class DynamicsBase(ABC, nn.Module):
 
     def __init__(
             self,
             state_feat: List,
             ctrl_feat: List,
-            input_stats: Dict,
-            use_normalizer: True,
             **kwargs,
     ):
         super().__init__()
@@ -31,15 +23,8 @@ class DynamicsBase(ABC, nn.Module):
         self.state_feat_list = state_feat
         self.ctrl_feat_list = ctrl_feat
 
-        self.normalizer = None
-        if use_normalizer:
-            # FIXME:
-            # self.normalizer = FeatureNormalizer(state_feat, ctrl_feat, input_stats)
-            self.normalizer = StateNormalizer(input_stats)
-
     def process_targets(self, states: torch.Tensor):
-        # FIXME:
-        # states = get_state_features(states, self.state_feat_list)
+        states = get_state_features(states, self.state_feat_list)
         if self.normalizer:
             states = self.normalizer.normalize_state(states)
         return states
@@ -81,8 +66,6 @@ class DynamicsBase(ABC, nn.Module):
         assert states_init.size(0) == control_seq.size(0)
 
         states_pred = self._rollout(states_init, control_seq, ctx_data)
-
-        states_pred = self.process_output(states_pred)
 
         return states_pred
 
