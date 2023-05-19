@@ -261,8 +261,13 @@ class beamng_interface():
         return x, y
  
     def gen_BEVmap(self):
+
         self.img_X = np.clip(int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
         self.img_Y = np.clip(int( self.pos[1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+
+        # self.img_X = int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2)
+        # self.img_Y = int( self.pos[1]*self.resolution_inv + self.image_shape[1]//2)
+
 
         self.Y_min = int(self.img_Y - self.map_size*self.resolution_inv)
         self.Y_max = int(self.img_Y + self.map_size*self.resolution_inv)

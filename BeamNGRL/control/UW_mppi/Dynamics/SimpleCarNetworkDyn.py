@@ -90,8 +90,9 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         throttle = controls[..., 1]
         states_pred = self.dyn_model.rollout(state, controls, ctx_data={})
         
-        _,_,_,_,_,_,vx, vy, vz, ax, ay, az, wx, wy, wz = states_pred.split(1, dim=-1)
-        
+        # _,_,_,_,_,_,vx, vy, vz, ax, ay, az, wx, wy, wz = states_pred.split(1, dim=-1)
+        _,_,_,_,_,_,vx, vy, vz, ax, ay, az, wx, wy, wz, _, _ = states_pred.split(1, dim=-1)
+
         ## squeeze all the singleton dimensions for all the states
         vx = vx.squeeze(-1) # + controls[..., 1]*20
         vy = vy.squeeze(-1)

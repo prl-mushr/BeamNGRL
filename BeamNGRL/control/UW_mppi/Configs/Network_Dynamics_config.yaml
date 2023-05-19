@@ -31,10 +31,9 @@ network:
 
   class: DeltaMLP2
   net_kwargs:
-    hidden_depth: 2
-    hidden_dim: 256
-    batch_norm: True
-
+    hidden_depth: 1
+    hidden_dim: 128
+    batch_norm: False
 
 #network:
 #  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
