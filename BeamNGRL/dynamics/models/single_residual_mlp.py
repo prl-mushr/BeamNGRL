@@ -46,51 +46,15 @@ class ResidualMLP(DynamicsBase):
             ctx_data: Dict,
     ):
 
-        b, h, _ = states.shape
-
-        # Get input features
-        # state_feats, ctrl_feats = self.process_input(states, controls)
-        # do I even need normalization? hmmmmmmmmmmmm
+        _, h, _ = states.shape
         if self.normalizer:
-            states, controls = self.normalizer(states, controls)
+            states[...,:15], controls = self.normalizer(states[...,:15], controls)
 
-        # (x, y, z,
-        #  r, p, th,
-        #  vx, vy, vz,
-        #  ax, ay, az,
-        #  wx, wy, wz) = states.split(1, dim=-1)
-        
-        # we propagate the state forward assuming "null" controls, and let the network figure out the 
-        # effect of controls on accelerations and rotations. We thus only propagate those states 
-        # which are "affected" by the accelerations and rotations, including those accelerations which 
-        # we can "sort of predict" (ay, az)
-
-        states[..., 6] = controls[..., 1]*20.0 + states[..., 9]*0.02
-        # states[..., 6] = states[..., 6] + states[..., 9]*0.02
-        states[..., 7] = states[..., 7] + states[..., 10]*0.02
-        states[..., 8] = states[..., 8] + (states[..., 11] - 9.81)*0.02
-        states[..., 14] = states[..., 6]*torch.tan(controls[..., 0] * 0.5)/2.6
-
-        state_feats = get_state_features(states, self.state_feat_list)
-        ctrl_feats = get_ctrl_features(controls, self.ctrl_feat_list)
-
-        state_feats = state_feats.view(-1, self.state_dim)
-        ctrl_feats = ctrl_feats.view(-1, self.ctrl_dim)
-
-        #===================================================
-
-        x = torch.cat((state_feats, ctrl_feats), dim=-1)
-        x_out = self.main(x)
-
-        x_out = x_out.reshape(b, h, -1)
-
-        # Populate delta tensor
-        state_feat_idx = self.state_feat_idx.expand(b, h, -1)
-        delta_states = torch.zeros_like(states)
-        delta_states = delta_states.scatter_(-1, state_feat_idx, x_out)
-
-        states_next = states + delta_states
-
+        states_next = torch.zeros_like(states)
+        states_next[...,0,:] = states[...,0,:]
+        for i in range(h - 1):
+            vawU = torch.cat((states_next[..., i,6:15], controls[..., i,:]), dim=-1)
+            states_next[..., i+1, 6:15] = self.main(vawU) # vaw_next = f(v,a,w,U)
         return states_next
 
     def _rollout(
@@ -99,27 +63,24 @@ class ResidualMLP(DynamicsBase):
             controls,
             ctx_data,
     ):
-
+        '''
+        so let me get this straight. We have a dynamics class that has a "forward" method,
+        which internally calls a dynamics model that has a rollout method
+        which internall calls a "forward" method, that internall calls the "main" on a sequential NN.
+        The inception is strong with this one.
+        '''
         b, n, horizon, d = states.shape
-        b, n, horizon, d_c = controls.shape
+        _, _, _,       d_c = controls.shape
 
         states = states.view(-1, horizon, d)
         controls = controls.view(-1, horizon, d_c)
 
-        horizon = controls.size(1)
-
-        for t in range(horizon - 1):
-            next_state = self._forward(
-                states[:, [t]],
-                controls[:, [t]],
-                ctx_data,
-            )  # B x 1 x D
-
-            next_state = next_state.detach()
-            states[:, [t+1]] = next_state
-
-        pred_states = states
+        pred_states = self._forward(
+            states,
+            controls,
+            ctx_data,
+        )  # B x T x D
         pred_states = pred_states.reshape(b, n, horizon, d)
 
-        return pred_states
+        return pred_states[...,:15]
 

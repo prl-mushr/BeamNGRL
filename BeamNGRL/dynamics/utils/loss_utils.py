@@ -27,3 +27,17 @@ class NextStatePredMSE(Loss):
         next_state_targets = next_state_targets[:, 1:] # first entry is an input.
         mse = F.mse_loss(next_state_preds, next_state_targets)
         return mse
+
+class AggregatedMSE(Loss):
+
+    def loss(self, next_state_preds, next_state_targets):
+        pred = next_state_preds[...,6:15].clone()
+        targ = next_state_targets[...,6:15].clone()
+        next_state_preds *= 0
+        next_state_targets *= 0
+        next_state_preds[...,6:15] = pred
+        next_state_targets[...,6:15] = targ
+        next_state_preds = next_state_preds[:, :-1] # no label for last prediction
+        next_state_targets = next_state_targets[:, 1:] # first entry is an input.
+        mse = F.mse_loss(next_state_preds, next_state_targets)
+        return mse

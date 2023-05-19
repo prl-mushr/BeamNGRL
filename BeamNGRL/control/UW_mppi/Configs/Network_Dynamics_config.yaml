@@ -31,7 +31,7 @@ network:
 
   class: DeltaMLP2
   net_kwargs:
-    hidden_depth: 1
+    hidden_depth: 2
     hidden_dim: 256
     batch_norm: True
 

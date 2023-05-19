@@ -1,5 +1,5 @@
 dataset:
-  name: 'small_grid_mppi'
+  name: 'small_grid_sinu'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -8,12 +8,12 @@ dataset:
 network:
   state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
-#  use_normalizer: True
+  # use_normalizer: True
   use_normalizer: False
 
   class: ResidualMLP
   net_kwargs:
-    hidden_depth: 1
+    hidden_depth: 2
     hidden_dim: 256
     batch_norm: True
 
@@ -21,6 +21,4 @@ network:
   opt_kwargs:
     lr: 1.0e-3
 
-loss: NextStatePredMSE
-
-
+loss: AggregatedMSE
