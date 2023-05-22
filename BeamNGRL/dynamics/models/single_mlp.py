@@ -4,7 +4,7 @@ from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
-from .normalizers import FeatureNormalizer, StateNormalizer
+from .normalizers import FeatureNormalizer
 
 
 class BasicMLP(DynamicsBase):
@@ -101,7 +101,7 @@ class BasicMLP(DynamicsBase):
         return pred_states
 
     def process_targets(self, states: torch.Tensor):
-        state_feats = get_state_features(states, self.state_feat_list)
+        state_feats = get_state_features(states, self.state_output_feat_list)
         if self.normalizer:
             state_feats = self.normalizer.normalize_state(state_feats)
         return state_feats
