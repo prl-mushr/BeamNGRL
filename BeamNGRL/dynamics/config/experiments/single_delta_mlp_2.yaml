@@ -1,5 +1,4 @@
 dataset:
-#  name: 'small_grid_mppi'
   name: 'small_grid_mixed'
   augment: False
   state_input_key: 'future_states'
@@ -7,10 +6,11 @@ dataset:
   ctx_input_keys: []
 
 network:
-  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
+  state_input_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
+  state_output_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
-  use_normalizer: True
-#  use_normalizer: False
+#  use_normalizer: True
+  use_normalizer: False
 
   class: DeltaMLP2
   net_kwargs:

@@ -49,8 +49,17 @@ state_feat_map = {
     'wy':       (lambda arr: arr[..., [13]]),
     'wz':       (lambda arr: arr[..., [14]]),
 
-    'dvx_dt':       (lambda arr: arr[..., 1:, [6]] - arr[..., :-1, [6]]),
-    'dvy_dt':       (lambda arr: arr[..., 1:, [7]] - arr[..., :-1, [7]]),
+    'dvx':       (lambda arr: arr[..., 1:, [6]] - arr[..., :-1, [6]]),
+    'dvy':       (lambda arr: arr[..., 1:, [7]] - arr[..., :-1, [7]]),
+    'dvz':       (lambda arr: arr[..., 1:, [8]] - arr[..., :-1, [8]]),
+
+    'dax':       (lambda arr: arr[..., 1:,  [9]] - arr[..., :-1, [9]]),
+    'day':       (lambda arr: arr[..., 1:, [10]] - arr[..., :-1, [10]]),
+    'daz':       (lambda arr: arr[..., 1:, [11]] - arr[..., :-1, [11]]),
+
+    'dwx':       (lambda arr: arr[..., 1:, [12]] - arr[..., :-1, [12]]),
+    'dwy':       (lambda arr: arr[..., 1:, [13]] - arr[..., :-1, [13]]),
+    'dwz':       (lambda arr: arr[..., 1:, [14]] - arr[..., :-1, [14]]),
 
     'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
     'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
@@ -79,9 +88,9 @@ def get_state_features(
     state_feats = []
     for f in feat_list:
         feat = state_feat_map[f](states)
-        if f in ['dvx_dt', 'dvx_dt']:
-            feat = torch.cat((feat, feat[:, [-1], :]), dim=-1) # repeat last entry
-            feat = feat / dt
+        if f in ['dvx', 'dvy', 'dvz', 'dax', 'day', 'daz', 'dwx', 'dwy', 'dwz']:
+            feat = torch.cat((feat, feat[:, [-1], :]), dim=1) # repeat last entry
+            # feat = feat / dt
         state_feats.append(feat)
     return torch.cat(state_feats, dim=-1)
 
