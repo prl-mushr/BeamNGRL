@@ -15,7 +15,7 @@ from BeamNGRL import MPPI_CONFIG_PTH, DATA_PATH, ROOT_PATH
 import time
 from typing import List
 import gc
-
+from pathlib import Path
 
 def update_npy_datafile(buffer: List, filepath):
     buff_arr = np.array(buffer)
@@ -56,7 +56,12 @@ def collect_mppi_data(args):
         date_time = datetime.now().strftime("%m_%d_%Y")
         output_dir = f'{args.map_name}_{date_time}'
 
-    output_path = DATA_PATH / 'sinu_data' / output_dir
+    suffix = ""
+    if(args.onlysteer):
+        suffix += "_steer"
+    if(args.onlyspeed):
+        suffix += "_speed"
+    output_path = DATA_PATH / ('sinu_data'+suffix) / output_dir
     output_path.mkdir(parents=True, exist_ok=True)
 
     bng = get_beamng_default(
@@ -99,7 +104,8 @@ def collect_mppi_data(args):
                 start = ts
             T = ts - start
 
-            f = f_min + (f_max - f_min)*T/args.duration
+            ft = f_min + (f_max - f_min)*T/args.duration
+            fs = f_min + (f_max - f_min)*(np.abs(np.sin(10*T/args.duration)))
 
             # get robot_centric BEV (not rotated into robot frame)
             BEV_color = bng.BEV_color
@@ -118,8 +124,19 @@ def collect_mppi_data(args):
 
             # we use our previous control output as input for next cycle!
             state_to_ctrl[15:17] = action ## adhoc wheelspeed.
-            action[0] = np.sin(f*T*np.pi*3) ## change steering 50% faster than throttle so that you don't get PLL
-            action[1] = np.sin(f*T*np.pi*2)*0.25 + 0.25
+            if(not args.onlysteer and not args.onlyspeed):
+                action[0] = np.sin(fs*T*np.pi) ## change steering 50% faster than throttle so that you don't get PLL
+                action[1] = np.sin(ft*T*np.pi)*0.25 + 0.25
+                print(action[1])
+            elif args.onlyspeed and not args.onlysteer:
+                action[0] = 0
+                action[1] = np.sin(ft*T*np.pi)*0.25 + 0.25
+            elif args.onlysteer and not args.onlyspeed:
+                action[0] = np.sin(fs*T*np.pi) ## change steering 50% faster than throttle so that you don't get PLL
+                action[1] = 0.5
+            else:
+                action[0] = 0
+                action[1] = 0
 
             # Aggregate Data
             timestamps.append(ts)
@@ -176,6 +193,8 @@ if __name__ == "__main__":
     parser.add_argument('--duration', type=int, default=30)
     parser.add_argument('--save_every_n_sec', type=int, default=15)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--onlysteer', type=bool, default=False)
+    parser.add_argument('--onlyspeed', type=bool, default=False)
     args = parser.parse_args()
 
     collect_mppi_data(args)
