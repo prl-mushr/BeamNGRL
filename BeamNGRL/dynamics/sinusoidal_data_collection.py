@@ -93,6 +93,7 @@ def collect_mppi_data(args):
     f_min = 0.1
     f_max = 1.0
     scaler = 1/args.duration
+    print(args.duration)
 
     while running:
         try:
@@ -123,20 +124,20 @@ def collect_mppi_data(args):
             state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
 
             # we use our previous control output as input for next cycle!
-            state_to_ctrl[15:17] = action ## adhoc wheelspeed.
             if(not args.onlysteer and not args.onlyspeed):
                 action[0] = np.sin(fs*T*np.pi) ## change steering 50% faster than throttle so that you don't get PLL
                 action[1] = np.sin(ft*T*np.pi)*0.25 + 0.25
-                print(action[1])
             elif args.onlyspeed and not args.onlysteer:
                 action[0] = 0
                 action[1] = np.sin(ft*T*np.pi)*0.25 + 0.25
+                print(ft, action[1])
             elif args.onlysteer and not args.onlyspeed:
                 action[0] = np.sin(fs*T*np.pi) ## change steering 50% faster than throttle so that you don't get PLL
                 action[1] = 0.5
             else:
                 action[0] = 0
                 action[1] = 0
+            state_to_ctrl[15:17] = action ## adhoc wheelspeed.
 
             # Aggregate Data
             timestamps.append(ts)

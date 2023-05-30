@@ -22,20 +22,20 @@ class ResidualMLP(DynamicsBase):
 
         self.register_buffer('state_feat_idx', feat_idx_tn)
 
-        input_dim = self.state_dim + self.ctrl_dim
-        output_dim = self.state_dim
+        input_dim = 4 ## vx, vy, wz , st, th
+        output_dim = 3 ## dvx, dvy, dwz
 
         fc_layers = [
             nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(),
         ]
         for _ in range(hidden_depth):
             fc_layers += [nn.Linear(hidden_dim, hidden_dim)]
             if batch_norm:
                 fc_layers += [nn.BatchNorm1d(hidden_dim)]
-            fc_layers += [nn.ReLU()]
+            fc_layers += [nn.Tanh()]
         fc_layers += [nn.Linear(hidden_dim, output_dim)]
-        fc_layers += [nn.ReLU()]
+        fc_layers += [nn.Tanh()]
 
         self.main = nn.Sequential(*fc_layers)
 
@@ -45,16 +45,29 @@ class ResidualMLP(DynamicsBase):
             controls: torch.Tensor,
             ctx_data: Dict,
     ):
+        t = states.shape[-2]
+        states_next = states.clone().detach()
+        ctrls = controls.clone().detach()
+        mean_vel = torch.ones_like(states_next[0,0,6:8])
+        mean_vel[..., 0] *= 4.18
+        mean_vel[..., 1] *= 0.0
+        std_vel = torch.ones_like(mean_vel)
+        std_vel[..., 0] *= 1.26483479
+        std_vel[..., 1] *= 0.28369839
+        mean_ctrl = torch.ones_like(ctrls[0,0,:])
+        mean_ctrl[..., 0] *= 0.01391617 
+        mean_ctrl[..., 1] *= 0.16625684
+        std_ctrl = torch.ones_like(mean_ctrl)
+        std_ctrl[..., 0] *= 0.40226127
+        std_ctrl[..., 1] *= 0.58021804
 
-        _, h, _ = states.shape
-        if self.normalizer:
-            states[...,:15], controls = self.normalizer(states[...,:15], controls)
+        for i in range(t - 1):
+            vU = torch.cat(((states_next[...,i, 6:8] - mean_vel)/std_vel, (ctrls[..., i,:] - mean_ctrl)/std_ctrl ), dim=-1)
+            dV = self.main(vU)
+            states_next[..., i+1, 6] = states_next[..., i, 6] + dV[..., 0]*0.1
+            states_next[..., i+1, 7] = states_next[..., i, 7] + dV[..., 1]*0.02
+            states_next[..., i+1, 14] = dV[..., 2]
 
-        states_next = torch.zeros_like(states)
-        states_next[...,0,:] = states[...,0,:]
-        for i in range(h - 1):
-            vawU = torch.cat((states_next[..., i,6:15], controls[..., i,:]), dim=-1)
-            states_next[..., i+1, 6:15] = self.main(vawU) # vaw_next = f(v,a,w,U)
         return states_next
 
     def _rollout(
@@ -69,18 +82,11 @@ class ResidualMLP(DynamicsBase):
         which internall calls a "forward" method, that internall calls the "main" on a sequential NN.
         The inception is strong with this one.
         '''
-        b, n, horizon, d = states.shape
-        _, _, _,       d_c = controls.shape
-
-        states = states.view(-1, horizon, d)
-        controls = controls.view(-1, horizon, d_c)
-
-        pred_states = self._forward(
-            states,
-            controls,
-            ctx_data,
-        )  # B x T x D
-        pred_states = pred_states.reshape(b, n, horizon, d)
-
-        return pred_states[...,:15]
+        # for t in range(horizon - 1):
+        states = self._forward(
+                                states[0,...],
+                                controls[0,...],
+                                ctx_data,
+                            )  # B x 1 x D
+        return states.unsqueeze(0)
 
