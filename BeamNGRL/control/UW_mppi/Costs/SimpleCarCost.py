@@ -81,8 +81,8 @@ class SimpleCarCost(torch.nn.Module):
         state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
         vel_cost = torch.square((self.speed_target - vx)/self.speed_target)
 
-        roll_cost = torch.clamp(torch.square((ay/az) / self.critical_RI ) - 1, 0, 1)
-        
+        roll_cost = torch.clamp(torch.square((ay/az) / self.critical_RI ) - 1, 0, 1) + torch.abs(vy/vx)
+
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 
         running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )
