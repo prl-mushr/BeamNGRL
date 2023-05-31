@@ -8,4 +8,4 @@
 # sleep 60
 # python ../process_data.py --cfg small_grid_sinu --output_dir small_grid_sinu --save_vis False
 
-python ../train.py --config single_delta_mlp_2.yaml --output small_grid --n_epochs 300
+# python ../train.py --config single_delta_mlp_2.yaml --output small_grid --n_epochs 300
