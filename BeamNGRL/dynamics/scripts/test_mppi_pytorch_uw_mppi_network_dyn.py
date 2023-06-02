@@ -36,7 +36,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
     # model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
-    model_weights_path = LOGS_PATH / 'small_grid_offroad' / 'best_49.pth'
+    model_weights_path = LOGS_PATH / 'small_grid' / 'best_46.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
 
     print(model_weights_path)

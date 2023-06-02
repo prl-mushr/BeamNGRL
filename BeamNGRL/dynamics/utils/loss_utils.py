@@ -36,5 +36,6 @@ class AggregatedMSE(Loss):
         vel_loss = F.mse_loss(next_state_preds[..., 6:8], next_state_targets[..., 6:8])
         acc_loss = F.mse_loss(next_state_preds[..., 9:11], next_state_targets[..., 9:11])
         yaw_loss = F.mse_loss(next_state_preds[..., 14], next_state_targets[..., 14])
-        mse = vel_loss + yaw_loss + acc_loss
+        rpy_loss = F.mse_loss(next_state_preds[..., 3:5], next_state_targets[..., 3:5])
+        mse = vel_loss + yaw_loss + acc_loss + rpy_loss
         return mse

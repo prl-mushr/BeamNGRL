@@ -4,6 +4,15 @@ from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
+import math
+
+class linear(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+
+    def forward(self, x):
+        return x
 
 class ResidualMLP(DynamicsBase):
 
