@@ -25,6 +25,17 @@ network:
    batch_norm: True
 
 # network:
+#  state_feat: ['vx', 'vy', 'vz']
+#  control_feat: ['steer', 'throttle']
+#  use_normalizer: False
+
+#  class: ContextMLP
+#  net_kwargs:
+#    hidden_depth: 2
+#    hidden_dim: 32
+#    batch_norm: True
+
+# network:
 #   state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
 #   control_feat: ['steer', 'throttle']
 #   use_normalizer: True

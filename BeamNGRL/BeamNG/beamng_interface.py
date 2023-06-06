@@ -152,6 +152,8 @@ class beamng_interface():
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
+        self.elev_map_hgt = 2.0
+        self.burn_time = 0.02
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -194,9 +196,9 @@ class beamng_interface():
         self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-        # time.sleep(2)
+        time.sleep(2)
         self.attach_accelerometer()
-        # time.sleep(2)
+        time.sleep(2)
         # self.attach_camera(name='camera')
         # time.sleep(2)
         # self.attach_lidar(name='lidar')
@@ -286,7 +288,7 @@ class beamng_interface():
         self.BEV_center[:2] = self.pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
         self.BEV_heght -= self.BEV_center[2]
-        self.BEV_heght = np.clip(self.BEV_heght, -2.0, 2.0)
+        self.BEV_heght = np.clip(self.BEV_heght, -self.elev_map_hgt, self.elev_map_hgt)
 
         self.BEV_normal = self.compute_surface_normals()
 
@@ -434,11 +436,11 @@ class beamng_interface():
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
                 self.timestamp = self.vehicle.sensors['timer']['time']
                 print("beautiful day, __init__?")
-                time.sleep(0.02)
+                time.sleep(1)
             else:
                 if(self.lockstep):
                     self.bng.resume()
-                    time.sleep(0.02) ## 50Hz
+                    time.sleep(self.burn_time) ## 50Hz
                     self.bng.pause()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)                

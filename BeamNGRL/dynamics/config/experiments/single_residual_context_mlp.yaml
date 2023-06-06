@@ -1,0 +1,24 @@
+dataset:
+  name: 'small_grid_sinu'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['bev_elev']
+
+network:
+  state_feat: ['vx', 'vy', 'vz']
+  control_feat: ['steer', 'throttle']
+  # use_normalizer: True
+  use_normalizer: False
+
+  class: ContextMLP
+  net_kwargs:
+    hidden_depth: 2
+    hidden_dim: 32
+    batch_norm: True
+
+  opt: Adam
+  opt_kwargs:
+    lr: 1.0e-3
+
+loss: AggregatedMSE

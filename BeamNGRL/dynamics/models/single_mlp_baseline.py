@@ -37,21 +37,12 @@ class ContextMLP(DynamicsBase):
         fc_layers += [nn.Tanh()]
 
         self.main = nn.Sequential(*fc_layers)
-        self.dtype = torch.float
-        self.d = torch.device('cuda')
-        self.BEVmap_size = torch.tensor(32, dtype=self.dtype, device=self.d)
-        self.BEVmap_res = torch.tensor(0.25, dtype=self.dtype, device=self.d)
-
-        self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
-        self.delta = torch.tensor(3/self.BEVmap_res, device=self.d, dtype=torch.long)
-
 
     def _forward(
             self,
             states: torch.Tensor, # b, L, d
             controls: torch.Tensor,
             ctx_data: Dict,
-            evaluation=False
     ):
         n = states.shape[-1]
         n_c = controls.shape[-1]
@@ -61,31 +52,6 @@ class ContextMLP(DynamicsBase):
         states_next = states.clone().detach()
         ctrls = controls.clone().detach()
         
-        '''
-        context data contains BEV hght map --
-        so let me get this straight,
-        you're getting k x t samples
-        for each "k" you have t samples
-        for each "t" sample you need to crop-rotate the image (prep)
-        then each image is passed into the network as context.
-        '''
-        if not evaluation:
-            bev = ctx_data['bev_elev']
-            bev_k = torch.zeros((k, t, bev.shape[0], bev.shape[0]))
-            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
-            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
-            y_min = c_Y - self.delta
-            y_max = c_Y + self.delta
-            x_min = c_X - self.delta
-            x_max = c_X + self.delta
-            print(x_min, x_max, y_min, y_max)
-            for i in range(k):
-                for j in range(t):
-                    bev_new = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
-
-            # print(bev_k.shape)
-
-
         mean_state = torch.ones_like(states_next[0,0,6:11])
         mean_state[..., 0] *= 4.18
         mean_state[..., 1] *= 0.0
