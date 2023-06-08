@@ -123,9 +123,9 @@ def collect_mppi_data(args):
         segmt_data = []
         path_data = []
         normal_data = []
-        fatality_data = []
-        fatality_counter = 0
-        fatality_limit = 100
+        reset_data = []
+        reset_counter = 0
+        reset_limit = 100
 
         start = None
         running = True
@@ -207,12 +207,12 @@ def collect_mppi_data(args):
                         if part['damage'] > 0.8:
                             count += 1
                     damage = count > 1
-                Fatality = False
+                reset = False
                 if(damage or bng.flipped_over):
-                    fatality_counter += 1
-                    if fatality_counter >= fatality_limit:
-                        Fatality = True
-                        fatality_counter = 0
+                    reset_counter += 1
+                    if reset_counter >= reset_limit:
+                        reset = True
+                        reset_counter = 0
                         bng.reset()
                         target_WP = target_WP[::-1, ...]
                         current_wp_index = 0
@@ -222,12 +222,12 @@ def collect_mppi_data(args):
                 # Aggregate Data
                 timestamps.append(ts)
                 state_data.append(state)
-                color_data.append(BEV_color)
-                elev_data.append(BEV_height)
-                segmt_data.append(BEV_segmt)
-                path_data.append(BEV_path)
-                normal_data.append(BEV_normal)
-                fatality_data.append(Fatality)
+                # color_data.append(BEV_color)
+                # elev_data.append(BEV_height)
+                # segmt_data.append(BEV_segmt)
+                # path_data.append(BEV_path)
+                # normal_data.append(BEV_normal)
+                reset_data.append(reset)
 
                 if ts >= save_prompt_time or \
                     ts - start > args.duration:
@@ -236,12 +236,12 @@ def collect_mppi_data(args):
                     print(f"time: {ts}")
                     timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
                     state_data = update_npy_datafile(state_data, output_path / "state.npy")
-                    path_data = update_npy_datafile(path_data, output_path / "bev_path.npy")
-                    color_data = update_npy_datafile(color_data, output_path / "bev_color.npy")
-                    segmt_data = update_npy_datafile(segmt_data, output_path / "bev_segmt.npy")
-                    elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
-                    normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
-                    fatality_data = update_npy_datafile(fatality_data, output_path / "fatality.npy")
+                    # path_data = update_npy_datafile(path_data, output_path / "bev_path.npy")
+                    # color_data = update_npy_datafile(color_data, output_path / "bev_color.npy")
+                    # segmt_data = update_npy_datafile(segmt_data, output_path / "bev_segmt.npy")
+                    # elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
+                    # normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
+                    reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
 
                     gc.collect()
                     save_prompt_time += float(args.save_every_n_sec)
