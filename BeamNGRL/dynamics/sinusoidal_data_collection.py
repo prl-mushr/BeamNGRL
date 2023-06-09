@@ -70,7 +70,8 @@ def collect_mppi_data(args):
         start_quat=np.array(args.start_quat),
         map_name=args.map_name,
         car_make='sunburst',
-        map_res=Map_config["map_size"]//2, ## make the map useless
+        # map_res=Map_config["map_size"]//2, ## make the map useless
+        map_res=Map_config["map_res"],
         map_size=Map_config["map_size"]
     )
 
@@ -114,11 +115,6 @@ def collect_mppi_data(args):
             BEV_segmt = bng.BEV_segmt
             BEV_path  = bng.BEV_path  # trail/roads
             BEV_normal  = bng.BEV_normal  # trail/roads
-
-            ## get robot_centric BEV (not rotated into robot frame)
-            BEV_height_tn = torch.from_numpy(BEV_height).to(device=device, dtype=dtype)
-            BEV_normal_tn = torch.from_numpy(BEV_normal).to(device=device, dtype=dtype)
-            BEV_path_tn = torch.from_numpy(bng.BEV_path).to(device=device, dtype=dtype)/255
 
             state_to_ctrl = state.copy()
             state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center

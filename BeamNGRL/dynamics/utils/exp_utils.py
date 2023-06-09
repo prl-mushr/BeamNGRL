@@ -36,7 +36,9 @@ def build_nets(config, tn_args, model_weight_file=None, data_stats=None):
     net_class = getattr(models, spec['class'])
     net_args = spec.get('net_kwargs', {})
     net = net_class(
-        state_feat=spec['state_feat'],
+        # state_feat=spec['state_feat'],
+        state_input_feat=spec['state_input_feat'],
+        state_output_feat=spec['state_output_feat'],
         ctrl_feat=spec['control_feat'],
         use_normalizer=spec['use_normalizer'],
         input_stats=data_stats,

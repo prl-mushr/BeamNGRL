@@ -7,7 +7,7 @@ from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_f
 from .normalizers import FeatureNormalizer
 
 
-class DeltaMLP2(DynamicsBase):
+class DeltaMLP3(DynamicsBase):
 
     def __init__(
             self,
@@ -68,11 +68,25 @@ class DeltaMLP2(DynamicsBase):
 
         x_out = self.main(x)
 
-        delta_state_feat = x_out.reshape(b, h, self.state_output_dim)
+        x_out = x_out.reshape(b, h, self.state_output_dim)
 
-        state_feats_next = state_feats.clone().detach()
+        state_feats_next = x_out
 
-        state_feats_next += delta_state_feat
+        # dvx, dvy, dvz, dax, day, daz, dwx, dwy, dwz = x_out.split(1, dim=-1)
+        #
+        # state_feats_next = state_feats.clone().detach()
+        #
+        # state_feats_next[..., [0]] = state_feats[..., [0]] + dvx
+        # state_feats_next[..., [1]] = state_feats[..., [1]] + dvy
+        # state_feats_next[..., [2]] = state_feats[..., [2]] + dvz
+        #
+        # state_feats_next[..., [3]] = state_feats[..., [3]] + dax
+        # state_feats_next[..., [4]] = state_feats[..., [4]] + day
+        # state_feats_next[..., [5]] = state_feats[..., [5]] + daz
+        #
+        # state_feats_next[..., [6]] = state_feats[..., [6]] + dwx
+        # state_feats_next[..., [7]] = state_feats[..., [7]] + dwy
+        # state_feats_next[..., [8]] = state_feats[..., [8]] + dwz
 
         return state_feats_next
 
@@ -99,13 +113,13 @@ class DeltaMLP2(DynamicsBase):
             )  # B x 1 x D
 
             # Unnormalize
-            next_state_feat = self.process_output(next_state_feat)
+            delta_state_feat = self.process_output(next_state_feat)
 
-            v_t = next_state_feat[..., :3]
-            w_t = next_state_feat[..., 3:6]
-
-            states[:, [t+1], 6:9] = v_t
-            states[:, [t+1], 12:15] = w_t
+            # states[:, [t+1], 6:15] = states[:, [t], 6:15] + delta_state_feat
+            v_t = delta_state_feat[..., :3]
+            w_t = delta_state_feat[..., 3:6]
+            states[:, [t+1], 6:9] = states[:, [t], 6:9] + v_t
+            states[:, [t+1], 12:15] = states[:, [t], 12:15] + w_t
 
         pred_states = states
         pred_states = pred_states.reshape(b, n, horizon, d)

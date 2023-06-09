@@ -1,5 +1,5 @@
 dataset:
-  name: 'small_grid_sinu'
+  name: 'small_grid_mixed'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -7,14 +7,14 @@ dataset:
 
 network:
   state_input_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
-  state_output_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
+  state_output_feat: ['dvx', 'dvy', 'dvz', 'dwx', 'dwy', 'dwz']
   control_feat: ['steer', 'throttle']
 #  use_normalizer: True
   use_normalizer: False
 
-  class: DeltaMLP2
+  class: DeltaMLP3
   net_kwargs:
-    hidden_depth: 1
+    hidden_depth: 2
     hidden_dim: 128
     batch_norm: False
 
@@ -22,6 +22,6 @@ network:
   opt_kwargs:
     lr: 1.0e-4
 
-loss: NextStatePredMSE
+loss: StatePredMSE
 
 

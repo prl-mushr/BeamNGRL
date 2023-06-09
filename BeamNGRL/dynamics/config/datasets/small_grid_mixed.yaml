@@ -1,4 +1,4 @@
-raw_data_dir: 'sinu_data/'
+raw_data_dir: 'mixed_data/'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
@@ -6,12 +6,13 @@ skip_frames: 5
 
 split:
   train:
-    - 'train_smallgrid'
+    - 'train_smallgrid_mppi'
+    - 'train_smallgrid_sinu'
   valid:
-    - 'valid_smallgrid'
+    - 'valid_smallgrid_mppi'
+    - 'valid_smallgrid_sinu'
 
 map:
   width: 32 # in meters
   height: 32
   resolution: 0.25
-#  resolution: 16 ## make the map useless. Save one pixel.
