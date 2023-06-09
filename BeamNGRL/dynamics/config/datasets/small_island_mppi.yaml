@@ -1,0 +1,17 @@
+raw_data_dir: 'mppi_data/'
+# Total traj len = future + past + 1 (current)
+future_traj_len: 50
+past_traj_len: 50
+skip_frames: 5
+
+split:
+  train:
+    - 'train_small_island'
+  valid:
+    - 'valid_small_island'
+
+map:
+  width: 64 # in meters
+  height: 64
+  resolution: 0.25
+  elevation_range: 4.0

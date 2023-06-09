@@ -130,7 +130,7 @@ def get_beamng_nobeam(
 
 
 class beamng_interface():
-    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None):
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None, shell_mode=False):
         self.lockstep   = False
         self.lidar_list = []
         self.camera_list = []
@@ -152,6 +152,8 @@ class beamng_interface():
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
+        self.elev_map_hgt = 2.0
+        self.burn_time = 0.02
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -161,7 +163,7 @@ class beamng_interface():
             else:
                 self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
                 self.bng.open()
-        else:
+        elif not shell_mode:
             self.dyn = dyn
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
@@ -194,9 +196,9 @@ class beamng_interface():
         self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-        # time.sleep(2)
+        time.sleep(2)
         self.attach_accelerometer()
-        # time.sleep(2)
+        time.sleep(2)
         # self.attach_camera(name='camera')
         # time.sleep(2)
         # self.attach_lidar(name='lidar')
@@ -205,7 +207,7 @@ class beamng_interface():
         self.flipped_over = False
 
 
-    def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps='', rotate=False):
+    def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0):
         self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
         self.color_map_full = cv2.imread(path_to_maps + '/map_data/color_map.png')
         self.segmt_map_full = cv2.imread(path_to_maps + '/map_data/segmt_map.png')
@@ -216,6 +218,7 @@ class beamng_interface():
         self.resolution_inv = 1/self.resolution  # pixels per meter
         self.map_size       = map_size/2  # 16 x 16 m grid around the car by default
         self.rotate = rotate
+        self.elev_map_hgt = elevation_range
 
         if(self.image_resolution != self.resolution):
             scale_factor = self.image_resolution/self.resolution
@@ -291,8 +294,8 @@ class beamng_interface():
         self.BEV_center[:2] = self.pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
         self.BEV_heght -= self.BEV_center[2]
-        self.BEV_heght = np.clip(self.BEV_heght, -2.0, 2.0)
-
+        self.BEV_heght = np.clip(self.BEV_heght, -self.elev_map_hgt, self.elev_map_hgt)
+        self.BEV_heght = np.nan_to_num(self.BEV_heght, copy=False, nan=0.0, posinf=self.elev_map_hgt, neginf=-self.elev_map_hgt)
         self.BEV_normal = self.compute_surface_normals()
 
 
@@ -439,11 +442,11 @@ class beamng_interface():
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
                 self.timestamp = self.vehicle.sensors['timer']['time']
                 print("beautiful day, __init__?")
-                time.sleep(0.02)
+                time.sleep(1)
             else:
                 if(self.lockstep):
                     self.bng.resume()
-                    time.sleep(0.02) ## 50Hz
+                    time.sleep(self.burn_time) ## 50Hz
                     self.bng.pause()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)                

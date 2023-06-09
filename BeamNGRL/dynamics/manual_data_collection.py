@@ -19,6 +19,8 @@ def collect_data(args):
         map_name=args.map_name,
         start_pos=np.array(args.start_pos),
         start_quat=np.array(args.start_quat),
+        car_make='sunburst',
+        car_model='drift'
     )
 
     bng.set_lockstep(True)
@@ -40,7 +42,8 @@ def collect_data(args):
             # state information follows ROS REP103 standards (so basically ROS standards): world refernce frame for (x,y,z) is east-north-up(ENU). Body frame ref is front-left-up(FLU)
             state = bng.state
             ts = bng.timestamp
-
+            state[16] = bng.avg_wheelspeed/20.0
+            print(state[-2:])
             if not start:
                 start = ts
 
@@ -80,10 +83,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--output_dir', type=str, default=None, help='location to store test results')
-    parser.add_argument('--start_pos', type=float, default=[-67, 336, 34.5], nargs=3, help='Starting position of the vehicle for tripped_flat on grimap_v2')
+    parser.add_argument('--start_pos', type=float, default=[-67, 336, 0.5], nargs=3, help='Starting position of the vehicle for tripped_flat on grimap_v2')
     parser.add_argument('--start_quat', type=float, default=[0, 0, 0.3826834, 0.9238795], nargs=4, help='Starting rotation (quat) of the vehicle.')
-    parser.add_argument('--map_name', type=str, default='small_island', help='Map name.')
-    parser.add_argument('--duration', type=int, default=10)
+    parser.add_argument('--map_name', type=str, default='smallgrid', help='Map name.')
+    parser.add_argument('--duration', type=int, default=300)
     args = parser.parse_args()
 
     collect_data(args)

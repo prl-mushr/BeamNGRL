@@ -3,7 +3,7 @@ dataset:
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
-  ctx_input_keys: []
+  ctx_input_keys: ['bev_elev']
 
 network:
   state_feat: ['vx', 'vy', 'vz']
@@ -11,7 +11,7 @@ network:
   # use_normalizer: True
   use_normalizer: False
 
-  class: ResidualMLP
+  class: ContextMLP
   net_kwargs:
     hidden_depth: 2
     hidden_dim: 32

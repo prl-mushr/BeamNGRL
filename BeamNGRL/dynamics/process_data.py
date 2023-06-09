@@ -9,7 +9,11 @@ from utils.dataset_utils import *
 from utils.vis_utils import *
 from BeamNGRL import *
 from collections import defaultdict
+from BeamNGRL.BeamNG.beamng_interface import *
+import os
 
+BNG_HOME = os.environ.get('BNG_HOME')
+bng = beamng_interface(BeamNG_path=BNG_HOME, use_beamng=False, shell_mode=True)
 
 def calc_data_stats(dataset_path):
 
@@ -48,6 +52,7 @@ def calc_data_stats(dataset_path):
             bev_map = np.load(fn)
             bev_stats[f'mean:bev_{type}'].append(bev_map.mean())
             bev_stats[f'std:bev_{type}'].append(bev_map.std())
+            # print(f'{type}', bev_map.mean(), bev_map.std())
 
     [get_bev_stats(t) for t in ['color', 'elev', 'normal']]
 
@@ -129,8 +134,14 @@ def generate_dataset(args):
     skip_frames = cfg['skip_frames']
     map_size = cfg['map']['width']
     map_res = cfg['map']['resolution']
+    try:
+        map_elev_range = cfg['map']['elevation_range'] ## defaults to 2.0
+    except:
+        map_elev_range = 2.0
 
     grid_size = int(map_size // map_res)
+
+    bng.set_map_attributes(map_size=map_size, resolution=map_res, elevation_range=map_elev_range) ## technically should also take map name but we only have 1 map.
 
     output_path = DATASETS_PATH / args.output_dir
     output_path.mkdir(parents=True, exist_ok=True)
@@ -171,9 +182,10 @@ def generate_dataset(args):
             timestamps = load_timestamps('timestamps.npy', sequence_path)
             states_seq = get_state_trajectory('state.npy', sequence_path, timestamps)
             controls_seq = get_controls('state.npy', sequence_path)
-            bev_color_seq = load_bev_map('bev_color.npy', sequence_path)
-            bev_elev_seq = load_bev_map('bev_elev.npy', sequence_path)
-            bev_normal_seq = load_bev_map('bev_normal.npy', sequence_path)
+            # bev_color_seq = load_bev_map('bev_color.npy', sequence_path)
+            # bev_elev_seq = load_bev_map('bev_elev.npy', sequence_path)
+            # bev_normal_seq = load_bev_map('bev_normal.npy', sequence_path)
+            reset_seq = load_reset_data('reset.npy', sequence_path)
 
             # Define data elements for processing
             job_args = []
@@ -185,9 +197,17 @@ def generate_dataset(args):
                 if data_idxs[0] < 0 or data_idxs[-1] >= num_frames:
                     # Skip frame if idxs are out of range
                     continue
-
                 # Base w.r.t world coord.
                 base_frame = states_seq[keyframe_idx, :6]
+
+                ## generate the BEV_maps in-situ
+                bng.pos = base_frame[:3] ## set bng pos
+                bng.gen_BEVmap()
+                bev_color = bng.BEV_color
+                bev_segmt = bng.BEV_segmt
+                bev_elev = bng.BEV_heght
+                bev_normal = bng.BEV_normal
+
                 traj_ts = timestamps[data_idxs]
                 traj_controls = controls_seq[data_idxs]
 
@@ -213,11 +233,17 @@ def generate_dataset(args):
                     'traj_ts': traj_ts,
                     'traj_states': traj_states,
                     'traj_controls': traj_controls,
-                    'bev_color': bev_color_seq[keyframe_idx],
-                    'bev_elev': bev_elev_seq[keyframe_idx],
-                    'bev_normal': bev_normal_seq[keyframe_idx],
+                    'bev_color': bev_color,
+                    'bev_elev': bev_elev,
+                    'bev_normal': bev_normal,
                 })
                 frame_idx += 1
+
+                ## we check for reset between end of current episode and future_traj_len + skip frames to make sure the "next" frame does not have a reset flag
+                reset_range = reset_seq[data_idxs[-1]: data_idxs[-1] + future_traj_len + skip_frames]
+                if reset_range.any():
+                    i = data_idxs[-1] + np.where(reset_range)[0].item() + past_traj_len + future_traj_len + skip_frames
+
 
             # Chunk jobs
             job_chunk_size = args.job_chunk_size

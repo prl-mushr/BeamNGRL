@@ -13,15 +13,27 @@ dt: 0.02
 #     hidden_dim: 256
 #     batch_norm: False
 
-#network:
-#  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
+network:
+ state_input_feat: ['vx', 'vy', 'vz']
+ state_output_feat: ['vx', 'vy', 'vz']
+ control_feat: ['steer', 'throttle']
+ use_normalizer: False
+
+ class: ResidualMLP
+ net_kwargs:
+   hidden_depth: 2
+   hidden_dim: 32
+   batch_norm: True
+
+# network:
+#  state_feat: ['vx', 'vy', 'vz']
 #  control_feat: ['steer', 'throttle']
 #  use_normalizer: False
-#
-#  class: ResidualMLP
+
+#  class: ContextMLP
 #  net_kwargs:
-#    hidden_depth: 1
-#    hidden_dim: 256
+#    hidden_depth: 2
+#    hidden_dim: 32
 #    batch_norm: True
 
 #network:
@@ -49,18 +61,18 @@ dt: 0.02
 #    hidden_dim: 128
 #    batch_norm: False
 
-network:
-  state_input_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
-  state_output_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
-  control_feat: ['steer', 'throttle']
-#  use_normalizer: True
-  use_normalizer: False
+#network:
+#  state_input_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
+#  state_output_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
+#  control_feat: ['steer', 'throttle']
+#  use_normalizer: False
+#
+#  class: DeltaMLP2
+#  net_kwargs:
+#    hidden_depth: 1
+#    hidden_dim: 128
+#    batch_norm: False
 
-  class: DeltaMLP2
-  net_kwargs:
-    hidden_depth: 1
-    hidden_dim: 128
-    batch_norm: False
 
 #network:
 #  state_feat: ['vx', 'vy', 'vz', 'ax', 'ay', 'az', 'wx', 'wy', 'wz']
