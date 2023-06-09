@@ -1,4 +1,5 @@
-goal_w: 0.01 ## weight on the terminal goal cost
+goal_w: 0.5 ## weight on the terminal goal cost
+#goal_w: 0.01 ## weight on the terminal goal cost
 speed_w: 1.0 ## weight with which target speed will be tracked
 roll_w: 1.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
 lethal_w: 5 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh

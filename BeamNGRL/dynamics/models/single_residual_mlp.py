@@ -17,10 +17,6 @@ class ResidualMLP(DynamicsBase):
 
         super().__init__(**kwargs)
 
-        feat_idx_tn = get_feat_index_tn(self.state_feat_list)
-
-        self.register_buffer('state_feat_idx', feat_idx_tn)
-
         input_dim = 7 ## vx, vy, wz, roll, pitch, st, th
         output_dim = 7 ## dvx, dvy, ax, ay, dr, dp, dwz
 

@@ -1,12 +1,14 @@
 dataset:
-  name: 'small_grid_sinu'
+#  name: 'small_grid_sinu'
+  name: 'small_grid_sinu_only'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
   ctx_input_keys: []
 
 network:
-  state_feat: ['vx', 'vy', 'vz']
+  state_input_feat: ['vx', 'vy', 'vz']
+  state_output_feat: ['vx', 'vy', 'vz']
   control_feat: ['steer', 'throttle']
   # use_normalizer: True
   use_normalizer: False

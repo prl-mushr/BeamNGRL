@@ -5,6 +5,7 @@ from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 
+
 class ContextMLP(DynamicsBase):
 
     def __init__(
@@ -45,7 +46,6 @@ class ContextMLP(DynamicsBase):
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.delta = torch.tensor(3/self.BEVmap_res, device=self.d, dtype=torch.long)
 
-
     def _forward(
             self,
             states: torch.Tensor, # b, L, d
@@ -82,9 +82,7 @@ class ContextMLP(DynamicsBase):
             for i in range(k):
                 for j in range(t):
                     bev_new = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
-
             # print(bev_k.shape)
-
 
         mean_state = torch.ones_like(states_next[0,0,6:11])
         mean_state[..., 0] *= 4.18

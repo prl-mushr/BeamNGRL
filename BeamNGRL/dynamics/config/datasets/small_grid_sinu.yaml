@@ -1,4 +1,5 @@
-raw_data_dir: 'sinu_data/'
+#raw_data_dir: 'sinu_data/'
+raw_data_dir: 'sinu_data_sid/'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
@@ -6,9 +7,13 @@ skip_frames: 5
 
 split:
   train:
-    - 'train_smallgrid'
+    - 'sinu_data/train_smallgrid'
+#    - 'sinu_data_speed/train_smallgrid'
+#    - 'sinu_data_steer/train_smallgrid'
   valid:
-    - 'valid_smallgrid'
+#    - 'sinu_data/valid_smallgrid'
+#    - 'sinu_data_speed/valid_smallgrid'
+    - 'sinu_data_steer/valid_smallgrid'
 
 map:
   width: 32 # in meters
