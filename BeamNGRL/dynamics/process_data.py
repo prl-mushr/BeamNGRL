@@ -244,7 +244,6 @@ def generate_dataset(args):
                 if reset_range.any():
                     i = data_idxs[-1] + np.where(reset_range)[0].item() + past_traj_len + future_traj_len + skip_frames
 
-
             # Chunk jobs
             job_chunk_size = args.job_chunk_size
             if len(job_args) > job_chunk_size:
