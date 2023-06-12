@@ -21,7 +21,7 @@ class ContextMLP(DynamicsBase):
 
         self.register_buffer('state_feat_idx', feat_idx_tn)
 
-        input_dim = 7 ## vx, vy, wz, roll, pitch, st, th
+        input_dim = 8 + 30 ## vx, vy, wz, roll, pitch, st, th
         output_dim = 7 ## dvx, dvy, ax, ay, dr, dp, dwz
 
         fc_layers = [
@@ -37,6 +37,7 @@ class ContextMLP(DynamicsBase):
         fc_layers += [nn.Tanh()]
 
         self.main = nn.Sequential(*fc_layers)
+
         self.dtype = torch.float
         self.d = torch.device('cuda')
         self.BEVmap_size = torch.tensor(32, dtype=self.dtype, device=self.d)
@@ -45,6 +46,19 @@ class ContextMLP(DynamicsBase):
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.delta = torch.tensor(3/self.BEVmap_res, device=self.d, dtype=torch.long)
 
+        conv1 = nn.Conv2d(1, 4, kernel_size=4, stride=1)
+        maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
+        conv2 = nn.Conv2d(4, 4, kernel_size=4, stride=2)
+        fc1 = nn.Linear(64, 48)
+        fc2 = nn.Linear(48, 30)
+
+        cnn_layers = [ conv1, nn.ReLU() ]
+        cnn_layers += [maxpool]
+        cnn_layers += [conv2, nn.ReLU() ]
+        cnn_layers += [nn.Flatten()]
+        cnn_layers += [ fc1, nn.ReLU() ]
+        cnn_layers += [ fc2 ]
+        self.CNN = nn.Sequential(*cnn_layers)
 
     def _forward(
             self,
@@ -63,41 +77,36 @@ class ContextMLP(DynamicsBase):
         
         '''
         context data contains BEV hght map --
-        so let me get this straight,
-        you're getting k x t samples
-        for each "k" you have t samples
-        for each "t" sample you need to crop-rotate the image (prep)
-        then each image is passed into the network as context.
+        I get k bevs of shape k x 1 x bevshape x bevshape
+        we don't rotate the image, but we do provide the yaw angle of the vehicle I assume relative to the start?
         '''
+        bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
         if not evaluation:
             bev = ctx_data['bev_elev']
-            bev_k = torch.zeros((k, t, bev.shape[0], bev.shape[0]))
-            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
-            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
+            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
+            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             y_min = c_Y - self.delta
             y_max = c_Y + self.delta
             x_min = c_X - self.delta
             x_max = c_X + self.delta
-            print(x_min, x_max, y_min, y_max)
             for i in range(k):
-                for j in range(t):
-                    bev_new = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
+                for j in range(t):                    
+                    bev_input[i, j, :, :] = ( bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]] - 0.53 ) / 1.43 ## subtract mean, normalize.
 
-            # print(bev_k.shape)
-
-
-        mean_state = torch.ones_like(states_next[0,0,6:11])
+        mean_state = torch.ones_like(states_next[0,0,6:12])
         mean_state[..., 0] *= 4.18
         mean_state[..., 1] *= 0.0
         mean_state[..., 2] *= 0.0
         mean_state[..., 3] *= 0.0 ## roll
         mean_state[..., 4] *= 0.0 ## pitch
+        mean_state[..., 5] *= 0.0 ## yaw
         std_state = torch.ones_like(mean_state)
         std_state[..., 0] *= 1.26483479
         std_state[..., 1] *= 0.28369839
         std_state[..., 2] *= 0.25
         std_state[..., 3] *= 0.08
         std_state[..., 4] *= 0.08
+        std_state[..., 5] *= 1.57 ## pi/2; we don't expect more than pi/2 rotation in 1 second since no turn taken by the car exceeds this value
 
         mean_ctrl = torch.ones_like(ctrls[0,0,:])
         mean_ctrl[..., 0] *= 0.01391617 
@@ -108,20 +117,26 @@ class ContextMLP(DynamicsBase):
 
         states_next = states_next.reshape((k*t, n))
         ctrls = ctrls.reshape((k*t, n_c))
+        bev_input = bev_input.reshape((k*t, self.delta*2, self.delta*2))
 
-        vx = (states_next[..., 6] - mean_state[..., 0])/std_state[..., 0]
-        vy = (states_next[..., 7] - mean_state[..., 1])/std_state[..., 1]
-        wz = (states_next[..., 14] - mean_state[..., 2])/std_state[..., 2]
-        wz = (states_next[..., 14] - mean_state[..., 2])/std_state[..., 2]
+        vU = torch.zeros((k*t, 8), dtype=self.dtype, device=self.d)
+
+        vU[..., 0] = (states_next[..., 6] - mean_state[..., 0])/std_state[..., 0]
+        vU[..., 1] = (states_next[..., 7] - mean_state[..., 1])/std_state[..., 1]
+        vU[..., 2] = (states_next[..., 14] - mean_state[..., 2])/std_state[..., 2]
         
-        rl = (states_next[..., 3] - mean_state[..., 3])/std_state[..., 3]
-        pt = (states_next[..., 4] - mean_state[..., 4])/std_state[..., 4]
+        vU[..., 3] = (states_next[..., 3] - mean_state[..., 3])/std_state[..., 3]
+        vU[..., 4] = (states_next[..., 4] - mean_state[..., 4])/std_state[..., 4]
+        vU[..., 5] = (states_next[..., 5] - mean_state[..., 5])/std_state[..., 5]
 
-        st = (ctrls[..., 0] - mean_ctrl[..., 0])/std_ctrl[..., 0]
-        th = (ctrls[..., 1] - mean_ctrl[..., 1])/std_ctrl[..., 1]
-        vU = torch.stack((vx, vy, wz, rl, pt, st, th), dim=-1)
+        vU[..., 6] = (ctrls[..., 0] - mean_ctrl[..., 0])/std_ctrl[..., 0]
+        vU[..., 7] = (ctrls[..., 1] - mean_ctrl[..., 1])/std_ctrl[..., 1]
 
-        dV = self.main(vU)
+        context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
+
+        vUc = torch.concatenate((vU, context), dim=-1)
+
+        dV = self.main(vUc)
         states_next[..., 6] = states_next[..., 6] + dV[..., 0]*0.25
         states_next[..., 7] = states_next[..., 7] + dV[..., 1]*0.25
         states_next[..., 14] = states_next[..., 14] + dV[..., 2]*0.2
