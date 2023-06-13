@@ -15,6 +15,7 @@ import os
 BNG_HOME = os.environ.get('BNG_HOME')
 bng = beamng_interface(BeamNG_path=BNG_HOME, use_beamng=False, shell_mode=True)
 
+
 def calc_data_stats(dataset_path):
 
     out_dir = dataset_path.__str__()

@@ -78,6 +78,7 @@ def load_bev_map(file_name: str, file_path: os.PathLike) -> np.ndarray:
     map = np.load(file_path / file_name, allow_pickle=True)
     return map
 
+
 def load_reset_data(file_name: str, file_path: os.PathLike) -> np.ndarray:
     reset = np.load(file_path / file_name, allow_pickle=True)
     return reset
