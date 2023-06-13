@@ -30,7 +30,7 @@ class NextStatePredMSE(Loss):
 
 class AggregatedMSE(Loss):
 
-    def loss(self, next_state_preds, next_state_targets, step=1):
+    def loss(self, next_state_preds, next_state_targets, step=5):
         next_state_preds = next_state_preds[:, :-step] # no label for last prediction
         next_state_targets = torch.roll(next_state_targets, dims=1, shifts=step)[:, :-step]# first entry is an input.
         vel_loss = F.mse_loss(next_state_preds[..., 6:8], next_state_targets[..., 6:8])

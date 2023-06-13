@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.transforms.functional import rotate
 from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
@@ -21,7 +22,7 @@ class ContextMLP(DynamicsBase):
 
         self.register_buffer('state_feat_idx', feat_idx_tn)
 
-        input_dim = 8 + 30 ## vx, vy, wz, roll, pitch, st, th
+        input_dim = 7 + 30 ## vx, vy, wz, roll, pitch, st, th
         output_dim = 7 ## dvx, dvy, ax, ay, dr, dp, dwz
 
         fc_layers = [
@@ -90,36 +91,39 @@ class ContextMLP(DynamicsBase):
             x_min = c_X - self.delta
             x_max = c_X + self.delta
             for i in range(k):
-                for j in range(t):                    
-                    bev_input[i, j, :, :] = ( bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]] - 0.53 ) / 1.43 ## subtract mean, normalize.
+                for j in range(t):
+                    X = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
+                    X = X.unsqueeze(0)
+                    X = rotate(X, states_next[i, j , 5].item()*57.3)
+                    bev_input[i, j, :, :] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
 
         mean_state = torch.ones_like(states_next[0,0,6:12])
-        mean_state[..., 0] *= 4.18
+        mean_state[..., 0] *= 9.16903211
         mean_state[..., 1] *= 0.0
         mean_state[..., 2] *= 0.0
         mean_state[..., 3] *= 0.0 ## roll
         mean_state[..., 4] *= 0.0 ## pitch
-        mean_state[..., 5] *= 0.0 ## yaw
+        mean_state[..., 5] *= -0.52 ## yaw
         std_state = torch.ones_like(mean_state)
-        std_state[..., 0] *= 1.26483479
-        std_state[..., 1] *= 0.28369839
-        std_state[..., 2] *= 0.25
+        std_state[..., 0] *= 1.40012654
+        std_state[..., 1] *= 0.61146516
+        std_state[..., 2] *= 0.34990806
         std_state[..., 3] *= 0.08
         std_state[..., 4] *= 0.08
-        std_state[..., 5] *= 1.57 ## pi/2; we don't expect more than pi/2 rotation in 1 second since no turn taken by the car exceeds this value
+        std_state[..., 5] *= 0.32 ## pi/2; we don't expect more than pi/2 rotation in 1 second since no turn taken by the car exceeds this value
 
         mean_ctrl = torch.ones_like(ctrls[0,0,:])
-        mean_ctrl[..., 0] *= 0.01391617 
-        mean_ctrl[..., 1] *= 0.16625684
+        mean_ctrl[..., 0] *= -0.011925
+        mean_ctrl[..., 1] *= 0.36558446
         std_ctrl = torch.ones_like(mean_ctrl)
-        std_ctrl[..., 0] *= 0.40226127
-        std_ctrl[..., 1] *= 0.58021804
+        std_ctrl[..., 0] *= 0.32298747
+        std_ctrl[..., 1] *= 0.36558446
 
         states_next = states_next.reshape((k*t, n))
         ctrls = ctrls.reshape((k*t, n_c))
         bev_input = bev_input.reshape((k*t, self.delta*2, self.delta*2))
 
-        vU = torch.zeros((k*t, 8), dtype=self.dtype, device=self.d)
+        vU = torch.zeros((k*t, 7), dtype=self.dtype, device=self.d)
 
         vU[..., 0] = (states_next[..., 6] - mean_state[..., 0])/std_state[..., 0]
         vU[..., 1] = (states_next[..., 7] - mean_state[..., 1])/std_state[..., 1]
@@ -127,16 +131,17 @@ class ContextMLP(DynamicsBase):
         
         vU[..., 3] = (states_next[..., 3] - mean_state[..., 3])/std_state[..., 3]
         vU[..., 4] = (states_next[..., 4] - mean_state[..., 4])/std_state[..., 4]
-        vU[..., 5] = (states_next[..., 5] - mean_state[..., 5])/std_state[..., 5]
+        # vU[..., 5] = (states_next[..., 5] - mean_state[..., 5])/std_state[..., 5]
 
-        vU[..., 6] = (ctrls[..., 0] - mean_ctrl[..., 0])/std_ctrl[..., 0]
-        vU[..., 7] = (ctrls[..., 1] - mean_ctrl[..., 1])/std_ctrl[..., 1]
+        vU[..., 5] = (ctrls[..., 0] - mean_ctrl[..., 0])/std_ctrl[..., 0]
+        vU[..., 6] = (ctrls[..., 1] - mean_ctrl[..., 1])/std_ctrl[..., 1]
 
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
 
         vUc = torch.concatenate((vU, context), dim=-1)
 
         dV = self.main(vUc)
+
         states_next[..., 6] = states_next[..., 6] + dV[..., 0]*0.25
         states_next[..., 7] = states_next[..., 7] + dV[..., 1]*0.25
         states_next[..., 14] = states_next[..., 14] + dV[..., 2]*0.2
