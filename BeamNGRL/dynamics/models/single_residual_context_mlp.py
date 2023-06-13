@@ -92,7 +92,7 @@ class ContextMLP(DynamicsBase):
             x_max = c_X + self.delta
             for i in range(k):
                 for j in range(t):
-                    X = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
+                    X = bev[i, 0, y_min[i, j]: y_max[i, j], x_min[i, j]: x_max[i, j]]
                     X = X.unsqueeze(0)
                     X = rotate(X, states_next[i, j , 5].item()*57.3)
                     bev_input[i, j, :, :] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
