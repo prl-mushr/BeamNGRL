@@ -191,9 +191,17 @@ def generate_dataset(args):
             job_args = []
             num_frames = states_seq.shape[0]
             for i in range(0, num_frames, skip_frames):
-                keyframe_idx = i
-                start_idx = i - past_traj_len
-                data_idxs = [start_idx + k for k in range(past_traj_len + future_traj_len + 1)]
+                reset_encountered = True
+                while reset_encountered:
+                    keyframe_idx = i
+                    start_idx = i - past_traj_len
+                    data_idxs = [start_idx + k for k in range(past_traj_len + future_traj_len + 1)]
+                    reset_range = reset_seq[data_idxs[0]: data_idxs[0] + past_traj_len + future_traj_len + skip_frames]
+                    reset_encountered = False
+                    if reset_range.any():
+                        print("reset_encountered")
+                        reset_encountered = True
+                        i = data_idxs[-1] + np.where(reset_range)[0].item() + past_traj_len + future_traj_len + skip_frames
                 if data_idxs[0] < 0 or data_idxs[-1] >= num_frames:
                     # Skip frame if idxs are out of range
                     continue
@@ -238,11 +246,6 @@ def generate_dataset(args):
                     'bev_normal': bev_normal,
                 })
                 frame_idx += 1
-
-                ## we check for reset between end of current episode and future_traj_len + skip frames to make sure the "next" frame does not have a reset flag
-                reset_range = reset_seq[data_idxs[-1]: data_idxs[-1] + future_traj_len + skip_frames]
-                if reset_range.any():
-                    i = data_idxs[-1] + np.where(reset_range)[0].item() + past_traj_len + future_traj_len + skip_frames
 
 
             # Chunk jobs

@@ -81,9 +81,22 @@ class ContextMLP(DynamicsBase):
         I get k bevs of shape k x 1 x bevshape x bevshape
         we don't rotate the image, but we do provide the yaw angle of the vehicle I assume relative to the start?
         '''
-        bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
-        if not evaluation:
-            bev = ctx_data['bev_elev']
+        bev = ctx_data['bev_elev']
+        if evaluation:
+            bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
+            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
+            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
+            y_min = c_Y - self.delta
+            y_max = c_Y + self.delta
+            x_min = c_X - self.delta
+            x_max = c_X + self.delta
+            for i in range(k):
+                X = bev[y_min[i, 0]: y_max[i, 0], x_min[i, 0]: x_max[i, 0]]
+                X = X.unsqueeze(0)
+                X = rotate(X, states_next[i, 0 , 5].item()*57.3)
+                bev_input[i] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
+        else:
+            bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
             c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             y_min = c_Y - self.delta
@@ -96,6 +109,7 @@ class ContextMLP(DynamicsBase):
                     X = X.unsqueeze(0)
                     X = rotate(X, states_next[i, j , 5].item()*57.3)
                     bev_input[i, j, :, :] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
+
 
         mean_state = torch.ones_like(states_next[0,0,6:12])
         mean_state[..., 0] *= 9.16903211
@@ -172,5 +186,6 @@ class ContextMLP(DynamicsBase):
                                     states[0, :, [i], :],
                                     controls[0, :, [i], :],
                                     ctx_data,
+                                    evaluation=True
                                 )  # B x 1 x D
         return states

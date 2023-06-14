@@ -88,7 +88,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
 
         steer = controls[..., 0]
         throttle = controls[..., 1]
-        states_pred = self.dyn_model.rollout(state, controls, ctx_data={})
+        states_pred = self.dyn_model.rollout(state, controls, ctx_data={'bev_elev':self.BEVmap_height})
 
         _,_,_,roll,pitch,_,vx, vy, vz, ax, ay, az, wx, wy, wz, _, _ = states_pred.split(1, dim=-1)
         
