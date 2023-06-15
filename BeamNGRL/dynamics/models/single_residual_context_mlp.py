@@ -146,9 +146,9 @@ class ContextMLP(DynamicsBase):
         '''
         horizon = states.shape[-2]
         for i in range(horizon - 1):
-            states[0, :, [i+1], :] = self._forward(
-                                    states[0, :, [i], :],
-                                    controls[0, :, [i], :],
+            states[..., [i+1], :] = self._forward(
+                                    states[..., [i], :],
+                                    controls[..., [i], :],
                                     ctx_data,
                                 )  # B x 1 x D
         return states
@@ -182,7 +182,7 @@ class ContextMLP(DynamicsBase):
         with torch.no_grad():
             states_pred = self._rollout(states, controls, ctx_data)
 
-        _,_,_,roll,pitch,_,vx, vy, vz, ax, ay, az, wx, wy, wz, _, _ = states_pred.split(1, dim=-1)
+        _,_,_,roll,pitch,_,vx, vy, vz, ax, ay, az, wx, wy, wz  = states_pred.split(1, dim=-1)
 
         ## squeeze all the singleton dimensions for all the states
         vx = vx.squeeze(-1) # + controls[..., 1]*20
@@ -212,5 +212,5 @@ class ContextMLP(DynamicsBase):
         y = y + self.dt*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
         z = z + self.dt*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
 
-        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=3)
+        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=-1)
 

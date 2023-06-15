@@ -58,7 +58,18 @@ def visualize_bev_traj(state, future_traj, past_traj, bev_map, resolution):
     return final_img
 
 
-def visualize_preds(
+def get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=0):
+    curr_state_b = ctx_tn_dict['state'][[batch_idx]]
+    controls_b = controls_tn[[batch_idx]]
+    ctx_tn_dict_b = {k: tn[[batch_idx]] for k, tn in ctx_tn_dict.items()}
+    T = controls_b.size(1)
+    curr_state_b = curr_state_b.view(1, 1, -1).expand(-1, T, -1)
+
+    state_rollouts = network.rollout(curr_state_b, controls_b, ctx_tn_dict_b)
+    state_rollouts = state_rollouts.squeeze(0)
+    return state_rollouts
+
+def visualize_rollouts(
         future_traj_gt,
         future_traj_pred,
         ctx_dict,
@@ -70,7 +81,8 @@ def visualize_preds(
 ):
 
     future_traj_gt = to_np(future_traj_gt[batch_idx])
-    future_traj_pred = to_np(future_traj_pred[batch_idx])
+    # future_traj_pred = to_np(future_traj_pred[batch_idx])
+    future_traj_pred = to_np(future_traj_pred)
 
     state = to_np(ctx_dict['state'][batch_idx])
     past_states = to_np(ctx_dict['past_states'][batch_idx])

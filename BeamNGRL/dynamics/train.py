@@ -9,7 +9,7 @@ import argparse
 import yaml
 from BeamNGRL import *
 from typing import Dict
-from utils.vis_utils import visualize_preds
+from utils.vis_utils import visualize_rollouts, get_rollouts
 
 
 def train(
@@ -41,8 +41,8 @@ def train(
             start = 1
 
         for epoch in range(start, args.n_epochs + 1):
-            # if epoch > 1: # run valid. without training first
-            if epoch > 0:
+            if epoch > 1: # run valid. without training first
+            # if epoch > 0:
                 network.train()
                 train_average_loss = []
 
@@ -77,8 +77,10 @@ def train(
                         len(train_loader) * epoch + i)
 
                     if i % args.log_interval == 0:
-                        visualize_preds(states_tn, pred, ctx_tn_dict, len(train_loader) * epoch + i,
-                                    batch_idx=0, mode='Train', writer=writer)
+                        batch_idx = 0
+                        state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
+                        visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
+                                           batch_idx=batch_idx, mode='Train', writer=writer)
 
                 train_average_loss = np.asarray(train_average_loss).mean()
                 writer.add_scalar('Train/Loss', train_average_loss, epoch)
@@ -117,11 +119,11 @@ def train(
                     writer.add_scalar('Valid/batchLoss', test_batch_loss,
                         len(valid_loader) * epoch + i)
 
-                    pred = torch.ones_like(pred)
-
                     if i % args.log_interval == 0:
-                        visualize_preds(states_tn, pred, ctx_tn_dict, len(valid_loader) * epoch + i,
-                                    batch_idx=0, mode='Valid', writer=writer)
+                        batch_idx = 0
+                        state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
+                        visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
+                                           batch_idx=batch_idx, mode='Valid', writer=writer)
 
                 test_loss = np.asarray(test_avg_loss).mean()
                 writer.add_scalar('Valid/Loss', test_loss, epoch)
