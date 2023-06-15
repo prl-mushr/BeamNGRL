@@ -81,7 +81,7 @@ class ContextMLP(DynamicsBase):
             for i in range(k):
                 for j in range(t):
                     bev_new = bev[i, 0, x_min[i, j]: x_max[i, j], y_min[i, j]: y_max[i, j]]
-            print(bev_k.shape)
+            # print(bev_k.shape)
 
         mean_state = torch.ones_like(states_next[0,0,6:11])
         mean_state[..., 0] *= 4.18

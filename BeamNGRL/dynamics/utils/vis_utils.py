@@ -6,7 +6,7 @@ import cv2
 
 def make_heatmap(bev_map, cmap='inferno'):
     import matplotlib.cm
-    cmap = matplotlib.cm.get_cmap(cmap)
+    cmap = matplotlib.cm.get_cmap(cmap).reversed()
     bev_map = bev_map / 255.0
     color = cmap(bev_map)[:, :, :3] * 255.0
     ret = color.astype(np.uint8)
@@ -74,27 +74,23 @@ def visualize_preds(
 
     state = to_np(ctx_dict['state'][batch_idx])
     past_states = to_np(ctx_dict['past_states'][batch_idx])
-    bev_color = to_np(ctx_dict['bev_color'][batch_idx]).transpose(1, 2, 0)
-    bev_elev = to_np(ctx_dict['bev_elev'][batch_idx]).transpose(1, 2, 0)
-    bev_normal = to_np(ctx_dict['bev_normal'][batch_idx]).transpose(1, 2, 0)
+
+
+    bev_color = to_np(ctx_dict['bev_color'][batch_idx])
+    bev_elev = to_np(ctx_dict['bev_elev'][batch_idx].squeeze())
+    # bev_normal = to_np(ctx_dict['bev_normal'][batch_idx])
+
+    bev_color = bev_color.transpose(1, 2, 0)
+    bev_elev = bev_elev
+    # bev_normal = bev_normal.transpose(1, 2, 0)
 
     grid_size, grid_size, n_channels = bev_color.shape
     # bev_color = bev_color.astype(np.uint8)
     bev_color = np.ascontiguousarray(bev_color, dtype=np.uint8)
-    bev_elev = make_heatmap(bev_elev)
-    bev_normal = make_heatmap(bev_normal)
-
-    # print(f'\nbev_color shape: {bev_color.shape}')
-    # print(f'{bev_color.max()}')
-    # print(f'{bev_color.min()}')
-    #
-    # print(f'\nbev_elev shape: {bev_elev.shape}')
-    # print(f'{bev_elev.max()}')
-    # print(f'{bev_elev.min()}')
-    #
-    # print(f'\nbev_normal shape: {bev_normal.shape}')
-    # print(f'{bev_normal.max()}')
-    # print(f'{bev_normal.min()}')
+    bev_elev = np.clip(bev_elev, -4., 4.)
+    bev_elev = (bev_elev + 4.) / 8. * 255.
+    bev_elev = make_heatmap(bev_elev, cmap='binary')
+    # bev_normal = make_heatmap(bev_normal)
 
     future_gt_bev, _ = project_traj_to_map(future_traj_gt, grid_size, resolution)
     future_pred_bev, _ = project_traj_to_map(future_traj_pred, grid_size, resolution)
@@ -112,14 +108,22 @@ def visualize_preds(
 
     bev_color_gt_img = plot_to_bev(np.copy(bev_color), future_gt_bev)[None]
     bev_color_pred_img = plot_to_bev(np.copy(bev_color), future_pred_bev)[None]
-    # bev_elev_img = plot_to_bev(bev_elev)[None]
-    # bev_normal_img = plot_to_bev(bev_normal)[None]
+
+    bev_elev_gt_img = plot_to_bev(np.copy(bev_elev), future_gt_bev)[None]
+    bev_elev_pred_img = plot_to_bev(np.copy(bev_elev), future_pred_bev)[None]
+
+    # bev_normal_gt_img = plot_to_bev(np.copy(bev_normal), future_gt_bev)[None]
+    # bev_normal_pred_img = plot_to_bev(np.copy(bev_normal), future_pred_bev)[None]
 
     if writer is not None:
         writer.add_images(mode+f'/gt_sem_{batch_idx}', bev_color_gt_img, global_step=step_iter, dataformats='NHWC')
         writer.add_images(mode+f'/pred_sem_{batch_idx}', bev_color_pred_img, global_step=step_iter, dataformats='NHWC')
-        # writer.add_images(mode+f'/elev_{batch_idx}', bev_elev_img, global_step=step_iter, dataformats='NHWC')
-        # writer.add_images(mode+f'/normal_{batch_idx}', bev_normal_img, global_step=step_iter, dataformats='NHWC')
+
+        writer.add_images(mode+f'/gt_elev_{batch_idx}', bev_elev_gt_img, global_step=step_iter, dataformats='NHWC')
+        writer.add_images(mode+f'/pred_elev_{batch_idx}', bev_elev_pred_img, global_step=step_iter, dataformats='NHWC')
+
+        # writer.add_images(mode+f'/gt_normal_{batch_idx}', bev_normal_gt_img, global_step=step_iter, dataformats='NHWC')
+        # writer.add_images(mode+f'/pred_normal_{batch_idx}', bev_normal_pred_img, global_step=step_iter, dataformats='NHWC')
 
 
 

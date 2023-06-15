@@ -41,8 +41,8 @@ def train(
             start = 1
 
         for epoch in range(start, args.n_epochs + 1):
-            if epoch > 1: # run valid. without training first
-            # if epoch > 0:
+            # if epoch > 1: # run valid. without training first
+            if epoch > 0:
                 network.train()
                 train_average_loss = []
 

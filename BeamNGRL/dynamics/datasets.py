@@ -145,8 +145,6 @@ class DynamicsDataset(Dataset):
         future_ts -= curr_time
         curr_time = 0.
 
-        # BEV maps: reshape to (C, H, W)
-        bev_input_dict = {k: v.transpose(2, 0, 1) for k, v in bev_input_dict.items()}
 
         # Data Augmentation
         if self.aug:
@@ -154,6 +152,9 @@ class DynamicsDataset(Dataset):
              past_states,
              future_states,
              bev_input_dict) = self.augment_2d(state, past_states, future_states, bev_input_dict)
+
+        # BEV maps: reshape to (C, H, W)
+        bev_input_dict = {k: v.transpose(2, 0, 1) for k, v in bev_input_dict.items()}
 
         ret = {}
 
@@ -218,6 +219,9 @@ class DynamicsDataset(Dataset):
         future_states = self.rotate_trajectories_2d(future_states[None], rotate_angle).squeeze(0)
 
         # BEV-maps
-        bev_dict = {k: self.rotate_bevmap(bm, rotate_angle) for k, bm in bev_dict.items()}
+        bev_dict['bev_color'] = self.rotate_bevmap(bev_dict['bev_color'], rotate_angle)
+        bev_dict['bev_elev'] = self.rotate_bevmap(bev_dict['bev_elev'], rotate_angle)[..., None]
+
+        # bev_dict = {k: self.rotate_bevmap(bm, rotate_angle) for k, bm in bev_dict.items()}
 
         return curr_state, past_states, future_states, bev_dict
