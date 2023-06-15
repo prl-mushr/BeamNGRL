@@ -104,7 +104,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                     .numpy(),
                     dtype=np.float64,
                 )[0]
-                action[1] = np.clip(action[1], 0, 0.5)
+                action[1] = np.clip(action[1], Sampling_config['min_thr'], Sampling_config['max_thr'])
                 dt_ = time.time() - now
                 
                 costmap_vis(
