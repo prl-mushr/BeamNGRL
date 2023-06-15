@@ -5,6 +5,7 @@ from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 
+
 class ResidualMLP(DynamicsBase):
 
     def __init__(

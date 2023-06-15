@@ -174,7 +174,15 @@ class DynamicsDataset(Dataset):
         # Get specified inputs
         state_input = ret.get(self.state_input_key)
         ctrl_input = ret.get(self.ctrl_input_key)
-        ctx_input_dict = {k: ret.get(k) for k in self.ctx_input_keys}
+
+        # Base context, needed for vis
+        ctx_input_dict = {'state': state, 'past_states': past_states,
+                          'bev_color': ret['bev_color'], 'bev_elev': ret['bev_elev'],
+                          'bev_normal': ret['bev_normal'],
+                          }
+
+        # Additional features
+        ctx_input_dict.update({k: ret.get(k) for k in self.ctx_input_keys})
 
         return state_input, ctrl_input, ctx_input_dict
 
@@ -192,7 +200,8 @@ class DynamicsDataset(Dataset):
         M = cv2.getRotationMatrix2D(rotation_center, -np.rad2deg(angle), 1.0)
         # when rotating, set void areas to OHE vector for void (-1)
         # this is done by setting fillers(border) to zero vector first.
-        bevmap = cv2.warpAffine(bevmap, M, self.size, flags=cv2.INTER_NEAREST,
+        size = (int(self.grid_size), int(self.grid_size))
+        bevmap = cv2.warpAffine(bevmap, M, size, flags=cv2.INTER_NEAREST,
                               borderMode=cv2.BORDER_CONSTANT, borderValue=0)
         return bevmap
 
