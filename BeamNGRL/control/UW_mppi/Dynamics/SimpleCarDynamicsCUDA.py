@@ -4,7 +4,6 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import pycuda.driver as cuda
 import numpy as np
-import time
 
 class SimpleCarDynamics:
     """
@@ -74,14 +73,10 @@ class SimpleCarDynamics:
         state_ = gpuarray.to_gpu(state.squeeze(0).cpu().numpy())
 
         # Launch the CUDA kernel
-        now = time.time()
         self.rollout(state_, controls, self.BEVmap_height, self.BEVmap_normal, self.dt, self.K, self.T, self.NX, self.NC,
                 self.D, self. B, self.C, self.lf, self.lr, self.Iz, self.throttle_to_wheelspeed, self.steering_max,
                 self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size,
                 block=(self.block_dim, 1, 1), grid=(self.grid_dim, 1))
-        dt = time.time() - now
-        # print(dt*1e6)
         # pack all values:
         self.states  = torch.from_numpy(state_.get()).unsqueeze(0).to(torch.device('cuda'))
-        print(self.states[...,10].max())
         return self.states

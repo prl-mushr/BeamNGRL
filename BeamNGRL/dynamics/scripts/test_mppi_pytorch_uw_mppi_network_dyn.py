@@ -71,6 +71,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_size=Map_config["map_size"]
         )
         bng_interface.set_lockstep(True)
+        bng_interface.burn_time = Dynamics_config["dt"]
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None

@@ -5,7 +5,8 @@ from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
-
+import time
+from BeamNGRL.dynamics.utils.misc_utils import *
 class ContextMLP(DynamicsBase):
 
     def __init__(
@@ -83,18 +84,10 @@ class ContextMLP(DynamicsBase):
         '''
         bev = ctx_data['bev_elev']
         if evaluation:
-            bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
-            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            y_min = c_Y - self.delta
-            y_max = c_Y + self.delta
-            x_min = c_X - self.delta
-            x_max = c_X + self.delta
-            for i in range(k):
-                X = bev[y_min[i, 0]: y_max[i, 0], x_min[i, 0]: x_max[i, 0]]
-                X = X.unsqueeze(0)
-                X = rotate(X, states_next[i, 0 , 5].item()*57.3)
-                bev_input[i] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
+            bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
+            center = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
+            angle = states_next[..., 5]
+            bev_input = crop_rotate_batch(bev, bev_input, center, -angle)
         else:
             bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
             c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
@@ -107,7 +100,7 @@ class ContextMLP(DynamicsBase):
                 for j in range(t):
                     X = bev[i, 0, y_min[i, j]: y_max[i, j], x_min[i, j]: x_max[i, j]]
                     X = X.unsqueeze(0)
-                    X = rotate(X, states_next[i, j , 5].item()*57.3)
+                    X = rotate(X, -states_next[i, j , 5].item()*57.3)
                     bev_input[i, j, :, :] = ( X.squeeze(0) - 0.53 ) / 1.43 ## subtract mean, normalize.
 
 
@@ -117,14 +110,14 @@ class ContextMLP(DynamicsBase):
         mean_state[..., 2] *= 0.0
         mean_state[..., 3] *= 0.0 ## roll
         mean_state[..., 4] *= 0.0 ## pitch
-        mean_state[..., 5] *= -0.52 ## yaw
+        mean_state[..., 5] *= 0.0 ## yaw
         std_state = torch.ones_like(mean_state)
         std_state[..., 0] *= 1.40012654
         std_state[..., 1] *= 0.61146516
         std_state[..., 2] *= 0.34990806
         std_state[..., 3] *= 0.08
         std_state[..., 4] *= 0.08
-        std_state[..., 5] *= 0.32 ## pi/2; we don't expect more than pi/2 rotation in 1 second since no turn taken by the car exceeds this value
+        std_state[..., 5] *= 0.32
 
         mean_ctrl = torch.ones_like(ctrls[0,0,:])
         mean_ctrl[..., 0] *= -0.011925
@@ -156,13 +149,13 @@ class ContextMLP(DynamicsBase):
 
         dV = self.main(vUc)
 
-        states_next[..., 6] = states_next[..., 6] + dV[..., 0]*0.25
-        states_next[..., 7] = states_next[..., 7] + dV[..., 1]*0.25
-        states_next[..., 14] = states_next[..., 14] + dV[..., 2]*0.2
+        states_next[..., 6] = states_next[..., 6] + dV[..., 0]*0.25*5
+        states_next[..., 7] = states_next[..., 7] + dV[..., 1]*0.25*5
+        states_next[..., 14] = states_next[..., 14] + dV[..., 2]*0.2*5
         states_next[..., 9] = dV[..., 5]*10.0
         states_next[..., 10] = dV[..., 6]*10.0
-        states_next[..., 3] = states_next[..., 3] + dV[..., 3]*0.01
-        states_next[..., 4] = states_next[..., 4] + dV[..., 4]*0.01
+        states_next[..., 3] = states_next[..., 3] + dV[..., 3]*0.01*5
+        states_next[..., 4] = states_next[..., 4] + dV[..., 4]*0.01*5
 
         states_next = states_next.reshape((k,t,n))
 
