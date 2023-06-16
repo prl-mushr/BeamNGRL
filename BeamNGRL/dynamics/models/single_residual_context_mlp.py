@@ -6,7 +6,7 @@ from typing import Dict
 from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 import time
-from BeamNGRL.dynamics.utils.misc_utils import *
+# from BeamNGRL.dynamics.utils.misc_utils import * ## uncomment on eval
 class ContextMLP(DynamicsBase):
 
     def __init__(
@@ -84,10 +84,12 @@ class ContextMLP(DynamicsBase):
         '''
         bev = ctx_data['bev_elev']
         if evaluation:
-            bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
-            center = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            angle = states_next[..., 5]
-            bev_input = crop_rotate_batch(bev, bev_input, center, -angle)
+            ## uncomment this during eval -- not sure why but pytorch has a problem if I so much as import the misc-utils stuff.
+            # bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
+            # center = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
+            # angle = states_next[..., 5]
+            # bev_input = crop_rotate_batch(bev, bev_input, center, -angle)
+            pass
         else:
             bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d)
             c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
