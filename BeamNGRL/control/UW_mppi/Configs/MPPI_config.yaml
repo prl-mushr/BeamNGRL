@@ -1,4 +1,4 @@
 ROLLOUTS: 1024
-TIMESTEPS: 10
+TIMESTEPS: 12
 BINS: 1
 u_per_command: 1
