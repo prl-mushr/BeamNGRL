@@ -1,9 +1,14 @@
 import numpy as np
-import pycuda.autoinit
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import torch
+from pycuda.tools import make_default_context
+
+device = torch.cuda.current_device()
+cuda.init()
+cuda.Device(device).retain_primary_context()
+pycuda_ctx = make_default_context()
 
 kernel_code = '''
 __global__ void rotate_crop(const float* in, float* out, float* rotation_angles, int* cent, int in_H, int in_W, int out_H, int out_W, int N)
@@ -35,11 +40,13 @@ __global__ void rotate_crop(const float* in, float* out, float* rotation_angles,
 '''
 mod = SourceModule(kernel_code)
 cuda_kernel = mod.get_function('rotate_crop')
-block_size = (32, 32, 1)
+pycuda_ctx.pop()
 
 def crop_rotate_batch(input_array, output_array, center, angle):
-	input_array = input_array.clone()
-	output_array = output_array.clone().transpose(0,2)
+	pycuda_ctx.push()
+
+	input_array = input_array.clone().detach()
+	output_array = output_array.clone().detach().transpose(0,2)
 	in_H = input_array.shape[0]
 	in_W = input_array.shape[1]
 	out_H = output_array.shape[0]
@@ -50,10 +57,10 @@ def crop_rotate_batch(input_array, output_array, center, angle):
 	output_images = gpuarray.to_gpu(output_array.cpu().numpy())
 	angles = gpuarray.to_gpu(angle.clone().cpu().numpy())
 	centers = gpuarray.to_gpu(center.clone().cpu().numpy())
+	block_size = (32, 32, 1)
 	grid_size = ((out_W + block_size[0] - 1) // block_size[0], (out_H + block_size[1] - 1) // block_size[1], N)
-
 	cuda_kernel(input_images, output_images, angles, centers, np.int32(in_H), np.int32(in_W), np.int32(out_H), np.int32(out_W), np.int32(N), block=block_size, grid=grid_size)
-	
 	output_images = torch.from_numpy(output_images.get()).transpose(0,2).to(torch.device('cuda'))
 	
+	pycuda_ctx.pop()
 	return output_images

@@ -39,3 +39,14 @@ class AggregatedMSE(Loss):
         rpy_loss = F.mse_loss(next_state_preds[..., 3:5], next_state_targets[..., 3:5])
         mse = vel_loss + yaw_loss + acc_loss*0.1 + rpy_loss
         return mse
+
+class AggregatedMSE_dV(Loss):
+
+    def loss(self, next_state_preds, next_state_targets, step=5):
+        next_state_preds = next_state_preds[:, :-step] # no label for last prediction
+        next_state_targets = torch.roll(next_state_targets, dims=1, shifts=-step)[:, :-step]# first entry is an input.
+        vel_loss = F.mse_loss(next_state_preds[..., 6:9], next_state_targets[..., 6:9])
+        rate_loss = F.mse_loss(next_state_preds[..., 12:15], next_state_targets[..., 12:15])
+        rp_loss = F.mse_loss(next_state_preds[..., 3:5], next_state_targets[..., 3:5])
+        mse = vel_loss/1.4 + rate_loss/0.3 + rp_loss/0.08
+        return mse

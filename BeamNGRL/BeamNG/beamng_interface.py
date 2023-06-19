@@ -28,6 +28,7 @@ def get_beamng_default(
         beamng_path=BNG_HOME,
         map_res=0.05,
         map_size=16, # 16 x 16 map
+        elevation_range=2.0,
         path_to_maps=DATA_PATH.__str__(),
 ):
 
@@ -48,7 +49,7 @@ def get_beamng_default(
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
     )
 
     return bng
@@ -62,6 +63,7 @@ def get_beamng_remote(
         beamng_path=BNG_HOME,
         map_res=0.05,
         map_size=16, # 16 x 16 map
+        elevation_range=2.0,
         path_to_maps=DATA_PATH.__str__(),
         remote=True,
         host_IP=None,
@@ -87,7 +89,7 @@ def get_beamng_remote(
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
     )
 
     return bng
@@ -103,6 +105,7 @@ def get_beamng_nobeam(
         beamng_path=BNG_HOME,
         map_res=0.05,
         map_size=16, # 16 x 16 map
+        elevation_range=2.0,
         path_to_maps=DATA_PATH.__str__(),
 ):
 
@@ -123,7 +126,7 @@ def get_beamng_nobeam(
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, path_to_maps=path_to_maps,
+        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
     )
 
     return bng
@@ -473,7 +476,7 @@ class beamng_interface():
                 self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
                 self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
                 self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
-                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed']
+                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed'] * np.sign(self.vehicle.sensors['electrics']['gear_index'])
 
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])

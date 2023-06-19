@@ -1,9 +1,9 @@
 dataset:
-  name: 'small_island_mppi'
+  name: 'small_island_manual'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
-  ctx_input_keys: [] #['bev_elev', 'bev_normal']
+  ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
 
 network:
   state_feat: ['vx', 'vy', 'vz']
@@ -21,4 +21,4 @@ network:
   opt_kwargs:
     lr: 1.0e-3
 
-loss: AggregatedMSE
+loss: AggregatedMSE_dV

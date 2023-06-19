@@ -1,11 +1,40 @@
-from BeamNGRL.BeamNG.beamng_interface import *
+import numpy as np
+from BeamNGRL.BeamNG.beamng_interface import get_beamng_default
 import traceback
+import torch
+from BeamNGRL.control.UW_mppi.MPPI import MPPI
+from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
+from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
+from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
+from BeamNGRL.utils.visualisation import costmap_vis
+from BeamNGRL.utils.planning import update_goal
+import yaml
 import argparse
 from datetime import datetime
-from BeamNGRL import *
+from BeamNGRL import MPPI_CONFIG_PTH, DATA_PATH, ROOT_PATH, LOGS_PATH
+import time
+from typing import List
+import gc ## import group chat?
 
 
-def collect_data(args):
+## I used the MPPI to train a model which I then use to collect more data. makes perfect sense.
+
+def update_npy_datafile(buffer: List, filepath):
+    buff_arr = np.array(buffer)
+    if filepath.is_file():
+        # Append to existing data file
+        data_arr = np.load(filepath, allow_pickle=True)
+        data_arr = np.concatenate((data_arr, buff_arr), axis=0)
+        np.save(filepath, data_arr)
+    else:
+        np.save(filepath, buff_arr)
+    return [] # empty buffer
+
+
+def collect_mppi_data(args):
+
+    dtype = torch.float
+    device = torch.device("cuda")
 
     output_dir = args.output_dir
     if output_dir is None:
@@ -16,61 +45,76 @@ def collect_data(args):
     output_path.mkdir(parents=True, exist_ok=True)
 
     bng = get_beamng_default(
-        map_name=args.map_name,
+        car_model='offroad',
         start_pos=np.array(args.start_pos),
         start_quat=np.array(args.start_quat),
+        map_name=args.map_name,
         car_make='sunburst',
-        car_model='drift'
-    )
-
+        map_res=0.25,
+        map_size=32
+    )## map params here make no difference!
     bng.set_lockstep(True)
-    start = None
+    
+    current_wp_index = 0  # initialize waypoint index with 0
+    goal = None
+    action = np.zeros(2)
 
     timestamps = []
     state_data = []
-    color_data = []
-    elev_data = []
-    segmt_data = []
-    path_data = []
-    normal_data = []
+    reset_data = []
+    reset_counter = 0
+    reset_limit = 100
 
-    while True:
+    start = None
+    running = True
+    save_prompt_time = float(args.save_every_n_sec)
+
+    while running:
         try:
             bng.state_poll()
-
-            # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
-            # state information follows ROS REP103 standards (so basically ROS standards): world refernce frame for (x,y,z) is east-north-up(ENU). Body frame ref is front-left-up(FLU)
             state = bng.state
             ts = bng.timestamp
-            state[16] = bng.avg_wheelspeed/20.0
-            print(state[-2:])
+
             if not start:
                 start = ts
 
-            # get robot_centric BEV (not rotated into robot frame)
-            BEV_color = bng.BEV_color
-            BEV_height = (bng.BEV_heght + 2.0)/4.0  # note that BEV_heght (elevation) has a range of +/- 2 meters around the center of the elevation.
-            BEV_segmt = bng.BEV_segmt
-            BEV_path  = bng.BEV_path  # trail/roads
-            BEV_normal  = bng.BEV_normal  # trail/roads
+            T = ts - start
 
+            damage = False
+            if(type(bng.broken) == dict ):
+                count = 0
+                for part in bng.broken.values():
+                    if part['damage'] > 0.8:
+                        count += 1
+                damage = count > 1
+            reset = False
+            if(damage or bng.flipped_over):
+                reset_counter += 1
+                if reset_counter >= reset_limit:
+                    reset = True
+                    reset_counter = 0
+                    bng.reset()
+
+            
+            state[16] = bng.avg_wheelspeed/20 ## divide by max wheelspeed because that is how we do it with the MPPI's output.
+            print(state[:3], state[15:])
+            # Aggregate Data
             timestamps.append(ts)
             state_data.append(state)
-            color_data.append(BEV_color)
-            elev_data.append(BEV_height)
-            segmt_data.append(BEV_segmt)
-            path_data.append(BEV_path)
-            normal_data.append(BEV_normal)
+            reset_data.append(reset)
+
+            if ts >= save_prompt_time or \
+                ts - start > args.duration:
+
+                print("\nSaving data...")
+                print(f"time: {ts}")
+                timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
+                state_data = update_npy_datafile(state_data, output_path / "state.npy")
+                reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
+                gc.collect()
+                save_prompt_time += float(args.save_every_n_sec)
 
             if ts - start > args.duration:
-                print("Saving data...")
-                np.save(output_path / "timestamps.npy", np.array(timestamps))
-                np.save(output_path / "state.npy", np.array(state_data))
-                np.save(output_path / "bev_path.npy", np.array(path_data))
-                np.save(output_path / "bev_color.npy", np.array(color_data))
-                np.save(output_path / "bev_segmt.npy", np.array(segmt_data))
-                np.save(output_path / "bev_elev.npy", np.array(elev_data))
-                np.save(output_path / "bev_normal.npy", np.array(normal_data))
                 break
 
         except Exception:
@@ -83,10 +127,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--output_dir', type=str, default=None, help='location to store test results')
-    parser.add_argument('--start_pos', type=float, default=[-67, 336, 0.5], nargs=3, help='Starting position of the vehicle for tripped_flat on grimap_v2')
+    parser.add_argument('--start_pos', type=float, default=[-67, 336, 34.5], nargs=3, help='Starting position of the vehicle for tripped_flat on grimap_v2')
     parser.add_argument('--start_quat', type=float, default=[0, 0, 0.3826834, 0.9238795], nargs=4, help='Starting rotation (quat) of the vehicle.')
-    parser.add_argument('--map_name', type=str, default='smallgrid', help='Map name.')
-    parser.add_argument('--duration', type=int, default=300)
+    parser.add_argument('--map_name', type=str, default='small_island', help='Map name.')
+    parser.add_argument('--waypoint_file', type=str, default='WP_file_offroad.npy', help='Map name.')
+    parser.add_argument('--duration', type=int, default=600)
+    parser.add_argument('--save_every_n_sec', type=int, default=15)
+    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()
 
-    collect_data(args)
+    collect_mppi_data(args)

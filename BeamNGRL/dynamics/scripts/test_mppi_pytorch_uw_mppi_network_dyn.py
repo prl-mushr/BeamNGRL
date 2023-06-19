@@ -36,7 +36,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
     # model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
-    model_weights_path = LOGS_PATH / 'small_island' / 'best_20.pth'
+    model_weights_path = LOGS_PATH / 'small_island' / 'best_49.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
 
     print(model_weights_path)
@@ -61,14 +61,15 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
         )
 
         bng_interface = get_beamng_default(
-            car_model='RACER',
+            car_model='offroad',
             start_pos=start_pos,
             start_quat=start_quat,
             map_name=map_name,
             car_make='sunburst',
             beamng_path=BNG_HOME,
             map_res=Map_config["map_res"],
-            map_size=Map_config["map_size"]
+            map_size=Map_config["map_size"],
+            elevation_range=4.0
         )
         bng_interface.set_lockstep(True)
         bng_interface.burn_time = Dynamics_config["dt"]
@@ -86,7 +87,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 # state = np.zeros(17)
                 pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
-                    goal, pos, target_WP, current_wp_index, 15
+                    goal, pos, target_WP, current_wp_index, 15, step_size=2
                 )
 
                 if terminate:
@@ -141,9 +142,9 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 0.5])
+    start_point = np.array([-67, 336, 34.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-    map_name = "smallgrid"
+    map_name = "small_island"
     # target_WP = np.load("WP_file_offroad.npy")
     # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
     target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
