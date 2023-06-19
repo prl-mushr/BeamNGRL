@@ -170,6 +170,9 @@ class DynamicsDataset(Dataset):
         ret['future_states'] = future_states
         ret['future_ctrls'] = future_ctrls
 
+        # ret['full_input_states'] = np.concatenate((past_states, state[None], future_states), axis=0)
+        # ret['full_input_ctrls'] = np.concatenate((past_ctrls, control[None], future_ctrls), axis=0)
+
         ret.update(bev_input_dict)
 
         # Get specified inputs
@@ -177,7 +180,7 @@ class DynamicsDataset(Dataset):
         ctrl_input = ret.get(self.ctrl_input_key)
 
         # Base context, needed for vis
-        ctx_input_dict = {'state': state, 'past_states': past_states,
+        ctx_input_dict = {'state': state, 'past_states': past_states, 'past_ctrls': past_ctrls,
                           'bev_color': ret['bev_color'], 'bev_elev': ret['bev_elev'],
                           'bev_normal': ret['bev_normal'],
                           }

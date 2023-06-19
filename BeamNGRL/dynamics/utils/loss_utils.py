@@ -22,11 +22,19 @@ class StatePredMSE(Loss):
 
 class NextStatePredMSE(Loss):
 
-    def loss(self, next_state_preds, next_state_targets, step=5):
-        next_state_preds = next_state_preds[:, :-step] # no label for last prediction
-        next_state_targets = torch.roll(next_state_targets, dims=1, shifts=step)[:, :-step]# first entry is an input.
+    def loss(self, next_state_preds, next_state_targets):
+        next_state_preds = next_state_preds[:, :-1] # no label for last prediction
+        next_state_targets = next_state_targets[:, 1:] # first entry is an input.
         mse = F.mse_loss(next_state_preds, next_state_targets)
         return mse
+
+# class NextStatePredMSE(Loss):
+#
+#     def loss(self, next_state_preds, next_state_targets, step=5):
+#         next_state_preds = next_state_preds[:, :-step] # no label for last prediction
+#         next_state_targets = torch.roll(next_state_targets, dims=1, shifts=step)[:, :-step]# first entry is an input.
+#         mse = F.mse_loss(next_state_preds, next_state_targets)
+#         return mse
 
 class AggregatedMSE(Loss):
 

@@ -41,8 +41,8 @@ def train(
             start = 1
 
         for epoch in range(start, args.n_epochs + 1):
-            if epoch > 1: # run valid. without training first
-            # if epoch > 0:
+            # if epoch > 1: # run valid. without training first
+            if epoch > 0:
                 network.train()
                 train_average_loss = []
 
@@ -60,10 +60,10 @@ def train(
                         ctx_tn_dict,
                     )
 
-                    targets = states_tn #network.process_targets(states_tn)
-                    loss = loss_func(pred, targets)
+                    # targets = states_tn
+                    targets = network.process_targets(states_tn)
 
-                    # loss = loss_func(pred, states_tn)
+                    loss = loss_func(pred, targets)
 
                     loss.backward()
                     optimizer.step()
@@ -112,7 +112,8 @@ def train(
                             ctx_tn_dict,
                         )
 
-                        targets = states_tn #network.process_targets(states_tn)
+                        # targets = states_tn
+                        targets = network.process_targets(states_tn)
                         test_batch_loss = loss_func(pred, targets)
 
                     test_avg_loss.append(test_batch_loss.cpu().numpy())

@@ -138,12 +138,7 @@ class ContextMLP(DynamicsBase):
             controls,
             ctx_data,
     ):
-        '''
-        so let me get this straight. We have a dynamics class that has a "forward" method,
-        which internally calls a dynamics model that has a rollout method
-        which internall calls a "forward" method, that internall calls the "main" on a sequential NN.
-        The inception is strong with this one.
-        '''
+
         horizon = states.shape[-2]
         for i in range(horizon - 1):
             states[..., [i+1], :] = self._forward(

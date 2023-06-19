@@ -38,7 +38,7 @@ state_feat_map = {
     'z':        (lambda arr: arr[..., [2]]),
     'r':        (lambda arr: arr[..., [3]]),
     'p':        (lambda arr: arr[..., [4]]),
-    'th':       (lambda arr: arr[..., [5]]),
+    'yaw':      (lambda arr: arr[..., [5]]),
     'vx':       (lambda arr: arr[..., [6]]),
     'vy':       (lambda arr: arr[..., [7]]),
     'vz':       (lambda arr: arr[..., [8]]),
@@ -61,8 +61,12 @@ state_feat_map = {
     'dwy':       (lambda arr: arr[..., 1:, [13]] - arr[..., :-1, [13]]),
     'dwz':       (lambda arr: arr[..., 1:, [14]] - arr[..., :-1, [14]]),
 
-    'sin_th':   (lambda arr: torch.sin(arr[..., [5]])),
-    'cos_th':   (lambda arr: torch.cos(arr[..., [5]])),
+    'sin_r':   (lambda arr: torch.sin(arr[..., [3]])),
+    'cos_r':   (lambda arr: torch.cos(arr[..., [3]])),
+    'sin_p':   (lambda arr: torch.sin(arr[..., [4]])),
+    'cos_p':   (lambda arr: torch.cos(arr[..., [4]])),
+    'sin_yaw':   (lambda arr: torch.sin(arr[..., [5]])),
+    'cos_yaw':   (lambda arr: torch.cos(arr[..., [5]])),
 }
 
 ctrl_feat_map = {
