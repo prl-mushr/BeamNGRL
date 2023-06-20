@@ -1,12 +1,12 @@
+import torch
 import numpy as np
 from .dataset_utils import to_np, project_traj_to_map
 from PIL import Image
 import cv2
 
-
 def make_heatmap(bev_map, cmap='inferno'):
     import matplotlib.cm
-    cmap = matplotlib.cm.get_cmap(cmap)
+    cmap = matplotlib.cm.get_cmap(cmap).reversed()
     bev_map = bev_map / 255.0
     color = cmap(bev_map)[:, :, :3] * 255.0
     ret = color.astype(np.uint8)
@@ -56,3 +56,86 @@ def visualize_bev_traj(state, future_traj, past_traj, bev_map, resolution):
     final_img = Image.fromarray(bev_img.astype(np.uint8))
 
     return final_img
+
+
+def get_rollouts(future_controls_tn, ctx_tn_dict, network, batch_idx=0):
+    curr_state_b = ctx_tn_dict['state'][[batch_idx]]
+    curr_ctrl_b = ctx_tn_dict['control'][[batch_idx]]
+    future_controls_b = future_controls_tn[[batch_idx]]
+    ctx_tn_dict_b = {k: tn[[batch_idx]] for k, tn in ctx_tn_dict.items()}
+    T = future_controls_b.size(1) + 1
+    states_b = curr_state_b.view(1, 1, -1).expand(-1, T, -1) # current + future states
+    controls_b = torch.cat((curr_ctrl_b, future_controls_b), dim=1)
+    state_rollouts = network.rollout(states_b, controls_b, ctx_tn_dict_b)
+    state_rollouts = state_rollouts.squeeze(0)
+    return state_rollouts
+
+def visualize_rollouts(
+        future_traj_gt,
+        future_traj_pred,
+        ctx_dict,
+        step_iter,
+        batch_idx=0,
+        mode='Train',
+        writer=None,
+        resolution=0.25,
+):
+
+    future_traj_gt = to_np(future_traj_gt[batch_idx])
+    # future_traj_pred = to_np(future_traj_pred[batch_idx])
+    future_traj_pred = to_np(future_traj_pred)
+
+    state = to_np(ctx_dict['state'][batch_idx])
+    past_states = to_np(ctx_dict['past_states'][batch_idx])
+
+    bev_color = to_np(ctx_dict['bev_color'][batch_idx])
+    bev_elev = to_np(ctx_dict['bev_elev'][batch_idx].squeeze())
+    # bev_normal = to_np(ctx_dict['bev_normal'][batch_idx])
+
+    bev_color = bev_color.transpose(1, 2, 0)
+    bev_elev = bev_elev
+    # bev_normal = bev_normal.transpose(1, 2, 0)
+
+    grid_size, grid_size, n_channels = bev_color.shape
+    # bev_color = bev_color.astype(np.uint8)
+    bev_color = np.ascontiguousarray(bev_color, dtype=np.uint8)
+    bev_elev = np.clip(bev_elev, -4., 4.)
+    bev_elev = (bev_elev + 4.) / 8. * 255.
+    bev_elev = make_heatmap(bev_elev, cmap='binary')
+    # bev_normal = make_heatmap(bev_normal)
+
+    future_gt_bev, _ = project_traj_to_map(future_traj_gt, grid_size, resolution)
+    future_pred_bev, _ = project_traj_to_map(future_traj_pred, grid_size, resolution)
+    past_states_bev, _ = project_traj_to_map(past_states, grid_size, resolution)
+    state_bev, _ = project_traj_to_map(state, grid_size, resolution)
+
+    # Plot trajectories
+    size = 3
+    type = 'circle'
+    def plot_to_bev(bev_img, future_traj_bev):
+        bev_img = project_traj_to_img(future_traj_bev, bev_img, [0, 0, 255], type, size)
+        bev_img = project_traj_to_img(past_states_bev, bev_img, [255, 0, 0], type, size)
+        bev_img = project_traj_to_img(state_bev, bev_img, [0, 255, 0], type, size)
+        return bev_img
+
+    bev_color_gt_img = plot_to_bev(np.copy(bev_color), future_gt_bev)[None]
+    bev_color_pred_img = plot_to_bev(np.copy(bev_color), future_pred_bev)[None]
+
+    bev_elev_gt_img = plot_to_bev(np.copy(bev_elev), future_gt_bev)[None]
+    bev_elev_pred_img = plot_to_bev(np.copy(bev_elev), future_pred_bev)[None]
+
+    # bev_normal_gt_img = plot_to_bev(np.copy(bev_normal), future_gt_bev)[None]
+    # bev_normal_pred_img = plot_to_bev(np.copy(bev_normal), future_pred_bev)[None]
+
+    if writer is not None:
+        writer.add_images(mode+f'/gt_sem_{batch_idx}', bev_color_gt_img, global_step=step_iter, dataformats='NHWC')
+        writer.add_images(mode+f'/pred_sem_{batch_idx}', bev_color_pred_img, global_step=step_iter, dataformats='NHWC')
+
+        writer.add_images(mode+f'/gt_elev_{batch_idx}', bev_elev_gt_img, global_step=step_iter, dataformats='NHWC')
+        writer.add_images(mode+f'/pred_elev_{batch_idx}', bev_elev_pred_img, global_step=step_iter, dataformats='NHWC')
+
+        # writer.add_images(mode+f'/gt_normal_{batch_idx}', bev_normal_gt_img, global_step=step_iter, dataformats='NHWC')
+        # writer.add_images(mode+f'/pred_normal_{batch_idx}', bev_normal_pred_img, global_step=step_iter, dataformats='NHWC')
+
+
+

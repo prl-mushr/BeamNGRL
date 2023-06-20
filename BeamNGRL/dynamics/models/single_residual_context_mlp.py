@@ -15,16 +15,15 @@ class ContextMLP(DynamicsBase):
             self,
             hidden_depth=2,
             hidden_dim=512,
+            # dt=0.1,
+            dt=0.02,
             batch_norm=False,
             **kwargs,
     ):
 
         super().__init__(**kwargs)
 
-        feat_idx_tn = get_feat_index_tn(self.state_feat_list)
-
-        self.register_buffer('state_feat_idx', feat_idx_tn)
-
+        self.dt = dt
         input_dim = 10 + 30 ## vx, vy, vz, wx, wy, wz, roll, pitch, st, th
         output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
 
@@ -102,7 +101,6 @@ class ContextMLP(DynamicsBase):
             controls: torch.Tensor,
             ctx_data: Dict,
             evaluation=False,
-            dt=0.1
     ):
         n = states.shape[-1]
         n_c = controls.shape[-1]
@@ -111,6 +109,8 @@ class ContextMLP(DynamicsBase):
 
         states_next = states.clone().detach()
         ctrls = controls.clone().detach()
+
+        dt = self.dt
 
         '''
         context data contains BEV hght map --
@@ -155,7 +155,7 @@ class ContextMLP(DynamicsBase):
 
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
 
-        vUc = torch.concatenate((vU, context), dim=-1)
+        vUc = torch.cat((vU, context), dim=-1)
 
         dV = self.main(vUc)
 
@@ -179,19 +179,75 @@ class ContextMLP(DynamicsBase):
             controls,
             ctx_data,
     ):
-        '''
-        so let me get this straight. We have a dynamics class that has a "forward" method,
-        which internally calls a dynamics model that has a rollout method
-        which internall calls a "forward" method, that internall calls the "main" on a sequential NN.
-        The inception is strong with this one.
-        '''
+
         horizon = states.shape[-2]
         for i in range(horizon - 1):
-            states[0, :, [i+1], :] = self._forward(
-                                    states[0, :, [i], :],
-                                    controls[0, :, [i], :],
+            states[..., [i+1], :] = self._forward(
+                                    states[..., [i], :],
+                                    controls[..., [i], :],
                                     ctx_data,
                                     evaluation=True,
-                                    dt=0.1
                                 )  # B x 1 x D
         return states
+
+    def rollout(
+            self,
+            states,
+            controls,
+            ctx_data,
+    ):
+
+        x = states[..., 0]
+        y = states[..., 1]
+        z = states[..., 2]
+        roll = states[..., 3]
+        pitch = states[..., 4]
+        yaw = states[..., 5]
+        vx = states[..., 6]
+        vy = states[..., 7]
+        vz = states[..., 8]
+        ax = states[..., 9]
+        ay = states[..., 10]
+        az = states[..., 11]
+        wx = states[..., 12]
+        wy = states[..., 13]
+        wz = states[..., 14]
+
+        steer = controls[..., 0]
+        throttle = controls[..., 1]
+
+        with torch.no_grad():
+            states_pred = self._rollout(states, controls, ctx_data)
+
+        _,_,_,roll,pitch,_,vx, vy, vz, ax, ay, az, wx, wy, wz  = states_pred.split(1, dim=-1)
+
+        ## squeeze all the singleton dimensions for all the states
+        vx = vx.squeeze(-1) # + controls[..., 1]*20
+        vy = vy.squeeze(-1)
+        vz = vz.squeeze(-1)
+        ax = ax.squeeze(-1)
+        ay = ay.squeeze(-1)
+        az = az.squeeze(-1)
+        wx = wx.squeeze(-1)
+        wy = wy.squeeze(-1)
+        wz = wz.squeeze(-1) #vx*torch.tan(controls[..., 0] * 0.5)/2.6
+        roll = roll.squeeze(-1)
+        pitch = pitch.squeeze(-1)
+        # roll = roll + torch.cumsum(wx*self.dt, dim=-1)
+        # pitch = pitch + torch.cumsum(wy*self.dt, dim=-1)
+        yaw = yaw + torch.cumsum(wz*self.dt, dim=-1)
+
+        cy = torch.cos(yaw)
+        sy = torch.sin(yaw)
+        cp = torch.cos(pitch)
+        sp = torch.sin(pitch)
+        cr = torch.cos(roll)
+        sr = torch.sin(roll)
+        ct = torch.sqrt(cp*cp + cr*cr)
+
+        x = x + self.dt*torch.cumsum(( vx*cp*cy + vy*(sr*sp*cy - cr*sy) + vz*(cr*sp*cy + sr*sy) ), dim=-1)
+        y = y + self.dt*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
+        z = z + self.dt*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
+
+        return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=-1)
+
