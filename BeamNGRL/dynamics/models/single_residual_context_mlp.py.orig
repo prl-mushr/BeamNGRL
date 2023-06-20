@@ -15,7 +15,6 @@ class ContextMLP(DynamicsBase):
             self,
             hidden_depth=2,
             hidden_dim=512,
-            # dt=0.1,
             dt=0.02,
             batch_norm=False,
             **kwargs,
@@ -24,6 +23,7 @@ class ContextMLP(DynamicsBase):
         super().__init__(**kwargs)
 
         self.dt = dt
+
         input_dim = 10 + 30 ## vx, vy, vz, wx, wy, wz, roll, pitch, st, th
         output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
 
@@ -101,6 +101,7 @@ class ContextMLP(DynamicsBase):
             controls: torch.Tensor,
             ctx_data: Dict,
             evaluation=False,
+            dt=0.1
     ):
         n = states.shape[-1]
         n_c = controls.shape[-1]
@@ -110,10 +111,9 @@ class ContextMLP(DynamicsBase):
         states_next = states.clone().detach()
         ctrls = controls.clone().detach()
 
-        dt = self.dt
-
         '''
         context data contains BEV hght map --
+<<<<<<< HEAD
         I get k bevs of shape k x 1 x bevshape x bevshape
         we don't rotate the image, but we do provide the yaw angle of the vehicle I assume relative to the start?
         '''
@@ -128,6 +128,24 @@ class ContextMLP(DynamicsBase):
             bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             angle = -states_next[..., 5] ## the map rotates in the opposite direction to the car!
+=======
+        so let me get this straight,
+        you're getting k x t samplese
+        for each "k" you have t samples
+        for each "t" sample you need to crop-rotate the image (prep)
+        then each image is passed into the network as context.
+        '''
+        if not evaluation:
+            bev = ctx_data['bev_elev']
+            bev_k = torch.zeros((k, t, bev.shape[0], bev.shape[0]))
+            c_X = torch.clamp( ((states_next[..., 0] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
+            c_Y = torch.clamp( ((states_next[..., 1] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
+            y_min = c_Y - self.delta
+            y_max = c_Y + self.delta
+            x_min = c_X - self.delta
+            x_max = c_X + self.delta
+            # print(x_min, x_max, y_min, y_max)
+>>>>>>> learning-sasha
             for i in range(k):
                 bev_input[i,...] = crop_rotate_batch(bev[i,...], bev_input[i,...], center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
 
@@ -135,6 +153,7 @@ class ContextMLP(DynamicsBase):
         states_next = states_next.reshape((k*t, n))
         ctrls = ctrls.reshape((k*t, n_c))
         
+<<<<<<< HEAD
         vU = torch.zeros((k*t, 10), dtype=self.dtype, device=self.d)
         
         vU[..., 0] = (states_next[..., 6] - self.mean[0])/self.std[0]  # vx
@@ -155,7 +174,7 @@ class ContextMLP(DynamicsBase):
 
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
 
-        vUc = torch.cat((vU, context), dim=-1)
+        vUc = torch.concatenate((vU, context), dim=-1)
 
         dV = self.main(vUc)
 
@@ -168,6 +187,24 @@ class ContextMLP(DynamicsBase):
         states_next[..., 14] = states_next[..., 14] + dV[..., 5]*15 * dt
 
         states_next[..., 3:6] = states_next[..., 3:6] + states_next[..., 12:15] * dt ## aggregate roll, pitch errors 
+=======
+        rl = (states_next[..., 3] - mean_state[..., 3])/std_state[..., 3]
+        pt = (states_next[..., 4] - mean_state[..., 4])/std_state[..., 4]
+
+        st = (ctrls[..., 0] - mean_ctrl[..., 0])/std_ctrl[..., 0]
+        th = (ctrls[..., 1] - mean_ctrl[..., 1])/std_ctrl[..., 1]
+        vU = torch.stack((vx, vy, wz, rl, pt, st, th), dim=-1)
+
+        dV = self.main(vU)
+
+        states_next[..., 6] = states_next[..., 6] + dV[..., 0]*0.25
+        states_next[..., 7] = states_next[..., 7] + dV[..., 1]*0.25
+        states_next[..., 14] = states_next[..., 14] + dV[..., 2]*0.2
+        states_next[..., 9] = dV[..., 5]*10.0
+        states_next[..., 10] = dV[..., 6]*10.0
+        states_next[..., 3] = states_next[..., 3] + dV[..., 3]*0.01
+        states_next[..., 4] = states_next[..., 4] + dV[..., 4]*0.01
+>>>>>>> learning-sasha
 
         states_next = states_next.reshape((k,t,n))
 
@@ -187,6 +224,7 @@ class ContextMLP(DynamicsBase):
                                     controls[..., [i], :],
                                     ctx_data,
                                     evaluation=True,
+                                    dt=0.1
                                 )  # B x 1 x D
         return states
 

@@ -1,0 +1,33 @@
+dataset:
+<<<<<<< HEAD
+  name: 'small_island_manual'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
+=======
+  name: 'small_island_mppi_sinu'
+  augment: True
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['state', 'past_states', 'bev_elev', 'bev_normal']
+>>>>>>> learning-sasha
+
+network:
+  state_input_feat: ['vx', 'vy', 'vz']
+  state_output_feat: ['vx', 'vy', 'vz']
+  control_feat: ['steer', 'throttle']
+  # use_normalizer: True
+  use_normalizer: False
+
+  class: ContextMLP
+  net_kwargs:
+    hidden_depth: 2
+    hidden_dim: 32
+    batch_norm: True
+
+  opt: Adam
+  opt_kwargs:
+    lr: 1.0e-3
+
+loss: AggregatedMSE_dV
