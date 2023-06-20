@@ -38,6 +38,12 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
     # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
     model_weights_path = LOGS_PATH / 'small_island' / 'best_49.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
+    # model_weights_path = LOGS_PATH / 'residual_mlp' / 'best_933.pth'
+    # model_weights_path = LOGS_PATH / 'residual_mlp_sid' / 'best_46.pth'
+    # model_weights_path = LOGS_PATH / 'residual_mlp_sinu' / 'best_33.pth'
+
+    model_weights_path = LOGS_PATH / 'residual_mlp_sinu' / 'best_5.pth'
+    # model_weights_path = LOGS_PATH / 'residual_mlp_sinu' / 'best_1.pth'
 
     print(model_weights_path)
 
@@ -142,9 +148,15 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2
+
     start_point = np.array([-67, 336, 34.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
     map_name = "small_island"
+
+    #start_point = np.array([-67, 336, 0.5])
+    #start_quat = np.array([0, 0, 0.3826834, 0.9238795])
+    #map_name = "smallgrid"
+
     # target_WP = np.load("WP_file_offroad.npy")
     # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
     target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")

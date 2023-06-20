@@ -4,33 +4,36 @@ import torch.nn.functional as F
 from abc import ABC, abstractmethod
 from typing import Dict, List
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
-from .normalizers import FeatureNormalizer, StateNormalizer
+from .normalizers import FeatureNormalizer
 
 
 class DynamicsBase(ABC, nn.Module):
 
     def __init__(
             self,
-            state_feat: List,
+            state_input_feat: List,
+            state_output_feat: List,
             ctrl_feat: List,
             **kwargs,
     ):
         super().__init__()
 
-        self.state_dim = len(state_feat)
+        self.state_input_dim = len(state_input_feat)
+        self.state_output_dim = len(state_output_feat)
         self.ctrl_dim = len(ctrl_feat)
 
-        self.state_feat_list = state_feat
+        self.state_input_feat_list = state_input_feat
+        self.state_output_feat_list = state_output_feat
         self.ctrl_feat_list = ctrl_feat
 
     def process_targets(self, states: torch.Tensor):
-        states = get_state_features(states, self.state_feat_list)
+        states = get_state_features(states, self.state_output_feat_list)
         if self.normalizer:
-            states = self.normalizer.normalize_state(states)
+            states = self.normalizer.normalize_state_output(states)
         return states
 
     def process_input(self, states: torch.Tensor, controls: torch.Tensor):
-        states = get_state_features(states, self.state_feat_list)
+        states = get_state_features(states, self.state_input_feat_list)
         controls = get_ctrl_features(controls, self.ctrl_feat_list)
         if self.normalizer:
             states, controls = self.normalizer(states, controls)
@@ -38,7 +41,7 @@ class DynamicsBase(ABC, nn.Module):
 
     def process_output(self, states: torch.Tensor):
         if self.normalizer:
-            states = self.normalizer.unnormalize_state(states)
+            states = self.normalizer.unnormalize_state_output(states)
         return states
 
     def forward(
