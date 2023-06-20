@@ -46,7 +46,6 @@ def collect_mppi_data(args):
     with open(MPPI_CONFIG_PTH / 'Map_config.yaml') as f:
         Map_config = yaml.safe_load(f)
 
-    # target_WP = np.load(ROOT_PATH.parent / 'examples' / "WP_file_offroad.npy")
     target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
 
     map_res = Map_config["map_res"]
@@ -158,7 +157,11 @@ def collect_mppi_data(args):
                     .numpy(),
                     dtype=np.float64,
                 )[0]
+<<<<<<< HEAD
                 action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
+=======
+                # action[1] = np.clip(action[1], 0, 0.5)
+>>>>>>> origin
 
                 costmap_vis(
                     controller.Dynamics.states.cpu().numpy(),
