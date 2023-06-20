@@ -1,7 +1,7 @@
 raw_data_dir: 'manual_data/'
 # Total traj len = future + past + 1 (current)
-future_traj_len: 30
-past_traj_len: 30
+future_traj_len: 50
+past_traj_len: 50
 skip_frames: 5
 
 split:
@@ -11,6 +11,7 @@ split:
     - 'valid_small_island'
 
 map:
-  width: 16 # in meters
-  height: 16
-  resolution: 0.05
+  width: 64 # in meters
+  height: 64
+  resolution: 0.25
+  elevation_range: 4.0

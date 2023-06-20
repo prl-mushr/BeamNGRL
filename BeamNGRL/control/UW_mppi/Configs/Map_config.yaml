@@ -1,4 +1,4 @@
-map_size: 32
+map_size: 64
 map_res: 0.25
 layers:
   color: 3
