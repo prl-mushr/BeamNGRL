@@ -60,8 +60,8 @@ def train(
                         ctx_tn_dict,
                     )
 
-                    # targets = states_tn
-                    targets = network.process_targets(states_tn)
+                    targets = states_tn
+                    # targets = network.process_targets(states_tn)
 
                     loss = loss_func(pred, targets)
 
@@ -112,8 +112,8 @@ def train(
                             ctx_tn_dict,
                         )
 
-                        # targets = states_tn
-                        targets = network.process_targets(states_tn)
+                        targets = states_tn
+                        # targets = network.process_targets(states_tn)
                         test_batch_loss = loss_func(pred, targets)
 
                     test_avg_loss.append(test_batch_loss.cpu().numpy())

@@ -1,8 +1,8 @@
+import torch
 import numpy as np
 from .dataset_utils import to_np, project_traj_to_map
 from PIL import Image
 import cv2
-
 
 def make_heatmap(bev_map, cmap='inferno'):
     import matplotlib.cm
@@ -58,14 +58,15 @@ def visualize_bev_traj(state, future_traj, past_traj, bev_map, resolution):
     return final_img
 
 
-def get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=0):
+def get_rollouts(future_controls_tn, ctx_tn_dict, network, batch_idx=0):
     curr_state_b = ctx_tn_dict['state'][[batch_idx]]
-    controls_b = controls_tn[[batch_idx]]
+    curr_ctrl_b = ctx_tn_dict['control'][[batch_idx]]
+    future_controls_b = future_controls_tn[[batch_idx]]
     ctx_tn_dict_b = {k: tn[[batch_idx]] for k, tn in ctx_tn_dict.items()}
-    T = controls_b.size(1)
-    curr_state_b = curr_state_b.view(1, 1, -1).expand(-1, T, -1)
-
-    state_rollouts = network.rollout(curr_state_b, controls_b, ctx_tn_dict_b)
+    T = future_controls_b.size(1) + 1
+    states_b = curr_state_b.view(1, 1, -1).expand(-1, T, -1) # current + future states
+    controls_b = torch.cat((curr_ctrl_b, future_controls_b), dim=1)
+    state_rollouts = network.rollout(states_b, controls_b, ctx_tn_dict_b)
     state_rollouts = state_rollouts.squeeze(0)
     return state_rollouts
 
@@ -87,7 +88,6 @@ def visualize_rollouts(
     state = to_np(ctx_dict['state'][batch_idx])
     past_states = to_np(ctx_dict['past_states'][batch_idx])
 
-
     bev_color = to_np(ctx_dict['bev_color'][batch_idx])
     bev_elev = to_np(ctx_dict['bev_elev'][batch_idx].squeeze())
     # bev_normal = to_np(ctx_dict['bev_normal'][batch_idx])
@@ -107,7 +107,7 @@ def visualize_rollouts(
     future_gt_bev, _ = project_traj_to_map(future_traj_gt, grid_size, resolution)
     future_pred_bev, _ = project_traj_to_map(future_traj_pred, grid_size, resolution)
     past_states_bev, _ = project_traj_to_map(past_states, grid_size, resolution)
-    state_bev, _ = project_traj_to_map(state[None, :], grid_size, resolution)
+    state_bev, _ = project_traj_to_map(state, grid_size, resolution)
 
     # Plot trajectories
     size = 3

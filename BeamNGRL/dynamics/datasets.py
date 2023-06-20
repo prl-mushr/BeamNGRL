@@ -158,8 +158,8 @@ class DynamicsDataset(Dataset):
 
         ret = {}
 
-        ret['state'] = state
-        ret['control'] = control
+        ret['state'] = state[None]
+        ret['control'] = control[None]
         ret['curr_time'] = curr_time
 
         ret['past_times'] = past_ts
@@ -180,7 +180,7 @@ class DynamicsDataset(Dataset):
         ctrl_input = ret.get(self.ctrl_input_key)
 
         # Base context, needed for vis
-        ctx_input_dict = {'state': state, 'past_states': past_states, 'past_ctrls': past_ctrls,
+        ctx_input_dict = {'state': state[None], 'control': control[None], 'past_states': past_states, 'past_ctrls': past_ctrls,
                           'bev_color': ret['bev_color'], 'bev_elev': ret['bev_elev'],
                           'bev_normal': ret['bev_normal'],
                           }

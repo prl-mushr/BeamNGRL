@@ -106,12 +106,13 @@ class BaselineMLP(DynamicsBase):
 
         bev_state = ctx_data['state']
 
-        # Get input features
+        # Get input features (w/ normalization if specified)
         state_seq, ctrl_seq = self.process_input(full_input_states, full_input_ctrls)
 
+        print(f'\nPred horizon: {horizon}')
         # Sliding window across full-length trajectory
         pred_states = []
-        for t in range(self.past_len, self.past_len + horizon - 1):
+        for t in range(self.past_len, self.past_len + horizon):
             curr_state = state_seq[:, [t]]
             past_states = state_seq[:, t - self.past_len: t]
 
@@ -130,10 +131,11 @@ class BaselineMLP(DynamicsBase):
             # next_state_feat = self.process_output(next_state)
 
             pred_states += [next_state]
-            state_seq[:, [t+1]] = next_state.clone()
+            if t < self.past_len + horizon - 1:
+                state_seq[:, [t+1]] = next_state.clone()
 
         pred_states = torch.cat(pred_states, dim=1) # B x horizon x s_dim
-
+        print(f'\npred_states shape {pred_states.shape}')
         return pred_states
 
     def _rollout(
@@ -159,7 +161,7 @@ class BaselineMLP(DynamicsBase):
         rollout_states = self._forward(future_states, future_ctrls, ctx_data)
 
         # Unnormalize
-        # next_state_feat = self.process_output(next_state_feat)
+        rollout_states = self.process_output(rollout_states)
 
         # Assign preds. state features to full state tensor
         v_t = rollout_states[..., :3]

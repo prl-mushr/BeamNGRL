@@ -9,7 +9,7 @@ network:
   state_input_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
   state_output_feat: ['vx', 'vy', 'vz', 'wx', 'wy', 'wz']
   control_feat: ['steer', 'throttle']
-  use_normalizer: False
+  use_normalizer: True
 
   class: BaselineMLP
   net_kwargs:

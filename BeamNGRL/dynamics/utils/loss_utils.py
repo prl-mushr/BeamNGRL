@@ -23,8 +23,10 @@ class StatePredMSE(Loss):
 class NextStatePredMSE(Loss):
 
     def loss(self, next_state_preds, next_state_targets):
+        print(f'\nloss: preds shape: {next_state_preds.shape}')
+        print(f'loss: targets shape: {next_state_targets.shape}')
         next_state_preds = next_state_preds[:, :-1] # no label for last prediction
-        next_state_targets = next_state_targets[:, 1:] # first entry is an input.
+        # next_state_targets = next_state_targets[:, 1:] # first entry is an input.
         mse = F.mse_loss(next_state_preds, next_state_targets)
         return mse
 
