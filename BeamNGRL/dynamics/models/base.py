@@ -25,6 +25,7 @@ class DynamicsBase(ABC, nn.Module):
         self.state_input_feat_list = state_input_feat
         self.state_output_feat_list = state_output_feat
         self.ctrl_feat_list = ctrl_feat
+        self.normalizer = None
 
     def process_targets(self, states: torch.Tensor):
         states = get_state_features(states, self.state_output_feat_list)

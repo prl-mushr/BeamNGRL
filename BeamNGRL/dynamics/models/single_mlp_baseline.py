@@ -17,10 +17,6 @@ class ContextMLP(DynamicsBase):
 
         super().__init__(**kwargs)
 
-        feat_idx_tn = get_feat_index_tn(self.state_feat_list)
-
-        self.register_buffer('state_feat_idx', feat_idx_tn)
-
         input_dim = 7 ## vx, vy, wz, roll, pitch, st, th
         output_dim = 7 ## dvx, dvy, ax, ay, dr, dp, dwz
 
@@ -106,12 +102,7 @@ class ContextMLP(DynamicsBase):
             controls,
             ctx_data,
     ):
-        '''
-        so let me get this straight. We have a dynamics class that has a "forward" method,
-        which internally calls a dynamics model that has a rollout method
-        which internall calls a "forward" method, that internall calls the "main" on a sequential NN.
-        The inception is strong with this one.
-        '''
+
         horizon = states.shape[-2]
         for i in range(horizon - 1):
             states[0, :, [i+1], :] = self._forward(

@@ -122,15 +122,6 @@ class DynamicsDataset(Dataset):
         h, w = bevmap.shape[:2]
         return bevmap.reshape((h, w, -1))
 
-    def rotate_trajectories(self, traj, angle):
-        # traj: B, H, dim
-        traj = np.copy(traj)
-        c, s = np.cos(angle), np.sin(angle)
-        R = np.array(((c, -s), (s, c)))
-        traj[:, :, :2] = np.einsum('ij,klj->kli', R, traj[:, :, :2])
-        traj[:, :, 2] += angle
-        return traj
-
     def __getitem__(self, t):
 
         # Load input files
@@ -154,10 +145,21 @@ class DynamicsDataset(Dataset):
         future_ts -= curr_time
         curr_time = 0.
 
+
+        # Data Augmentation
+        if self.aug:
+            (state,
+             past_states,
+             future_states,
+             bev_input_dict) = self.augment_2d(state, past_states, future_states, bev_input_dict)
+
+        # BEV maps: reshape to (C, H, W)
+        bev_input_dict = {k: v.transpose(2, 0, 1) for k, v in bev_input_dict.items()}
+
         ret = {}
 
-        ret['state'] = state
-        ret['control'] = control
+        ret['state'] = state[None]
+        ret['control'] = control[None]
         ret['curr_time'] = curr_time
 
         ret['past_times'] = past_ts
@@ -168,13 +170,61 @@ class DynamicsDataset(Dataset):
         ret['future_states'] = future_states
         ret['future_ctrls'] = future_ctrls
 
-        # BEV maps: reshape to (C, H, W)
-        bev_input_dict = {k: v.transpose(2, 0, 1) for k, v in bev_input_dict.items()}
+        # ret['full_input_states'] = np.concatenate((past_states, state[None], future_states), axis=0)
+        # ret['full_input_ctrls'] = np.concatenate((past_ctrls, control[None], future_ctrls), axis=0)
+
         ret.update(bev_input_dict)
 
         # Get specified inputs
         state_input = ret.get(self.state_input_key)
         ctrl_input = ret.get(self.ctrl_input_key)
-        ctx_input_dict = {k: ret.get(k) for k in self.ctx_input_keys}
+
+        # Base context, needed for vis
+        ctx_input_dict = {'state': state[None], 'control': control[None], 'past_states': past_states, 'past_ctrls': past_ctrls,
+                          'bev_color': ret['bev_color'], 'bev_elev': ret['bev_elev'],
+                          'bev_normal': ret['bev_normal'],
+                          }
+
+        # Additional features
+        ctx_input_dict.update({k: ret.get(k) for k in self.ctx_input_keys})
 
         return state_input, ctrl_input, ctx_input_dict
+
+    def rotate_trajectories_2d(self, traj, angle):
+        # traj: B, H, dim
+        traj = np.copy(traj)
+        c, s = np.cos(angle), np.sin(angle)
+        R = np.array(((c, -s), (s, c)))
+        traj[:, :, :2] = np.einsum('ij,klj->kli', R, traj[:, :, :2])
+        traj[:, :, 5] += angle # yaw
+        return traj
+
+    def rotate_bevmap(self, bevmap, angle):
+        rotation_center = (self.grid_size // 2, self.grid_size // 2) # center of map
+        M = cv2.getRotationMatrix2D(rotation_center, -np.rad2deg(angle), 1.0)
+        # when rotating, set void areas to OHE vector for void (-1)
+        # this is done by setting fillers(border) to zero vector first.
+        size = (int(self.grid_size), int(self.grid_size))
+        bevmap = cv2.warpAffine(bevmap, M, size, flags=cv2.INTER_NEAREST,
+                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        return bevmap
+
+    def augment_2d(self, curr_state, past_states, future_states, bev_dict):
+
+        # Random rotation
+        rotate_angle = np.random.uniform(-np.deg2rad(90), np.deg2rad(90))
+
+        # Current pose: augment yaw angle
+        curr_state[5] += rotate_angle
+
+        # Trajectories: rotate about current pose
+        past_states = self.rotate_trajectories_2d(past_states[None], rotate_angle).squeeze(0)
+        future_states = self.rotate_trajectories_2d(future_states[None], rotate_angle).squeeze(0)
+
+        # BEV-maps
+        bev_dict['bev_color'] = self.rotate_bevmap(bev_dict['bev_color'], rotate_angle)
+        bev_dict['bev_elev'] = self.rotate_bevmap(bev_dict['bev_elev'], rotate_angle)[..., None]
+
+        # bev_dict = {k: self.rotate_bevmap(bm, rotate_angle) for k, bm in bev_dict.items()}
+
+        return curr_state, past_states, future_states, bev_dict

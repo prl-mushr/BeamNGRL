@@ -1,4 +1,4 @@
-raw_data_dir: 'mppi_data/'
+raw_data_dir: 'small_island_mppi/'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
