@@ -12,7 +12,7 @@ import yaml
 import os
 from pathlib import Path
 import time
-
+import cv2
 
 def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/", target_WP=None):
     with open(config_path + 'MPPI_config.yaml') as f:
@@ -54,7 +54,8 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_name=map_name,
             car_make='sunburst',
             map_res=Map_config["map_res"],
-            map_size=Map_config["map_size"]
+            map_size=Map_config["map_size"],
+            elevation_range=4.0
         )
         bng_interface.set_lockstep(True)
         bng_interface.burn_time = Dynamics_config['dt']
@@ -72,7 +73,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 # state = np.zeros(17)
                 pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
-                    goal, pos, target_WP, current_wp_index, 30, step_size=2
+                    goal, pos, target_WP, current_wp_index, 20, step_size=2
                 )
 
                 if terminate:
@@ -113,7 +114,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                     pos,
                     np.copy(goal),
                     # 1/bng_interface.BEV_normal[:,:,2]*0.1,
-                    BEV_path.cpu().numpy(),
+                    cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET),
                     1 / map_res,
                 )
 
