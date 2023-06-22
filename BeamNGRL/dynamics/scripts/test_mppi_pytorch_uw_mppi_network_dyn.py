@@ -36,7 +36,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
     # model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
-    model_weights_path = LOGS_PATH / 'small_island' / 'best_49.pth'
+    model_weights_path = LOGS_PATH / 'small_island' / 'best_48.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
 
     print(model_weights_path)
@@ -146,7 +146,6 @@ if __name__ == "__main__":
 
     start_point = np.array([-67, 336, 34.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-<<<<<<< HEAD
     map_name = "small_island"
 
     #start_point = np.array([-67, 336, 0.5])
@@ -158,10 +157,5 @@ if __name__ == "__main__":
     target_WP = np.load(ROOT_PATH / 'utils' / 'waypoint_files' / "WP_file_offroad.npy")
 
     config_path = str(ROOT_PATH) + "/control/UW_mppi/Configs/"
-=======
-    map_name = "smallgrid"
-    waypoint_path = str(Path(os.getcwd()).parent.parent.parent.absolute()) + "/BeamNGRL/utils/waypoint_files/" + "WP_file_offroad.npy"
-    target_WP = np.load(waypoint_path)
-    config_path = str(Path(os.getcwd()).parent.parent.parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
->>>>>>> origin
+
     main(map_name, start_point, start_quat, config_path, target_WP=target_WP)

@@ -6,8 +6,8 @@ dataset:
   #control_input_key: 'future_ctrls'
   #ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
 
-  name: 'small_island_mppi_sinu'
-  augment: True
+  name: 'small_island_manual'
+  augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
   ctx_input_keys: ['bev_elev', 'bev_normal']
@@ -30,5 +30,4 @@ network:
   opt_kwargs:
     lr: 1.0e-3
 
-loss: AggregatedMSE
-#loss: AggregatedMSE_dV
+loss: AggregatedMSE_dV

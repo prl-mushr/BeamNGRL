@@ -15,17 +15,14 @@ class ContextMLP(DynamicsBase):
             self,
             hidden_depth=2,
             hidden_dim=512,
-            # dt=0.1,
-            dt=0.02,
             batch_norm=False,
             **kwargs,
     ):
 
         super().__init__(**kwargs)
 
-        self.dt = dt
-        input_dim = 10 + 30 ## vx, vy, vz, wx, wy, wz, roll, pitch, st, th
-        output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
+        input_dim = 8 + 30 ## vx, vy, vz, wx, wy, wz, st, th + terrain features
+        output_dim = 8 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt, roll, pitch
 
         fc_layers = [
             nn.Linear(input_dim, hidden_dim),
@@ -87,8 +84,8 @@ class ContextMLP(DynamicsBase):
         self.std[3] *= 0.32675986
         self.std[4] *= 0.25927919
         self.std[5] *= 0.45646246       
-        self.std[6] *= 0.08
-        self.std[7] *= 0.08
+        self.std[6] *= 0.5
+        self.std[7] *= 0.5
 
         self.std[8] *= 0.50912194 
         self.std[9] *= 0.16651182
@@ -101,6 +98,7 @@ class ContextMLP(DynamicsBase):
             controls: torch.Tensor,
             ctx_data: Dict,
             evaluation=False,
+            dt = 0.1
     ):
         n = states.shape[-1]
         n_c = controls.shape[-1]
@@ -109,8 +107,6 @@ class ContextMLP(DynamicsBase):
 
         states_next = states.clone().detach()
         ctrls = controls.clone().detach()
-
-        dt = self.dt
 
         '''
         context data contains BEV hght map --
@@ -145,11 +141,11 @@ class ContextMLP(DynamicsBase):
         vU[..., 4] = (states_next[..., 13] - self.mean[4])/self.std[4]  # wy
         vU[..., 5] = (states_next[..., 14] - self.mean[5])/self.std[5]  # wz
 
-        vU[..., 6] = (states_next[..., 3] - self.mean[6])/self.std[6] # roll
-        vU[..., 7] = (states_next[..., 4] - self.mean[7])/self.std[8] # pitch
+        # vU[..., 6] = (states_next[..., 3] - self.mean[6])/self.std[6] # roll
+        # vU[..., 7] = (states_next[..., 4] - self.mean[7])/self.std[7] # pitch
 
-        vU[..., 8] = (ctrls[..., 0] - self.mean[8])/self.std[8] # steering
-        vU[..., 9] = (ctrls[..., 1] - self.mean[9])/self.std[9] # wheelspeed
+        vU[..., 6] = (ctrls[..., 0] - self.mean[8])/self.std[8] # steering
+        vU[..., 7] = (ctrls[..., 1] - self.mean[9])/self.std[9] # wheelspeed
 
         bev_input = (bev_input.reshape((k*t, self.delta*2, self.delta*2)) - self.mean[10])/self.std[10]
 
@@ -163,11 +159,25 @@ class ContextMLP(DynamicsBase):
         states_next[..., 7] = states_next[..., 7] + dV[..., 1]*12.5 * dt
         states_next[..., 8] = states_next[..., 8] + dV[..., 2]*12.5 * dt
 
-        states_next[..., 12] = states_next[..., 12] + dV[..., 3]*15 * dt
-        states_next[..., 13] = states_next[..., 13] + dV[..., 4]*15 * dt
-        states_next[..., 14] = states_next[..., 14] + dV[..., 5]*15 * dt
+        states_next[..., 12] = states_next[..., 12] + dV[..., 3]* 1.0 * dt
+        states_next[..., 13] = states_next[..., 13] + dV[..., 4]* 1.0 * dt
+        states_next[..., 14] = states_next[..., 14] + dV[..., 5]* 1.0 * dt
 
-        states_next[..., 3:6] = states_next[..., 3:6] + states_next[..., 12:15] * dt ## aggregate roll, pitch errors 
+        states_next[..., 3:5] = (dv[..., 6:8] - self.mean[6:8])/self.std[6:8]
+
+        states_next[..., 6] = states_next[..., 6] + states_next[..., 14] * dt ## aggregate roll, pitch errors 
+
+        with torch.no_grad():
+            cr = torch.cos(states_next[..., 3])
+            sr = torch.sin(states_next[..., 3])
+            cp = torch.cos(states_next[..., 4])
+            sp = torch.sin(states_next[..., 4])
+            cy = torch.cos(states_next[..., 5])
+            sy = torch.sin(states_next[..., 5])
+
+        states_next[..., 0] = states_next[..., 0] + dt*( states_next[..., 6]*cp*cy + states_next[..., 7]*(sr*sp*cy - cr*sy) + states_next[..., 8]*(cr*sp*cy + sr*sy) )
+        states_next[..., 1] = states_next[..., 1] + dt*( states_next[..., 6]*cp*sy + states_next[..., 7]*(sr*sp*sy + cr*cy) + states_next[..., 8]*(cr*sp*sy - sr*cy) )
+        states_next[..., 2] = states_next[..., 2] + dt*( states_next[..., 6]*(-sp) + states_next[..., 7]*(sr*cp)            + states_next[..., 8]*(cr*cp)            )
 
         states_next = states_next.reshape((k,t,n))
 
@@ -178,6 +188,7 @@ class ContextMLP(DynamicsBase):
             states,
             controls,
             ctx_data,
+            dt=0.1,
     ):
 
         horizon = states.shape[-2]
@@ -187,40 +198,46 @@ class ContextMLP(DynamicsBase):
                                     controls[..., [i], :],
                                     ctx_data,
                                     evaluation=True,
+                                    dt=dt
                                 )  # B x 1 x D
         return states
 
     def rollout(
             self,
-            states,
+            states_input,
             controls,
             ctx_data,
+            dt = 0.02
     ):
+        states = states_input.clone().detach()
+        states[..., 1:, :] = states[...,[0],:]
+        # x = states[..., 0].clone().detach()
+        # x[...,1:] = x[..., [0]]
+        # y = states[..., 1].clone().detach()
+        # y[...,1:] = y[..., [0]]
+        # z = states[..., 2].clone().detach()
+        # z[...,1:] = z[..., [0]]
 
-        x = states[..., 0]
-        y = states[..., 1]
-        z = states[..., 2]
-        roll = states[..., 3]
-        pitch = states[..., 4]
-        yaw = states[..., 5]
-        vx = states[..., 6]
-        vy = states[..., 7]
-        vz = states[..., 8]
-        ax = states[..., 9]
-        ay = states[..., 10]
-        az = states[..., 11]
-        wx = states[..., 12]
-        wy = states[..., 13]
-        wz = states[..., 14]
+        # roll = states[..., 3]
+        # pitch = states[..., 4]
+        # yaw = states[..., 5]
+        # vx = states[..., 6]
+        # vy = states[..., 7]
+        # vz = states[..., 8]
+        # ax = states[..., 9]
+        # ay = states[..., 10]
+        # az = states[..., 11]
+        # wx = states[..., 12]
+        # wy = states[..., 13]
+        # wz = states[..., 14]
 
         steer = controls[..., 0]
         throttle = controls[..., 1]
 
         with torch.no_grad():
-            states_pred = self._rollout(states, controls, ctx_data)
+            states_pred = self._rollout(states[...,:15], controls, ctx_data, dt=dt)
 
-        _,_,_,roll,pitch,_,vx, vy, vz, ax, ay, az, wx, wy, wz  = states_pred.split(1, dim=-1)
-
+        x,y,z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz = states_pred.split(1, dim=-1)
         ## squeeze all the singleton dimensions for all the states
         vx = vx.squeeze(-1) # + controls[..., 1]*20
         vy = vy.squeeze(-1)
@@ -233,21 +250,25 @@ class ContextMLP(DynamicsBase):
         wz = wz.squeeze(-1) #vx*torch.tan(controls[..., 0] * 0.5)/2.6
         roll = roll.squeeze(-1)
         pitch = pitch.squeeze(-1)
-        # roll = roll + torch.cumsum(wx*self.dt, dim=-1)
-        # pitch = pitch + torch.cumsum(wy*self.dt, dim=-1)
-        yaw = yaw + torch.cumsum(wz*self.dt, dim=-1)
+        yaw = yaw.squeeze(-1)
+        x = x.squeeze(-1)
+        y = y.squeeze(-1)
+        z = z.squeeze(-1)
+        # roll = roll + torch.cumsum(wx*dt, dim=-1)
+        # pitch = pitch + torch.cumsum(wy*dt, dim=-1)
+        # yaw = yaw + torch.cumsum(wz*dt, dim=-1)
 
-        cy = torch.cos(yaw)
-        sy = torch.sin(yaw)
-        cp = torch.cos(pitch)
-        sp = torch.sin(pitch)
-        cr = torch.cos(roll)
-        sr = torch.sin(roll)
-        ct = torch.sqrt(cp*cp + cr*cr)
+        # cy = torch.cos(yaw)
+        # sy = torch.sin(yaw)
+        # cp = torch.cos(pitch)
+        # sp = torch.sin(pitch)
+        # cr = torch.cos(roll)
+        # sr = torch.sin(roll)
+        # ct = torch.sqrt(cp*cp + cr*cr)
 
-        x = x + self.dt*torch.cumsum(( vx*cp*cy + vy*(sr*sp*cy - cr*sy) + vz*(cr*sp*cy + sr*sy) ), dim=-1)
-        y = y + self.dt*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
-        z = z + self.dt*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
+        # x = x + dt*torch.cumsum(( vx*cp*cy + vy*(sr*sp*cy - cr*sy) + vz*(cr*sp*cy + sr*sy) ), dim=-1)
+        # y = y + dt*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
+        # z = z + dt*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
 
         return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=-1)
 
