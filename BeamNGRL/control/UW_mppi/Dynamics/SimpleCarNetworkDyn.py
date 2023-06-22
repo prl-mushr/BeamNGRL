@@ -70,7 +70,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
     ## remember, this function is called only once! If you have a single-step dynamics function, you will need to roll it out inside this function.
     def forward(self, state, controls):
 
-        states_pred = self.dyn_model.rollout(state, controls, ctx_data={})
+        states_pred = self.dyn_model.rollout(state, controls, ctx_data={'bev_elev':self.BEVmap_height, 'bev_normal':self.BEVmap_normal}, dt =self.dt)
 
         self.states = states_pred
 

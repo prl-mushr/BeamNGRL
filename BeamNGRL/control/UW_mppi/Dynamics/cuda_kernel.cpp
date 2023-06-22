@@ -16,7 +16,9 @@
 #define wz_index 14
 #define st_index 0
 #define th_index 1
-#define GRAVITY 9.8
+#define GRAVITY 9.8f
+#define car_w2 1.0f
+#define car_l2 1.5f
 
 __device__ float nan_to_num(float x, float replace)
 {
@@ -27,9 +29,41 @@ __device__ float nan_to_num(float x, float replace)
     return x;
 }
 
-__global__ void rollout(float* state, float* controls, float* BEVmap_height, float* BEVmap_normal, float dt, int rollouts, int timesteps, int NX, int NC,
-                        float D, float B, float C, float lf, float lr, float Iz, float throttle_to_wheelspeed, float steering_max,
-                        int BEVmap_size_px, float BEVmap_res, float BEVmap_size )
+
+__device__ float map_to_elev(const float x, const float y, const float* elev, const int map_size_px, const float res_inv)
+{
+    int img_X = fminf(fmaxf((int)((x*res_inv) + map_size_px/2), 0), map_size_px - 1);
+    int img_Y = fminf(fmaxf((int)((y*res_inv) + map_size_px/2), 0), map_size_px - 1);
+
+    return elev[img_Y * map_size_px + img_X];
+}
+
+__device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, float& z, 
+                                const float x, const float y, const float cy, const float sy, 
+                                const float* elev, const float map_size_px, const float res_inv)
+{
+    fl[0] = car_l2*cy - car_w2*sy + x;
+    fl[1] = car_l2*sy + car_w2*cy + y;
+
+    fr[0] = car_l2*cy - (-1)*car_w2*sy + x;
+    fr[1] = car_l2*sy + (-1)*car_w2*cy + y;
+    
+    bl[0] = (-1)*car_l2*cy - car_w2*sy + x;
+    bl[1] = (-1)*car_l2*sy + car_w2*cy + y;
+    
+    br[0] = (-1)*car_l2*cy - (-1)*car_w2*sy + x;
+    br[1] = (-1)*car_l2*sy + (-1)*car_w2*cy + y;
+
+    z = map_to_elev(x, y, elev, map_size_px, res_inv);
+    fl[2] = map_to_elev(fl[0], fl[1], elev, map_size_px, res_inv);
+    fr[2] = map_to_elev(fr[0], fr[1], elev, map_size_px, res_inv);
+    bl[2] = map_to_elev(bl[0], bl[1], elev, map_size_px, res_inv);
+    br[2] = map_to_elev(br[0], br[1], elev, map_size_px, res_inv);
+}
+
+__global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
+                        const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size )
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     int state_index = k*timesteps*NX;
@@ -42,11 +76,9 @@ __global__ void rollout(float* state, float* controls, float* BEVmap_height, flo
 
     float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
     float cp, sp, cr, sr, cy, sy, ct;
-    float normal_x, normal_y, normal_z, heading_x, heading_y, heading_z;
-    float left_x, left_y, left_z, forward_x, forward_y, forward_z;
-    int img_X, img_Y;
+    float fl[3], fr[3], bl[3], br[3];
     int norm_base;
-    float bevmap_size_b2 = BEVmap_size*0.5f, res_inv = 1.0f/BEVmap_res;
+    float res_inv = 1.0f/BEVmap_res;
 
     for(int t = 0; t < timesteps-1; t++)
     {
@@ -72,34 +104,15 @@ __global__ void rollout(float* state, float* controls, float* BEVmap_height, flo
         last_roll = state[curr + roll_index];
         last_pitch = state[curr + pitch_index];
 
-        img_X = fminf(fmaxf((int)((x + bevmap_size_b2)*res_inv), 0), BEVmap_size_px - 1);
-        img_Y = fminf(fmaxf((int)((y + bevmap_size_b2)*res_inv), 0), BEVmap_size_px - 1);
-
-        z = BEVmap_height[img_Y * BEVmap_size_px + img_X];
-
         yaw = state[curr + yaw_index];
-
-        norm_base = img_Y * BEVmap_size_px * 3 + img_X * 3;
-        normal_x = BEVmap_normal[norm_base + 0];
-        normal_y = BEVmap_normal[norm_base + 1];
-        normal_z = BEVmap_normal[norm_base + 2];
         
         cy = cosf(yaw);
         sy = sinf(yaw);
-        heading_x = cy;
-        heading_y = sy;
-        heading_z = 0.0;
 
-        left_x = normal_y * heading_z - normal_z * heading_y;
-        left_y = normal_z * heading_x - normal_x * heading_z;
-        left_z = normal_x * heading_y - normal_y * heading_x;
+        get_footprint_z(fl, fr, bl, br, z, x, y, cy, sy, BEVmap_height, BEVmap_size_px, res_inv);
 
-        forward_x = left_y * normal_z - left_z * normal_y;
-        forward_y = left_z * normal_x - left_x * normal_z;
-        forward_z = left_x * normal_y - left_y * normal_x;
-
-        roll = asinf(left_z);
-        pitch = -asinf(forward_z);
+        roll = atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2);
+        pitch = atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2);
 
         wx = (roll - last_roll)/dt;
         wy = (pitch - last_pitch)/dt;
@@ -136,7 +149,7 @@ __global__ void rollout(float* state, float* controls, float* BEVmap_height, flo
         Ffy = Ff * sigmaf_y / sigmaf;
 
         ax = Frx + Ffx * cos(st) - Ffy * sin(st) + sp*GRAVITY;
-        ay = Fry + Ffy * cos(st) + Ffx * sin(st) + sr*GRAVITY;
+        ay = Fry + Ffy * cos(st) + Ffx * sin(st) - sr*GRAVITY;
         az = GRAVITY*ct;
 
         alpha_z = (Ffx * sin(st) * lf + Ffy * lf * cos(st) - Fry * lr) / Iz;

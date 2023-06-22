@@ -3,7 +3,7 @@ from BeamNGRL.BeamNG.beamng_interface import get_beamng_default
 import traceback
 import torch
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
-from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics
+from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDynamics
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
 from BeamNGRL.utils.visualisation import costmap_vis
@@ -48,7 +48,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
         )
 
         bng_interface = get_beamng_default(
-            car_model='RACER',
+            car_model='offroad',
             start_pos=start_pos,
             start_quat=start_quat,
             map_name=map_name,
@@ -57,6 +57,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
             map_size=Map_config["map_size"]
         )
         bng_interface.set_lockstep(True)
+        bng_interface.burn_time = Dynamics_config['dt']
 
         current_wp_index = 0  # initialize waypoint index with 0
         goal = None
@@ -71,7 +72,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 # state = np.zeros(17)
                 pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
-                    goal, pos, target_WP, current_wp_index, 15
+                    goal, pos, target_WP, current_wp_index, 30, step_size=2
                 )
 
                 if terminate:
@@ -126,9 +127,9 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
 if __name__ == "__main__":
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 0.5])
+    start_point = np.array([-67, 336, 34.5])
     start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-    map_name = "smallgrid"
+    map_name = "small_island"
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/control/UW_mppi/Configs/"
     waypoint_path = str(Path(os.getcwd()).parent.absolute()) + "/BeamNGRL/utils/waypoint_files/"
     target_WP = np.load(waypoint_path+"WP_file_offroad.npy")

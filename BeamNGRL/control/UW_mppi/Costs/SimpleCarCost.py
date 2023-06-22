@@ -79,9 +79,9 @@ class SimpleCarCost(torch.nn.Module):
         # state_cost = torch.square(torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) / (self.critical_SA)) - 1, 0, 10) ) ## don't go fast over uneven terrain
         # state_cost = state_cost + torch.clamp(torch.square(self.BEVmap_height[img_Y, img_X]) - 0.09, 0, 10)
         state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
-        vel_cost = torch.square((self.speed_target - vx)/self.speed_target)
+        vel_cost = torch.clamp((vx - self.speed_target),0, 100)
 
-        roll_cost = torch.square(roll)#torch.clamp(torch.square((ay/az) / self.critical_RI ) - 1, 0, 1) + torch.abs(vy/vx)
+        roll_cost = torch.square(roll) + torch.abs(vy/vx) + torch.square(vy*wx) + torch.square(vx*wy)
 
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 
