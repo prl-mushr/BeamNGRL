@@ -36,7 +36,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
     # model_weights_path = LOGS_PATH / 'small_grid' / 'best_201.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_residual' / 'epoch_300.pth'
-    model_weights_path = LOGS_PATH / 'small_island' / 'best_48.pth'
+    model_weights_path = LOGS_PATH / 'small_island' / 'best_18.pth'
     # model_weights_path = LOGS_PATH / 'small_grid_mlp' / 'epoch_1000.pth'
 
     print(model_weights_path)
@@ -88,7 +88,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                 # state = np.zeros(17)
                 pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                 goal, terminate, current_wp_index = update_goal(
-                    goal, pos, target_WP, current_wp_index, 15, step_size=2
+                    goal, pos, target_WP, current_wp_index, 20, step_size=2
                 )
 
                 if terminate:
@@ -129,7 +129,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                     pos,
                     np.copy(goal),
                     # 1/bng_interface.BEV_normal[:,:,2]*0.1,
-                    BEV_path.cpu().numpy(),
+                    cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET),
                     1 / map_res,
                 )
 

@@ -32,7 +32,7 @@ class SimpleCarCost(torch.nn.Module):
         self.BEVmap_height = torch.zeros_like(self.BEVmap)
         self.BEVmap_normal = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item(), 3), dtype=self.dtype, device=self.d)
         self.BEVmap_center = torch.zeros(3, dtype=self.dtype, device=self.d)
-        self.BEVmap_path = torch.zeros_like(self.BEVmap)
+        self.BEVmap_path = torch.zeros_like(self.BEVmap_normal)
 
         self.GRAVITY = torch.tensor(9.8, dtype=self.dtype, device=self.d)
 
@@ -81,7 +81,7 @@ class SimpleCarCost(torch.nn.Module):
         state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
         vel_cost = torch.clamp((vx - self.speed_target),0, 100)
 
-        roll_cost = torch.square(roll) + torch.abs(vy/vx) + torch.square(vy*wx) + torch.square(vx*wy)
+        roll_cost = torch.square(roll) + torch.square(ay/10) + torch.square(vy*wx) + torch.square(vx*wy)
 
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 

@@ -7,7 +7,7 @@ from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
 from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 import time
 from BeamNGRL.dynamics.utils.misc_utils import * ## uncomment on eval
-
+import cv2
 
 class ContextMLP(DynamicsBase):
 
@@ -21,8 +21,8 @@ class ContextMLP(DynamicsBase):
 
         super().__init__(**kwargs)
 
-        input_dim = 8 + 30 ## vx, vy, vz, wx, wy, wz, st, th + terrain features
-        output_dim = 8 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt, roll, pitch
+        input_dim = 10 + 6 ## vx, vy, vz, wx, wy, wz, roll, pitch, st, th
+        output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
 
         fc_layers = [
             nn.Linear(input_dim, hidden_dim),
@@ -45,13 +45,13 @@ class ContextMLP(DynamicsBase):
         ## TODO: import map size and res from training data and throw error during forward pass if the numbers don't square tf up (in training, check on every pass, on inference just check outside for loop)
 
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
-        self.delta = torch.tensor(3/self.BEVmap_res, device=self.d, dtype=torch.long)
+        self.delta = torch.tensor(1.5/self.BEVmap_res, device=self.d, dtype=torch.long)
 
         conv1 = nn.Conv2d(1, 4, kernel_size=4, stride=1)
         maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
         conv2 = nn.Conv2d(4, 4, kernel_size=4, stride=2)
-        fc1 = nn.Linear(64, 48)
-        fc2 = nn.Linear(48, 30)
+        fc1 = nn.Linear(4, 4)
+        fc2 = nn.Linear(4, 6)
 
         cnn_layers = [ conv1, nn.ReLU() ]
         cnn_layers += [maxpool]
@@ -84,8 +84,8 @@ class ContextMLP(DynamicsBase):
         self.std[3] *= 0.32675986
         self.std[4] *= 0.25927919
         self.std[5] *= 0.45646246       
-        self.std[6] *= 0.5
-        self.std[7] *= 0.5
+        self.std[6] *= torch.sin(torch.tensor(0.5))
+        self.std[7] *= torch.sin(torch.tensor(0.5))
 
         self.std[8] *= 0.50912194 
         self.std[9] *= 0.16651182
@@ -113,20 +113,37 @@ class ContextMLP(DynamicsBase):
         I get k bevs of shape k x 1 x bevshape x bevshape
         we don't rotate the image, but we do provide the yaw angle of the vehicle I assume relative to the start?
         '''
-        # with torch.no_grad():
         bev = ctx_data['bev_elev']
         if evaluation:
             bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             angle = -states_next[..., 5] ## the map rotates in the opposite direction to the car!
-            bev_input = crop_rotate_batch(bev, bev_input, center, angle) ## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+            bev_input = crop_rotate_batch(bev, self.delta.item()*2, self.delta.item()*2, center, angle) ## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+            fl = torch.zeros(k, dtype=self.dtype, device=self.d)
+            fr = torch.zeros(k, dtype=self.dtype, device=self.d)
+            bl = torch.zeros(k, dtype=self.dtype, device=self.d)
+            br = torch.zeros(k, dtype=self.dtype, device=self.d)
+            fl = bev_input[ :, 2*self.delta-1, 0]
+            fr = bev_input[ :, 0, 0]
+            bl = bev_input[ :, 2*self.delta-1, 2*self.delta-1]
+            br = bev_input[ :, 0, 2*self.delta-1]
         else:
             bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             angle = -states_next[..., 5] ## the map rotates in the opposite direction to the car!
+            fl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
+            fr = torch.zeros((k,t), dtype=self.dtype, device=self.d)
+            bl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
+            br = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             for i in range(k):
-                bev_input[i,...] = crop_rotate_batch(bev[i,...], bev_input[i,...], center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+                bev_input[i,...] = crop_rotate_batch(bev[i,...], self.delta.item()*2, self.delta.item()*2, center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+                fl[i, :] = bev_input[i, :, 2*self.delta-1, 0]
+                fr[i, :] = bev_input[i, :, 0, 0]
+                bl[i, :] = bev_input[i, :, 2*self.delta-1, 2*self.delta-1]
+                br[i, :] = bev_input[i, :, 0, 2*self.delta-1]
 
+        roll = (torch.atan( ((fl + bl) - (fr + br))/(4*self.delta*self.BEVmap_res))).reshape((k*t))
+        pitch = (torch.atan( ((bl + br) - (fl + fr))/(4*self.delta*self.BEVmap_res))).reshape((k*t))
 
         states_next = states_next.reshape((k*t, n))
         ctrls = ctrls.reshape((k*t, n_c))
@@ -141,11 +158,12 @@ class ContextMLP(DynamicsBase):
         vU[..., 4] = (states_next[..., 13] - self.mean[4])/self.std[4]  # wy
         vU[..., 5] = (states_next[..., 14] - self.mean[5])/self.std[5]  # wz
 
-        # vU[..., 6] = (states_next[..., 3] - self.mean[6])/self.std[6] # roll
-        # vU[..., 7] = (states_next[..., 4] - self.mean[7])/self.std[7] # pitch
+        # terrain derived roll/pitch
+        vU[..., 6] = torch.sin(roll - self.mean[6])/self.std[6] # roll
+        vU[..., 7] = torch.sin(pitch - self.mean[7])/self.std[7] # pitch
 
-        vU[..., 6] = (ctrls[..., 0] - self.mean[8])/self.std[8] # steering
-        vU[..., 7] = (ctrls[..., 1] - self.mean[9])/self.std[9] # wheelspeed
+        vU[..., 8] = (ctrls[..., 0] - self.mean[8])/self.std[8] # steering
+        vU[..., 9] = (ctrls[..., 1] - self.mean[9])/self.std[9] # wheelspeed
 
         bev_input = (bev_input.reshape((k*t, self.delta*2, self.delta*2)) - self.mean[10])/self.std[10]
 
@@ -163,9 +181,7 @@ class ContextMLP(DynamicsBase):
         states_next[..., 13] = states_next[..., 13] + dV[..., 4]* 1.0 * dt
         states_next[..., 14] = states_next[..., 14] + dV[..., 5]* 1.0 * dt
 
-        states_next[..., 3:5] = (dv[..., 6:8] - self.mean[6:8])/self.std[6:8]
-
-        states_next[..., 6] = states_next[..., 6] + states_next[..., 14] * dt ## aggregate roll, pitch errors 
+        states_next[..., 3:6] = states_next[..., 3:6] + states_next[..., 12:15] * dt
 
         with torch.no_grad():
             cr = torch.cos(states_next[..., 3])
@@ -211,29 +227,8 @@ class ContextMLP(DynamicsBase):
     ):
         states = states_input.clone().detach()
         states[..., 1:, :] = states[...,[0],:]
-        # x = states[..., 0].clone().detach()
-        # x[...,1:] = x[..., [0]]
-        # y = states[..., 1].clone().detach()
-        # y[...,1:] = y[..., [0]]
-        # z = states[..., 2].clone().detach()
-        # z[...,1:] = z[..., [0]]
-
-        # roll = states[..., 3]
-        # pitch = states[..., 4]
-        # yaw = states[..., 5]
-        # vx = states[..., 6]
-        # vy = states[..., 7]
-        # vz = states[..., 8]
-        # ax = states[..., 9]
-        # ay = states[..., 10]
-        # az = states[..., 11]
-        # wx = states[..., 12]
-        # wy = states[..., 13]
-        # wz = states[..., 14]
-
         steer = controls[..., 0]
         throttle = controls[..., 1]
-
         with torch.no_grad():
             states_pred = self._rollout(states[...,:15], controls, ctx_data, dt=dt)
 
@@ -254,21 +249,6 @@ class ContextMLP(DynamicsBase):
         x = x.squeeze(-1)
         y = y.squeeze(-1)
         z = z.squeeze(-1)
-        # roll = roll + torch.cumsum(wx*dt, dim=-1)
-        # pitch = pitch + torch.cumsum(wy*dt, dim=-1)
-        # yaw = yaw + torch.cumsum(wz*dt, dim=-1)
-
-        # cy = torch.cos(yaw)
-        # sy = torch.sin(yaw)
-        # cp = torch.cos(pitch)
-        # sp = torch.sin(pitch)
-        # cr = torch.cos(roll)
-        # sr = torch.sin(roll)
-        # ct = torch.sqrt(cp*cp + cr*cr)
-
-        # x = x + dt*torch.cumsum(( vx*cp*cy + vy*(sr*sp*cy - cr*sy) + vz*(cr*sp*cy + sr*sy) ), dim=-1)
-        # y = y + dt*torch.cumsum(( vx*cp*sy + vy*(sr*sp*sy + cr*cy) + vz*(cr*sp*sy - sr*cy) ), dim=-1)
-        # z = z + dt*torch.cumsum(( vx*(-sp) + vy*(sr*cp)            + vz*(cr*cp)            ), dim=-1)
 
         return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=-1)
 
