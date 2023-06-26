@@ -150,7 +150,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         ax = Frx + Ffx * cos(st) - Ffy * sin(st) + sp*GRAVITY;
         ay = Fry + Ffy * cos(st) + Ffx * sin(st) - sr*GRAVITY;
-        az = GRAVITY*ct;
+        az = GRAVITY*ct; // don't integrate this acceleration
 
         alpha_z = (Ffx * sin(st) * lf + Ffy * lf * cos(st) - Fry * lr) / Iz;
 

@@ -3,5 +3,5 @@ noise_0: 1.0
 noise_1: 1.0
 scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
 temperature: 0.1
-max_thr: 1.0
+max_thr: 0.8
 min_thr: -0.2

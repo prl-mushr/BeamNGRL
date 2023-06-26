@@ -2,7 +2,7 @@ import torch
 from BeamNGRL.dynamics.utils.exp_utils import build_nets
 from BeamNGRL.dynamics.utils.network_utils import load_model
 from typing import Dict
-
+import time
 
 def load_dyn_model(config, weights_path, tn_args: Dict = None):
     net, _ = build_nets(config, tn_args, model_weight_file=weights_path)
@@ -69,9 +69,11 @@ class SimpleCarNetworkDyn(torch.nn.Module):
 
     ## remember, this function is called only once! If you have a single-step dynamics function, you will need to roll it out inside this function.
     def forward(self, state, controls):
+        now = time.time()
 
         states_pred = self.dyn_model.rollout(state.squeeze(0), controls.squeeze(0), ctx_data={'bev_elev':self.BEVmap_height, 'bev_normal':self.BEVmap_normal}, dt =self.dt)
-
+        dt = time.time() - now
+        print(dt)
         self.states = states_pred.unsqueeze(0)
 
         return self.states
