@@ -77,7 +77,9 @@ class MPPI(torch.nn.Module):
         states = self.Dynamics.forward(states, controls)
         ## Evaluate costs on STATES with dimensions M x K x T x NX.
         ## Including the terminal costs in here is YOUR own responsibility!
-        cost_total = self.Costs.forward(states, controls) + perturbation_cost
+        cost_total = torch.nan_to_num(
+            self.Costs.forward(states, controls) + perturbation_cost, nan=1000.0
+        )
 
         controls, self.U = self.Sampling.update_control(cost_total, self.U, _state)
         return controls

@@ -33,6 +33,7 @@ class Delta_Sampling(torch.nn.Module):
         self.CTRL_NOISE_MU = torch.zeros(self.nu, dtype=self.dtype, device=self.d)
 
         ## for torchscript we have to initialize these things to same shape and size as what we'll use later
+        torch.manual_seed(0)
         self.noise = (
             torch.matmul(
                 torch.randn((self.K, self.T, self.nu), device=self.d, dtype=self.dtype),
