@@ -9,9 +9,21 @@ Dynamics_config:
   lf: 1.3
   lr: 1.3
   Iz: 1.0
+  type: "slip3d" ## this will be overwritten during evaluation
+  network:
+    state_input_feat: ['vx', 'vy', 'vz']
+    state_output_feat: ['vx', 'vy', 'vz']
+    control_feat: ['steer', 'throttle']
+    use_normalizer: False
+
+    class: ContextMLP
+    net_kwargs:
+      hidden_depth: 2
+      hidden_dim: 32
+      batch_norm: True
 
 MPPI_config:
-  ROLLOUTS: 8
+  ROLLOUTS: 1024
   TIMESTEPS: 50
   BINS: 1
   u_per_command: 1
@@ -27,18 +39,6 @@ Map_config:
     costmap: 1
 
 models: ['noslip3d', 'slip3d', 'TerrainCNN']
-
-network:
-  state_input_feat: ['vx', 'vy', 'vz']
-  state_output_feat: ['vx', 'vy', 'vz']
-  control_feat: ['steer', 'throttle']
-  use_normalizer: False
-
-  class: ContextMLP
-  net_kwargs:
-    hidden_depth: 2
-    hidden_dim: 32
-    batch_norm: True
 
 vehicle:
   make: "sunburst"

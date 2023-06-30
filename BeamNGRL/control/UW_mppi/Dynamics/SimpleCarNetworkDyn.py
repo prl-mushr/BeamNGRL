@@ -73,7 +73,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
 
         states_pred = self.dyn_model.rollout(state.squeeze(0), controls.squeeze(0), ctx_data={'bev_elev':self.BEVmap_height, 'bev_normal':self.BEVmap_normal}, dt =self.dt)
         dt = time.time() - now
-        print(dt)
+        # print(dt)
         self.states = states_pred.unsqueeze(0)
 
         return self.states

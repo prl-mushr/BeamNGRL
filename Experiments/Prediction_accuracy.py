@@ -1,6 +1,5 @@
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDynamics
-from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamics import SimpleCarDynamics as SimpleCarDynamicsNS
 from BeamNGRL.dynamics.utils.exp_utils import get_dataloaders, build_nets, get_loss_func, init_exp_dir
 import torch
 import yaml
@@ -17,11 +16,16 @@ def get_dynamics(model, Config):
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     if model == 'TerrainCNN':
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + "best_18.pth"
+        dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == 'slip3d':
+        Dynamics_config["type"] = "slip3d" ## just making sure 
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
     elif model == 'noslip3d':
+        # temporarily change the dynamics type to noslip3d
+        Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        Dynamics_config["type"] = "slip3d"
     else:
         raise ValueError('Unknown model type')
     return dynamics
@@ -50,8 +54,8 @@ def evaluator(
                 controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                 ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
 
-                BEV_heght = ctx_tn_dict["bev_elev"]
-                BEV_normal = ctx_tn_dict["bev_normal"]
+                BEV_heght = ctx_tn_dict["bev_elev"].squeeze(0).squeeze(0)
+                BEV_normal = ctx_tn_dict["bev_normal"].squeeze(0).squeeze(0)
                 dynamics.set_BEV(BEV_heght, BEV_normal)
 
                 states_tn[0,0,:3] -= states_tn[0, 0, :3].clone() ## subtract off the initial position

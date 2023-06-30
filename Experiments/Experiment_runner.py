@@ -69,7 +69,7 @@ def main(config_path=None, WP_file=None, scenario_name=None, num_iters=3):
                 device=device,
             )
         elif Config["Model_Type"] == "TerrainCNN":
-            model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island" + "best_18.pt"
+            model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + "best_18.pt"
             print(model_weights_path)
             dynamics = SimpleCarNetworkDyn(
                 Dynamics_config, Map_config, MPPI_config,

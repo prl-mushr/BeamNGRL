@@ -59,6 +59,9 @@ def plot_accuracy(config):
     ax2.legend()
     ax3.legend()
     ax4.legend()
+    ax5.legend()
+    ax6.legend()
+
     plt.show()
 
 
