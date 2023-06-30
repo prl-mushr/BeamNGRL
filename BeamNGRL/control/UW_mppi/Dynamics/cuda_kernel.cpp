@@ -77,6 +77,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
     float cp, sp, cr, sr, cy, sy, ct;
     float fl[3], fr[3], bl[3], br[3];
     float res_inv = 1.0f/BEVmap_res;
+    float Nf, Nr;
 
     for(int t = 0; t < timesteps-1; t++)
     {
@@ -119,7 +120,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         sp = sinf(pitch);
         cr = cosf(roll);
         sr = sinf(roll);
-        ct = sqrtf(1 - (sp*sp) - (sr*sr));
+        ct = nan_to_num(sqrtf(1 - (sp*sp) - (sr*sr)), 0.0); // if roll and pitch are super large at the same time this can go nan.
 
         vf = (vx * cosf(st) + vy * sinf(st));
         vr = vx;
@@ -132,13 +133,12 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         sigmaf_x = nan_to_num( Kf / (1 + Kf), 0.01);
         sigmaf_y = nan_to_num( tanf(alphaf) / (1 + Kf), 0.01);
-        sigmaf = sqrtf(sigmaf_x * sigmaf_x + sigmaf_y * sigmaf_y);
+        sigmaf = fmaxf(sqrtf(sigmaf_x * sigmaf_x + sigmaf_y * sigmaf_y), 0.0001);
 
         sigmar_x = nan_to_num( Kr / (1 + Kr), 0.01);
         sigmar_y = nan_to_num( tanf(alphar) / (1 + Kr), 0.01);
-        sigmar = sqrtf(sigmar_x * sigmar_x + sigmar_y * sigmar_y);
+        sigmar = fmaxf(sqrtf(sigmar_x * sigmar_x + sigmar_y * sigmar_y), 0.0001);
 
-        float Nf, Nr;
         Nf = az*0.5 - ax*cg_height/(car_l2*2);
         Nr = az*0.5 + ax*cg_height/(car_l2*2);
 

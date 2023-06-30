@@ -42,12 +42,12 @@ class SimpleCarDynamics:
         self.states = torch.zeros( (self.M, self.K, self.T, 17), dtype=torch.float32, device=torch.device('cuda:0'))
 
         ## pulled these values from: A Hybrid Hierarchical Rally Driver Model for Autonomous Vehicle Agile Maneuvering on Loose Surfaces
-        self.D = np.float32(0.8)
-        self.B = np.float32(6.8)
-        self.C = np.float32(1.5)
-        self.lf = np.float32(1.3)
-        self.lr = np.float32(1.3)
-        self.Iz = np.float32(1.0)
+        self.D = np.float32(Dynamics_config["D"])
+        self.B = np.float32(Dynamics_config["B"])
+        self.C = np.float32(Dynamics_config["C"])
+        self.lf = np.float32(Dynamics_config["lf"])
+        self.lr = np.float32(Dynamics_config["lr"])
+        self.Iz = np.float32(Dynamics_config["Iz"])
 
         self.car_l2 = np.float32(1.5)
         self.car_w2 = np.float32(0.75)

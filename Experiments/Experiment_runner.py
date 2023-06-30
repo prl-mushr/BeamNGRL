@@ -24,6 +24,8 @@ def main(config_path=None, WP_file=None, scenario_name=None, num_iters=3):
         exit()
     
     map_name = scenario_name.split("-")[1]
+    test_name = scenario_name.split("-")[2]
+    test_num = scenario_name.split("-")[3]
     target_WP = np.load(WP_file)
     start_pos = target_WP[0, :3]
     start_quat = target_WP[0, 3:]
@@ -110,7 +112,7 @@ def main(config_path=None, WP_file=None, scenario_name=None, num_iters=3):
                     time.sleep(1)
                     # save the data:
                     result_states = np.array(result_states)
-                    filename = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/" + scenario_name + "-{}-trial-{}.npy".format(Config["Model_Type"], str(trial))
+                    filename = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + Config["Model_Type"] + "/{}-{}-trial-{}.npy".format(test_name, test_num, str(trial))
                     np.save(filename, result_states)
                     trial += 1
                     if(trial < num_iters):
@@ -171,7 +173,7 @@ def main(config_path=None, WP_file=None, scenario_name=None, num_iters=3):
 if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="Test_Config.yml", help="name of the config file to use")
+    parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
     parser.add_argument("--scenario_name", type=str, default="waypoints-small_island-hill-0.npy",help="name of the scenario file to use")
 
     args = parser.parse_args()
