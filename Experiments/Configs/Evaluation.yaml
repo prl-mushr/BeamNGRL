@@ -21,6 +21,7 @@ Dynamics_config:
       hidden_depth: 2
       hidden_dim: 32
       batch_norm: True
+  model_weights: "best_40.pth"
 
 MPPI_config:
   ROLLOUTS: 1024
@@ -38,7 +39,8 @@ Map_config:
     semantics: 3
     costmap: 1
 
-models: ['noslip3d', 'slip3d', 'TerrainCNN']
+# models: ['TerrainCNN']
+models: ['unpurturbed3d','noslip3d','slip3d','TerrainCNN']
 
 vehicle:
   make: "sunburst"

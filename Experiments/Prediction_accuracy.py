@@ -16,7 +16,7 @@ def get_dynamics(model, Config):
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     if model == 'TerrainCNN':
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + "best_18.pth"
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == 'slip3d':
         Dynamics_config["type"] = "slip3d" ## just making sure 
@@ -26,6 +26,13 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["type"] = "slip3d"
+    elif model == 'unpurturbed3d':
+        # temporarily change the dynamics type to noslip3d
+        Dynamics_config["type"] = "slip3d"
+        temp_D = Dynamics_config["D"]
+        Dynamics_config["D"] = 0.0
+        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        Dynamics_config["D"] = temp_D ## change it back
     else:
         raise ValueError('Unknown model type')
     return dynamics
@@ -67,7 +74,6 @@ def evaluator(
                 pred_states = predict_states[:,0,:,:15].cpu().numpy()
                 gt_states = states_tn.clone().cpu().numpy()
                 errors[i,:,:] = (pred_states - gt_states)[0,:,:]
-                
                 if(np.any(np.isnan(pred_states))):
                     print("NaN error")
                     print(pred_states)

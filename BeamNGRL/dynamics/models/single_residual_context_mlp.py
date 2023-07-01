@@ -22,7 +22,7 @@ class ContextMLP(DynamicsBase):
         super().__init__(**kwargs)
 
         input_dim = 10 + 6 ## vx, vy, vz, wx, wy, wz, roll, pitch, st, th
-        output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
+        output_dim = 8 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt, droll, dpitch
 
         fc_layers = [
             nn.Linear(input_dim, hidden_dim),
@@ -46,6 +46,16 @@ class ContextMLP(DynamicsBase):
 
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.delta = torch.tensor(1.5/self.BEVmap_res, device=self.d, dtype=torch.long)
+        self.wheelbase = torch.tensor(2.6/self.BEVmap_res, device=self.d, dtype=torch.long)
+        self.trackwidth = torch.tensor(1.5/self.BEVmap_res, device=self.d, dtype=torch.long)
+        self.flx = self.delta + self.wheelbase//2 # mid plus half of wheelbase
+        self.fly = self.delta + self.trackwidth//2 # mid minus half of trackwidth
+        self.brx = self.delta - self.wheelbase//2 # mid minus half of wheelbase
+        self.bry = self.delta - self.trackwidth//2 # mid plus half of trackwidth
+        self.frx = self.flx
+        self.fry = self.bry
+        self.blx = self.brx
+        self.bly = self.fly
 
         conv1 = nn.Conv2d(1, 4, kernel_size=4, stride=1)
         maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -91,6 +101,7 @@ class ContextMLP(DynamicsBase):
         self.std[9] *= 0.16651182
         # bev elev:
         self.std[10] *= 2.2274804
+        self.GRAVITY = torch.tensor(9.81, dtype=self.dtype, device=self.d)
 
     def _forward(
             self,
@@ -98,7 +109,8 @@ class ContextMLP(DynamicsBase):
             controls: torch.Tensor,
             ctx_data: Dict,
             evaluation=False,
-            dt = 0.1
+            dt = 0.1,
+            count=0,
     ):
         n = states.shape[-1]
         n_c = controls.shape[-1]
@@ -117,33 +129,33 @@ class ContextMLP(DynamicsBase):
         if evaluation:
             bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            angle = -states_next[..., 5] ## the map rotates in the opposite direction to the car!
+            angle = states_next[..., 5]
             bev_input = crop_rotate_batch(bev, self.delta.item()*2, self.delta.item()*2, center, angle) ## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
             fl = torch.zeros(k, dtype=self.dtype, device=self.d)
             fr = torch.zeros(k, dtype=self.dtype, device=self.d)
             bl = torch.zeros(k, dtype=self.dtype, device=self.d)
             br = torch.zeros(k, dtype=self.dtype, device=self.d)
-            fl = bev_input[ :, 2*self.delta-1, 0]
-            fr = bev_input[ :, 0, 0]
-            bl = bev_input[ :, 2*self.delta-1, 2*self.delta-1]
-            br = bev_input[ :, 0, 2*self.delta-1]
+            fl = bev_input[ :, self.fly, self.flx]
+            fr = bev_input[ :, self.fry, self.frx]
+            bl = bev_input[ :, self.bly, self.blx]
+            br = bev_input[ :, self.bry, self.brx]
         else:
             bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            angle = -states_next[..., 5] ## the map rotates in the opposite direction to the car!
+            angle = states_next[..., 5] ## the map rotates in the opposite direction to the car!
             fl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             fr = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             bl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             br = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             for i in range(k):
                 bev_input[i,...] = crop_rotate_batch(bev[i,...], self.delta.item()*2, self.delta.item()*2, center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
-                fl[i, :] = bev_input[i, :, 2*self.delta-1, 0]
-                fr[i, :] = bev_input[i, :, 0, 0]
-                bl[i, :] = bev_input[i, :, 2*self.delta-1, 2*self.delta-1]
-                br[i, :] = bev_input[i, :, 0, 2*self.delta-1]
+                fl[i, :] = bev_input[i, :, self.fly, self.flx]
+                fr[i, :] = bev_input[i, :, self.fry, self.frx]
+                bl[i, :] = bev_input[i, :, self.bly, self.blx]
+                br[i, :] = bev_input[i, :, self.bry, self.brx]
 
-        roll = (torch.atan( ((fl + bl) - (fr + br))/(4*self.delta*self.BEVmap_res))).reshape((k*t))
-        pitch = (torch.atan( ((bl + br) - (fl + fr))/(4*self.delta*self.BEVmap_res))).reshape((k*t))
+        roll = (torch.atan( ((fl + bl) - (fr + br))/(2*self.trackwidth*self.BEVmap_res))).reshape((k*t))
+        pitch = (torch.atan( ((bl + br) - (fl + fr))/(2*self.wheelbase*self.BEVmap_res))).reshape((k*t))
 
         states_next = states_next.reshape((k*t, n))
         ctrls = ctrls.reshape((k*t, n_c))
@@ -177,10 +189,13 @@ class ContextMLP(DynamicsBase):
         states_next[..., 7] = states_next[..., 7] + dV[..., 1]*12.5 * dt
         states_next[..., 8] = states_next[..., 8] + dV[..., 2]*12.5 * dt
 
-        states_next[..., 12] = states_next[..., 12] + dV[..., 3]* 1.0 * dt
-        states_next[..., 13] = states_next[..., 13] + dV[..., 4]* 1.0 * dt
-        states_next[..., 14] = states_next[..., 14] + dV[..., 5]* 1.0 * dt
+        states_next[..., 12] = states_next[..., 12] + dV[..., 3]* 6.0 * dt
+        states_next[..., 13] = states_next[..., 13] + dV[..., 4]* 6.0 * dt
+        states_next[..., 14] = states_next[..., 14] + dV[..., 5]* 2.0 * dt
 
+        # learn the residual for roll and pitch
+        states_next[..., 3] = roll + dV[..., 6]/self.std[6]
+        states_next[..., 4] = pitch + dV[..., 7]/self.std[7]
         states_next[..., 3:6] = states_next[..., 3:6] + states_next[..., 12:15] * dt
 
         with torch.no_grad():
@@ -190,10 +205,15 @@ class ContextMLP(DynamicsBase):
             sp = torch.sin(states_next[..., 4])
             cy = torch.cos(states_next[..., 5])
             sy = torch.sin(states_next[..., 5])
+            ct = torch.sqrt(torch.clamp(1 - sp**2 - sr**2,0,1))
 
-        states_next[..., 0] = states_next[..., 0] + dt*( states_next[..., 6]*cp*cy + states_next[..., 7]*(sr*sp*cy - cr*sy) + states_next[..., 8]*(cr*sp*cy + sr*sy) )
-        states_next[..., 1] = states_next[..., 1] + dt*( states_next[..., 6]*cp*sy + states_next[..., 7]*(sr*sp*sy + cr*cy) + states_next[..., 8]*(cr*sp*sy - sr*cy) )
-        states_next[..., 2] = states_next[..., 2] + dt*( states_next[..., 6]*(-sp) + states_next[..., 7]*(sr*cp)            + states_next[..., 8]*(cr*cp)            )
+            states_next[..., 9] = dV[..., 0]*12.5  - states_next[..., 7]*states_next[..., 5]
+            states_next[..., 10] = dV[..., 1]*12.5 + states_next[..., 6]*states_next[..., 5]
+            states_next[..., 11] = self.GRAVITY*ct - states_next[..., 6]*states_next[..., 13] + states_next[..., 7]*states_next[..., 12]
+
+            states_next[..., 0] = states_next[..., 0] + dt*( states_next[..., 6]*cp*cy + states_next[..., 7]*(sr*sp*cy - cr*sy) + states_next[..., 8]*(cr*sp*cy + sr*sy) )
+            states_next[..., 1] = states_next[..., 1] + dt*( states_next[..., 6]*cp*sy + states_next[..., 7]*(sr*sp*sy + cr*cy) + states_next[..., 8]*(cr*sp*sy - sr*cy) )
+            states_next[..., 2] = states_next[..., 2] + dt*( states_next[..., 6]*(-sp) + states_next[..., 7]*(sr*cp)            + states_next[..., 8]*(cr*cp)            )
 
         states_next = states_next.reshape((k,t,n))
 
@@ -214,7 +234,8 @@ class ContextMLP(DynamicsBase):
                                     controls[..., [i], :],
                                     ctx_data,
                                     evaluation=True,
-                                    dt=dt
+                                    dt=dt,
+                                    count = i,
                                 )  # B x 1 x D
         return states
 

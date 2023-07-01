@@ -14,6 +14,24 @@ import argparse
 import traceback
 import cv2
 
+def get_dynamics(model, Config):
+    Dynamics_config = Config["Dynamics_config"]
+    MPPI_config = Config["MPPI_config"]
+    Map_config = Config["Map_config"]
+    if model == 'TerrainCNN':
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + Dynamics_config["model_weights"]
+        dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
+    elif model == 'slip3d':
+        Dynamics_config["type"] = "slip3d" ## just making sure 
+        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+    elif model == 'noslip3d':
+        # temporarily change the dynamics type to noslip3d
+        Dynamics_config["type"] = "noslip3d"
+        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
+        Dynamics_config["type"] = "slip3d"
+    else:
+        raise ValueError('Unknown model type')
+    return dynamics
 
 def main(config_path=None, WP_file=None, scenario_name=None, num_iters=3):
     if(scenario_name is None or WP_file is None or config_path is None):
