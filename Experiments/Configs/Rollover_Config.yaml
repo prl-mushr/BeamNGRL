@@ -1,0 +1,44 @@
+Map_config:
+  map_size: 64
+  map_res: 0.25
+  elevation_range: 4.0
+  layers:
+    color: 3
+    elevation: 1
+    semantics: 3
+    costmap: 1
+
+vehicle_list: ["rollover_test", "flux"]
+
+vehicles:
+  "rollover_test":
+    cg_height: 0.85
+    wheelbase: 2.6
+    track_width: 1.4
+    max_speed: 20.0
+    max_steer: 0.5
+    mass: 1500.0
+    rotate_speed: 12.0
+    make: "sunburst"
+    model: "rollover_test"
+    accel_gain: 1.0
+    roll_rate_gain: 0.3
+    speed_Kp: 2.0
+  "flux":
+    cg_height: 0.136
+    wheelbase: 0.3
+    track_width: 0.25
+    max_speed: 15.0
+    max_steer: 0.4 ## mushr's max steer is 0.47 actually. track width is 0.23 not 0.25. wheelbase is 0.295 not 0.3
+    mass: 4.0
+    make: "savage"
+    model: "flux"
+    rotate_speed: 5.0
+    accel_gain: 1.0
+    roll_rate_gain: 0.3
+    speed_Kp: 2.0
+
+dt: 0.02
+scenarios: ["smallgrid", "small_island"] ## we will save waypoint files corresponding to each map
+time_limit: 12.0
+num_iters: 10

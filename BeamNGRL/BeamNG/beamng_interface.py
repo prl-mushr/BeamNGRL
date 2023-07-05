@@ -140,6 +140,8 @@ class beamng_interface():
         self.state_init = False
         self.A = np.array([0,0,9.81])
         self.last_A     = np.copy(self.A)
+        self.vel_wf     = np.zeros(3)
+        self.last_vel_wf= np.zeros(3)
         self.quat       = np.array([1,0,0,0])
         self.Tnb, self.Tbn = self.calc_Transform(self.quat)
         self.depth      = None
@@ -157,6 +159,7 @@ class beamng_interface():
         self.whspd_error_diff = 0
         self.elev_map_hgt = 2.0
         self.burn_time = 0.02
+        self.use_vel_diff = True
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -175,6 +178,7 @@ class beamng_interface():
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
                       time_of_day=1200, hide_hud=False, fps=60):
         self.start_pos = start_pos
+        self.start_quat = start_rot
         if not self.use_beamng:
             self.state[:3] = torch.from_numpy(start_pos)
             self.state[3:6] = torch.from_numpy(self.rpy_from_quat(self.convert_beamng_to_REP103(start_rot)))
@@ -200,7 +204,10 @@ class beamng_interface():
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
         time.sleep(2)
-        self.attach_accelerometer()
+        if(car_make == 'savage'):
+            self.attach_accelerometer(pos=(0,0,0.1))
+        else:
+            self.attach_accelerometer()
         time.sleep(2)
         # self.attach_camera(name='camera')
         # time.sleep(2)
@@ -400,8 +407,8 @@ class beamng_interface():
         self.camera_list.append(camera)
         print("camera attached")
 
-    def attach_accelerometer(self):
-        self.accel = Accelerometer('accel', self.bng, self.vehicle, pos = (0, 0.0,0.8), requested_update_time=0.01, is_using_gravity=False)
+    def attach_accelerometer(self, pos=(0, 0.0,0.8)):
+        self.accel = Accelerometer('accel', self.bng, self.vehicle, pos =pos, requested_update_time=0.1, is_using_gravity=False)
         print("accel attached")
 
     def camera_poll(self, index):
@@ -421,15 +428,21 @@ class beamng_interface():
             pass
 
     def Accelerometer_poll(self):
-        try:
-            acc = self.accel.poll()
-            temp_acc = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
-            g_bf = np.matmul(self.Tnb, self.Gravity)
-            if( np.all(temp_acc) != 0):
-                self.last_A = self.A
-                self.A = temp_acc + g_bf
-        except Exception:
-            print(traceback.format_exc())
+        if not self.use_vel_diff:
+            try:
+                acc = self.accel.poll()
+                temp_acc = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
+                g_bf = np.matmul(self.Tnb, self.Gravity)
+                if( np.all(temp_acc) != 0):
+                    self.last_A = self.A
+                    self.A = temp_acc + g_bf
+            except Exception:
+                print(traceback.format_exc())
+        else:
+            acc = (self.vel_wf - self.last_vel_wf)/self.dt
+            self.last_vel_wf = np.copy(self.vel_wf)
+            self.A = 0.8*np.matmul(self.Tnb, acc + self.Gravity) + 0.2*self.last_A
+            self.last_A = np.copy(self.A)
 
     def set_lockstep(self, lockstep):
         self.lockstep = lockstep
@@ -455,7 +468,7 @@ class beamng_interface():
                 # self.lidar_poll(0)                
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.Accelerometer_poll()
-                self.dt = self.vehicle.sensors['timer']['time'] - self.timestamp
+                self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.001)
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
                 self.pos = np.copy(self.vehicle.state['pos'])
@@ -481,7 +494,10 @@ class beamng_interface():
                 self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
                 self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
                 self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
-                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed'] * np.sign(self.vehicle.sensors['electrics']['gear_index'])
+                sign = np.sign(self.vehicle.sensors['electrics']['gear_index'])
+                if sign == 0:
+                    sign = 1 ## special case just to make sure we don't consider 0 speed in neutral gear
+                self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed'] * sign
 
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
@@ -520,15 +536,18 @@ class beamng_interface():
 
         self.vehicle.control(throttle = th_out, brake = br, steering = st)
 
-    def reset(self, start_pos = None):
+    def reset(self, start_pos = None, start_quat=None):
         if(start_pos is None):
             start_pos = np.copy(self.start_pos)
-        self.vehicle.teleport(pos=(start_pos[0], start_pos[1], start_pos[2]))# rot_quat= (start_quat[0], start_quat[1], start_quat[2], start_quat[3]) )
+        if(start_quat is None):
+            start_quat = np.copy(self.start_quat)
+            self.vehicle.teleport(pos=(start_pos[0], start_pos[1], start_pos[2]) )
+        else:
+            self.vehicle.teleport(pos=(start_pos[0], start_pos[1], start_pos[2]), rot_quat= (start_quat[0], start_quat[1], start_quat[2], start_quat[3]) )
         self.vehicle.control(throttle = 0, brake = 0, steering = 0)
         self.flipped_over = False
 
         self.avg_wheelspeed = 0
-        self.dt = 0.016
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0

@@ -5,8 +5,6 @@ import traceback
 import yaml
 import os
 from pathlib import Path
-import time
-import cv2
 from BeamNGRL.utils.keygrabber import KeyGrabber
 
 '''
@@ -17,8 +15,6 @@ All poses in between will be recorded and saved to a file called "experiment.npy
 def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/", target_WP=None):
     with open(config_path + 'Map_config.yaml') as f:
         Map_config = yaml.safe_load(f)
-
-    map_res = Map_config["map_res"]
     
     bng_interface = get_beamng_default(
         car_model='offroad',
@@ -54,7 +50,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
                         wp_list_np = np.array(wp_list)
                         x = int(wp_list_np[0,0])
                         y = int(wp_list_np[0,1])
-                        filepath = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints"
+                        filepath = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/"
                         filepath += "waypoints-{}-{}-{}.npy".format(map_name, str(x), str(y))
                         np.save(filepath, wp_list_np)
                     recording = False

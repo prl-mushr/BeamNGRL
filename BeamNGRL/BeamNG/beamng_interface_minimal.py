@@ -8,11 +8,11 @@ def main(map_name, start_pos, start_quat):
     map_size = 16 # 16 x 16 map
 
     bng_interface = get_beamng_default(
-        car_model='RACER',
+        car_model='flux',
         start_pos=start_pos,
         start_quat=start_quat,
         map_name=map_name,
-        car_make='sunburst',
+        car_make='savage',
         beamng_path=BNG_HOME,
         map_res=map_res,
         map_size=map_size
@@ -29,6 +29,7 @@ def main(map_name, start_pos, start_quat):
             # state information follows ROS REP103 standards (so basically ROS standards): world refernce frame for (x,y,z) is east-north-up(ENU). Body frame ref is front-left-up(FLU)
             state =  bng_interface.state
             pos = state[:3]  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
+            print(pos)
             ## if you just want position, you can also do pos = bng_interface.pos
             ## camera and depth currently unavailable on Ubuntu!
             # color, depth, segmt = bng_interface.color, bng_interface.depth, bng_interface.segmt
@@ -65,7 +66,7 @@ def main(map_name, start_pos, start_quat):
 
 if __name__ == '__main__':
     # position of the vehicle for tripped_flat on grimap_v2
-    start_point = np.array([-67, 336, 34.5])
-    start_quat = np.array([0, 0, 0.3826834, 0.9238795])
-    map_name = "small_island"
+    start_point = np.array([0,0, 0.5])
+    start_quat = np.array([0, 0, 0, 1])
+    map_name = "smallgrid"
     main(map_name,start_point, start_quat)
