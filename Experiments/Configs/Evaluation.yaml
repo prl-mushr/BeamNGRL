@@ -2,7 +2,7 @@ Dynamics_config:
   wheelbase: 2.6
   throttle_to_wheelspeed: 20.0
   steering_max: 0.6
-  dt: 0.02
+  dt: 0.04
   D: 0.8
   B: 6.8
   C: 1.5
@@ -21,11 +21,11 @@ Dynamics_config:
       hidden_depth: 2
       hidden_dim: 32
       batch_norm: True
-  model_weights: "best_40.pth"
+  model_weights: "best_42.pth"
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 50
+  TIMESTEPS: 25
   BINS: 1
   u_per_command: 1
 
@@ -40,14 +40,14 @@ Map_config:
     costmap: 1
 
 # models: ['TerrainCNN']
-models: ['unpurturbed3d','noslip3d','slip3d','TerrainCNN']
+models: ['TerrainCNN']
 
 vehicle:
   make: "sunburst"
   model: "offroad"
 
 dataset:
-  name: 'small_island_manual'
+  name: 'experiment_data_mppi'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

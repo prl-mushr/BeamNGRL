@@ -135,7 +135,7 @@ def main(config_path=None, args=None):
 
                 for trial in range(num_iters):
                     # run once with rollover prevention and once without
-                    for rollover_prevention in [2]:
+                    for rollover_prevention in [0,1,2]:
                         trial_pos = np.copy(start_pos)
                         bng_interface.reset(start_pos=trial_pos, start_quat=start_quat)
                         action = np.zeros(2)

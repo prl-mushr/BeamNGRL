@@ -160,6 +160,7 @@ class beamng_interface():
         self.elev_map_hgt = 2.0
         self.burn_time = 0.02
         self.use_vel_diff = True
+        self.paused = False
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -191,6 +192,9 @@ class beamng_interface():
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
                              rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
         self.bng.set_tod(time_of_day/2400)
+
+        self.bng.set_deterministic()
+
         self.scenario.make(self.bng)
         if(hide_hud):
             self.bng.hide_hud()
@@ -446,10 +450,28 @@ class beamng_interface():
 
     def set_lockstep(self, lockstep):
         self.lockstep = lockstep
+        if self.lockstep:
+            self.paused = False ## assume initially not paused
+        else:
+            self.paused = True ## assume initially paused
+
+    def handle_timing(self):
+        if(self.lockstep):
+            if not self.paused:
+                self.bng.pause()
+                self.paused = True
+            self.bng.step(1)
+        else:
+            if self.paused:
+                self.bng.resume()
+                self.paused = False
 
     def state_poll(self):
         try:
             if(self.state_init == False):
+                assert self.burn_time != 0, "step time can't be 0"
+                self.bng.set_steps_per_second(int(1/self.burn_time)) ## maximum steps per second; we can only guarantee this if running on a high perf. system.
+                self.handle_timing()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)
                 self.Accelerometer_poll()
@@ -460,15 +482,12 @@ class beamng_interface():
                 print("beautiful day, __init__?")
                 time.sleep(1)
             else:
-                if(self.lockstep):
-                    self.bng.resume()
-                    time.sleep(self.burn_time) ## 50Hz
-                    self.bng.pause()
+                self.handle_timing()
                 # self.camera_poll(0)
                 # self.lidar_poll(0)                
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.Accelerometer_poll()
-                self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.001)
+                self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.02)
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
                 self.pos = np.copy(self.vehicle.state['pos'])

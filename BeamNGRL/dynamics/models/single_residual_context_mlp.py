@@ -100,7 +100,7 @@ class ContextMLP(DynamicsBase):
         self.std[8] *= 0.50912194 
         self.std[9] *= 0.16651182
         # bev elev:
-        self.std[10] *= 2.2274804
+        self.std[10] *= 4.0
         self.GRAVITY = torch.tensor(9.81, dtype=self.dtype, device=self.d)
 
     def _forward(
@@ -131,6 +131,7 @@ class ContextMLP(DynamicsBase):
             center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
             angle = states_next[..., 5]
             bev_input = crop_rotate_batch(bev, self.delta.item()*2, self.delta.item()*2, center, angle) ## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+            bev_input -= bev_input[:,self.delta,self.delta].clone().unsqueeze(-1).unsqueeze(-1)
             fl = torch.zeros(k, dtype=self.dtype, device=self.d)
             fr = torch.zeros(k, dtype=self.dtype, device=self.d)
             bl = torch.zeros(k, dtype=self.dtype, device=self.d)
@@ -149,6 +150,7 @@ class ContextMLP(DynamicsBase):
             br = torch.zeros((k,t), dtype=self.dtype, device=self.d)
             for i in range(k):
                 bev_input[i,...] = crop_rotate_batch(bev[i,...], self.delta.item()*2, self.delta.item()*2, center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
+                bev_input[i,...] -= bev_input[i,:,self.delta,self.delta].clone().unsqueeze(-1).unsqueeze(-1)
                 fl[i, :] = bev_input[i, :, self.fly, self.flx]
                 fr[i, :] = bev_input[i, :, self.fry, self.frx]
                 bl[i, :] = bev_input[i, :, self.bly, self.blx]
@@ -177,7 +179,7 @@ class ContextMLP(DynamicsBase):
         vU[..., 8] = (ctrls[..., 0] - self.mean[8])/self.std[8] # steering
         vU[..., 9] = (ctrls[..., 1] - self.mean[9])/self.std[9] # wheelspeed
 
-        bev_input = (bev_input.reshape((k*t, self.delta*2, self.delta*2)) - self.mean[10])/self.std[10]
+        bev_input = (bev_input.reshape((k*t, self.delta*2, self.delta*2)))/self.std[10]
 
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
 
