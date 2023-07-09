@@ -25,7 +25,7 @@ Dynamics_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 25
+  TIMESTEPS: 50
   BINS: 1
   u_per_command: 1
 
@@ -40,14 +40,14 @@ Map_config:
     costmap: 1
 
 # models: ['TerrainCNN']
-models: ['TerrainCNN']
+models: ['unperturbed3d','noslip3d','slip3d']
 
 vehicle:
   make: "sunburst"
   model: "offroad"
 
 dataset:
-  name: 'small_island_mppi'
+  name: 'experiment_data_mppi'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

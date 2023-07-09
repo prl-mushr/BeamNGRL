@@ -1,10 +1,10 @@
 Cost_config:
   goal_w: 1.0 ## weight on the terminal goal cost
   speed_w: 0.0 ## weight with which target speed will be tracked
-  roll_w: 10.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+  roll_w: 100.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
   lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
   speed_target: 10.0 ## target speed in m/s
-  critical_SA: 1.414 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
+  critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
   critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
 
 Dynamics_config:
@@ -30,20 +30,20 @@ Dynamics_config:
       hidden_depth: 2
       hidden_dim: 32
       batch_norm: True
-  model_weights: "best_42.pth"
+  model_weights: "best_40.pth"
 
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
-  scaled_dt: 0.15 ## this is dt * bandwidth of the physical actuators (in what units?)
+  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: -0.2
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 32
+  TIMESTEPS: 30
   BINS: 1
   u_per_command: 1
 
@@ -57,14 +57,14 @@ Map_config:
     semantics: 3
     costmap: 1
 
-models: ['slip3d', 'TerrainCNN']
-scenarios: ['hill-0', 'hill-1', 'ditch-1', 'ditch-2', 'race-0', 'race-1']
-time_limit: [30.0,    30.0,     30.0,      30.0,      60.0,     60.0] ## (simulated) time limit for each scenario.
-lookahead:  [20.0,    20.0,     20.0,      20.0,      20.0,     20.0]  # lookahead on scenario by scenario basis
+models: ['slip3d']
+scenarios: ['ditch-1', 'hill-1', 'hill-2', 'ditch-0', 'ditch-1', 'ditch-2', 'race-0', 'race-1']
+time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,      30.0,       60.0,     60.0] ## (simulated) time limit for each scenario.
+lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,      20.0,       20.0,     20.0]  # lookahead on scenario by scenario basis
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-# scenarios: ['race-1']
-# time_limit: [80.0] ## (simulated) time limit for each scenario.
+# scenarios: ['ditch-0']
+# time_limit: [30.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0]  # lookahead on scenario by scenario basis
 num_iters: 1
 start_pos: [-67, 336, 34.5]
@@ -73,7 +73,7 @@ start_pose_noise: 1.0
 output_dir: "train"
 map_name: "small_island"
 
-save_data: True
+save_data: False
 run_lockstep: True
 
 vehicle:

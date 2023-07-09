@@ -57,7 +57,7 @@ Map_config:
     semantics: 3
     costmap: 1
 
-models: ['noslip3d', 'slip3d', 'TerrainCNN']
+models: ['slip3d']
 scenarios: ['hill-0', 'hill-1', 'ditch-1', 'ditch-2', 'race-0', 'race-1']
 time_limit: [30.0,    30.0,     30.0,      30.0,      60.0,     60.0] ## (simulated) time limit for each scenario.
 lookahead:  [20.0,    20.0,     20.0,      20.0,      20.0,     20.0]  # lookahead on scenario by scenario basis

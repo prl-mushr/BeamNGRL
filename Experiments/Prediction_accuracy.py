@@ -26,11 +26,11 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["type"] = "slip3d"
-    elif model == 'unpurturbed3d':
+    elif model == 'unperturbed3d':
         # temporarily change the dynamics type to noslip3d
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 0.0
+        Dynamics_config["D"] = 0.01
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["D"] = temp_D ## change it back
     else:
@@ -49,9 +49,10 @@ def evaluator(
         dataset_dt = 0.02
         skip = int(dt/dataset_dt) ## please keep the dt a multiple of the dataset_dt
         TIMESTEPS = MPPI_config["TIMESTEPS"]
-        if TIMESTEPS != int(50/skip):
+        if TIMESTEPS != int(100/skip):
             print("dynamics timesteps not equal to dataset timesteps after skipping frames")
             exit()
+        count = 0
         for model in config['models']:
             dynamics = get_dynamics(model, config)
             errors = np.zeros((len(data_loader), TIMESTEPS, 15))
@@ -60,7 +61,10 @@ def evaluator(
                 states_tn = states_tn.to(**tn_args)[:,::skip,:]
                 controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                 ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
-
+                gt_states = states_tn.clone().cpu().numpy()
+                # if(np.mean(np.linalg.norm(gt_states[0,:,9:11], axis=1)) < 8):
+                #     count += 1
+                #     continue
                 BEV_heght = ctx_tn_dict["bev_elev"].squeeze(0).squeeze(0)
                 BEV_normal = ctx_tn_dict["bev_normal"].squeeze(0).squeeze(0)
                 dynamics.set_BEV(BEV_heght, BEV_normal)
@@ -72,12 +76,13 @@ def evaluator(
                 controls = controls_tn.repeat((dynamics.K, 1, 1)).clone()
                 predict_states = dynamics.forward(states, controls)
                 pred_states = predict_states[:,0,:,:15].cpu().numpy()
-                gt_states = states_tn.clone().cpu().numpy()
+
                 errors[i,:,:] = (pred_states - gt_states)[0,:,:]
                 if(np.any(np.isnan(pred_states))):
                     print("NaN error")
                     print(pred_states)
                     exit()
+            print(count)
             dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + model
             if(not os.path.isdir(dir_name)):
                 os.makedirs(dir_name)

@@ -113,6 +113,9 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         roll = atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2);
         pitch = atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2);
 
+        // roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*0.2f + last_roll*0.8f;
+        // pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*0.2f + last_pitch*0.8f;
+
         wx = (roll - last_roll)/dt;
         wy = (pitch - last_pitch)/dt;
 

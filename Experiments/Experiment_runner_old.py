@@ -14,7 +14,7 @@ import os
 import argparse
 import cv2
 
-# torch.manual_seed(0)
+torch.manual_seed(0)
 
 def update_npy_datafile(buffer: List, filepath):
     buff_arr = np.array(buffer)
@@ -82,8 +82,8 @@ def main(config_path=None, args=None):
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
             raise ValueError("Model weights for TerrainCNN do not exist")
     
+
     if not args.remote:
-        print("running local")
         bng_interface = get_beamng_default(
             car_model=vehicle["model"],
             start_pos=start_pos,
@@ -95,9 +95,9 @@ def main(config_path=None, args=None):
             map_size=map_size,
             elevation_range=Map_config["elevation_range"]
         )
-        bng_interface.burn_time = 0.02
+        bng_interface.burn_time = Dynamics_config["dt"]
+
     else:
-        print("running remote")
         if args.host_IP is None:
             raise ValueError("Host IP must be specified when running remote")
 
@@ -113,10 +113,9 @@ def main(config_path=None, args=None):
             elevation_range=Map_config["elevation_range"],
             host_IP=args.host_IP
         )
-        bng_interface.burn_time = 0.02
+        bng_interface.burn_time = Dynamics_config["dt"]*0.4  ## multiply by 0.4 to account for the overhead of the remote connection
 
-    if(Config["run_lockstep"]):
-        bng_interface.set_lockstep(True)
+    bng_interface.set_lockstep(True)
 
     dtype = torch.float
     device = torch.device("cuda")
@@ -135,8 +134,6 @@ def main(config_path=None, args=None):
         costs = SimpleCarCost(Cost_config, Map_config, device=device)
         sampling = Delta_Sampling(Sampling_config, MPPI_config, device=device)
         temp_temperature = torch.clone(sampling.temperature)
-        skips = Dynamics_config["dt"]/bng_interface.burn_time
-
         for model in Config["models"]:
             dynamics = get_dynamics(model, Config)
 
@@ -185,16 +182,11 @@ def main(config_path=None, args=None):
 
 
                     while ts < time_limit:
-                        for _ in range(int(skips)):
-                            bng_interface.state_poll()
-                            state = np.copy(bng_interface.state)
-                            ts = bng_interface.timestamp - last_reset_time
-                            timestamps.append(ts)
-                            state_data.append(state)
-                            reset_data.append(False)
-                            ## append extra data to these lists
+                        bng_interface.state_poll()
+                        state = np.copy(bng_interface.state)
+                        ts = bng_interface.timestamp - last_reset_time
                         pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
-                        goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=Config["wp_radius"])
+                        goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead)
                         ## get robot_centric BEV (not rotated into robot frame)
                         BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
                         BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
@@ -202,14 +194,12 @@ def main(config_path=None, args=None):
                         controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                         controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
                         controller.Costs.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype))  # you can also do this asynchronously
-                        
-                        state_to_ctrl = np.copy(state)
-                        state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
+                        state[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
                         # we use our previous control output as input for next cycle!
-                        state_to_ctrl[15:17] = action ## adhoc wheelspeed.
-                        action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
+                        state[15:17] = action ## adhoc wheelspeed.
+                        action = np.array(controller.forward(torch.from_numpy(state).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
-                        costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
+                        costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_path.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
                         bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
                         damage = False
@@ -222,8 +212,12 @@ def main(config_path=None, args=None):
 
                         result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), np.copy(ts), success, damage ) ))
                         
-                        if success or bng_interface.flipped_over:
+                        if success:
                             break ## break the for loop
+                        
+                        timestamps.append(ts)
+                        state_data.append(state)
+                        reset_data.append(False)
 
 
                     result_states = np.array(result_states)
@@ -231,16 +225,15 @@ def main(config_path=None, args=None):
                     filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
                     if(not os.path.isdir(dir_name)):
                         os.makedirs(dir_name)
+                    np.save(filename, result_states)
                     ## add one last data point because we reset the car
                     timestamps.append(ts)
                     state_data.append(state)
                     reset_data.append(True)
 
-                    if(Config["save_data"]):
-                        np.save(filename, result_states)
-                        timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
-                        state_data = update_npy_datafile(state_data, output_path / "state.npy")
-                        reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
+                    timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
+                    state_data = update_npy_datafile(state_data, output_path / "state.npy")
+                    reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
                 
                 controller.Costs.lethal_w = temp_lethal_w
                 controller.Costs.roll_w = temp_roll_w
@@ -261,7 +254,7 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
-    parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
+    parser.add_argument("--remote", type=str, default="False", help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
 
     args = parser.parse_args()

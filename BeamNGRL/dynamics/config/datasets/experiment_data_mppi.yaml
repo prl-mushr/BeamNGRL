@@ -1,7 +1,7 @@
 raw_data_dir: 'experiment_data/'
 # Total traj len = future + past + 1 (current)
-future_traj_len: 50
-past_traj_len: 50
+future_traj_len: 100
+past_traj_len: 100
 skip_frames: 5
 
 split:
