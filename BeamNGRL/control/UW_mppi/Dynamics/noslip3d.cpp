@@ -62,7 +62,7 @@ __device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, floa
 
 __global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
                         const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
-                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height)
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     int state_index = k*timesteps*NX;
@@ -122,9 +122,9 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         sr = sinf(roll);
         ct = nan_to_num(sqrtf(1 - (sp*sp) - (sr*sr)), 0.0); // if roll and pitch are super large at the same time this can go nan.
 
-        ax = (vx - last_vx) - sp*GRAVITY;
-        ay = (vx*wz) - sr*GRAVITY;
-        az = GRAVITY*ct - vx*wy + vy*wx; // don't integrate this acceleration
+        ax = nan_to_num((vx - last_vx) + sp*GRAVITY, 0.0);
+        ay = nan_to_num((vx*wz) + sr*GRAVITY, 0.0);
+        az = nan_to_num(GRAVITY*ct - vx*wy + vy*wx, GRAVITY); // don't integrate this acceleration
 
         vx = w;
         wz = K*vx;

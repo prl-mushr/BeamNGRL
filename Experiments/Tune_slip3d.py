@@ -29,33 +29,13 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["type"] = "slip3d"
-    elif model == 'slip3d_150':
+    elif model == 'unperturbed3d':
         # temporarily change the dynamics type to noslip3d
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 1.2 ## 150 % of the original D
+        Dynamics_config["D"] = 0.0
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["D"] = temp_D ## change it back
-    elif model == 'slip3d_LPF':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.2 ## apply a LPF with tau = 0.2
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-    elif model == 'slip3d_LPF_drag':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.2 ## apply a LPF with tau = 0.2
-        temp_drag = Dynamics_config["drag_coeff"]
-        temp_res = Dynamics_config["res_coeff"]
-        Dynamics_config["drag_coeff"] = 0.01
-        Dynamics_config["res_coeff"] = 0.01
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-        Dynamics_config["drag_coeff"] = temp_drag
-        Dynamics_config["res_coeff"] = temp_res
     else:
         raise ValueError('Unknown model type')
     return dynamics
@@ -81,20 +61,11 @@ def evaluator(
             dynamics = get_dynamics(model, config)
             errors = np.zeros((len(data_loader), TIMESTEPS, 15))
             for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(data_loader)):
-                # Set device
-                ## skip every 10th step of the for loop
-                # count+=1
-                # if(count%100 != 0):
-                #     continue
                 states_tn = states_tn.to(**tn_args)[:,::skip,:]
                 controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                 ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
                 gt_states = states_tn.clone().cpu().numpy()
-                vel_condition = np.min(gt_states[0,:,6]) < 2
-                acc_condition = np.mean(np.abs(gt_states[0,:,9])) < 2 or np.mean(np.abs(gt_states[0,:,10])) < 2
-                rat_condition = np.mean(np.abs(gt_states[0,:,12])) < 0.05 or np.mean(np.abs(gt_states[0,:,13])) < 0.05
-                rp_condition = np.mean(np.abs(gt_states[0,:,3])) < 0.05 or np.mean(np.abs(gt_states[0,:,4])) < 0.05
-                if(vel_condition or acc_condition or rat_condition or rp_condition):
+                if(np.mean(np.abs(gt_states[0,:,9])) < 2 or np.mean(np.abs(gt_states[0,:,10])) < 2 or np.mean(gt_states[0,:,6]) < 2):
                     count += 1
                     continue
                 BEV_heght = ctx_tn_dict["bev_elev"].squeeze(0).squeeze(0)
@@ -108,26 +79,7 @@ def evaluator(
                 predict_states = dynamics.forward(states, controls)
                 pred_states = predict_states[0,0,:,:15].cpu().numpy()
                 
-                errors[i,:,:] = (pred_states - gt_states)
-                ## remember to normalize these errors by the maximum values of the states for this episode:
-                # print("max values of states")
-
-                
-                ## lets also plot the positions from ground truth and predicted. 
-                # do remember to set x and y lims between -20, 20
-                # plt.plot(gt_states[0,:,0], gt_states[0,:,1], label='gt', color='r')
-                # plt.plot(pred_states[:,0], pred_states[:,1], label='pred', color='b')
-                # # legend
-                # plt.legend(loc='upper left')
-                # # plot title
-                # plt.title('position')
-                # # set the limits:
-                # plt.xlim(-20, 20)
-                # plt.ylim(-20, 20)
-                # # show the plot for 0.1 seconds and then close it automatically
-                # plt.show(block=False)
-                # plt.pause(0.1)
-                # plt.clf()
+                errors[i,:,:] = (pred_states - gt_states) / np.max(np.abs(gt_states[0,:,:]), axis=0)
 
                 if(np.any(np.isnan(pred_states))):
                     print("NaN error")

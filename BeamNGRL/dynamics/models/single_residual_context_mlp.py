@@ -207,10 +207,9 @@ class ContextMLP(DynamicsBase):
             sy = torch.sin(states_next[..., 5])
             ct = torch.sqrt(torch.clamp(1 - sp**2 - sr**2,0,1))
 
-            states_next[..., 9] = dV[..., 0]*12.5  - states_next[..., 7]*states_next[..., 5]
-            states_next[..., 10] = dV[..., 1]*12.5 + states_next[..., 6]*states_next[..., 5]
-            states_next[..., 11] = self.GRAVITY*ct - states_next[..., 6]*states_next[..., 13] + states_next[..., 7]*states_next[..., 12]
-
+            states_next[..., 9] = dV[..., 0]*12.5  - states_next[..., 7]*states_next[..., 14]
+            states_next[..., 10] = dV[..., 1]*12.5 + states_next[..., 6]*states_next[..., 14]
+            states_next[..., 11] = dV[..., 2]*12.5 + self.GRAVITY*ct 
             states_next[..., 0] = states_next[..., 0] + dt*( states_next[..., 6]*cp*cy + states_next[..., 7]*(sr*sp*cy - cr*sy) + states_next[..., 8]*(cr*sp*cy + sr*sy) )
             states_next[..., 1] = states_next[..., 1] + dt*( states_next[..., 6]*cp*sy + states_next[..., 7]*(sr*sp*sy + cr*cy) + states_next[..., 8]*(cr*sp*sy - sr*cy) )
             states_next[..., 2] = states_next[..., 2] + dt*( states_next[..., 6]*(-sp) + states_next[..., 7]*(sr*cp)            + states_next[..., 8]*(cr*cp)            )

@@ -13,6 +13,7 @@ We basically increase the turn angle with each "iteration" of the experiment and
 I wont be using the MPPI controller here since it is not needed.
 '''
 def create_bng_scenario(map_name, make, model, start_pos, start_quat, args):
+    print("creating beamng scenario")
     if args.remote:
         if args.host_IP is None:
             raise ValueError("Host IP must be specified when running remote")
@@ -29,7 +30,7 @@ def create_bng_scenario(map_name, make, model, start_pos, start_quat, args):
             elevation_range=2.0,
             host_IP=args.host_IP
         )
-        bng_interface.burn_time = 0.01  ## remote connection takes up a lot of time, so we don't need to burn time
+        bng_interface.burn_time = 0.02  ## remote connection takes up a lot of time, so we don't need to burn time
         bng_interface.set_lockstep(False)
         return bng_interface
 
@@ -54,8 +55,8 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros
     intervention = False
     whspd2 = max(1.0, wheelspeed)
     whspd2 *= whspd2
-    
     Aylim = t_h_ratio * max(1.0, abs(accBF[2]))
+    delta_steering = 0
     if(rollover_prevention == 2): ## only static limiter
         steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2))
         if(abs(steering_setpoint) > steering_limit):
@@ -66,7 +67,7 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros
         steering_setpoint = min(max(steering_setpoint, -1.0),1.0)
         return steering_setpoint, intervention, delta_steering, 0
 
-    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.4*max_steer
+    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.2*max_steer
 
     if(abs(steering_setpoint) > steering_limit):
         intervention = True
@@ -120,6 +121,7 @@ def main(config_path=None, args=None):
                 model = vehicle["model"]
                 dt = float(Config["dt"])
                 
+                track_width = vehicle["track_width"]
                 t_h_ratio = vehicle["track_width"]/(2*vehicle["cg_height"])
                 max_steer = vehicle["max_steer"]
                 wheelbase = vehicle["wheelbase"]
@@ -140,7 +142,7 @@ def main(config_path=None, args=None):
                         bng_interface.reset(start_pos=trial_pos, start_quat=start_quat)
                         action = np.zeros(2)
                         bng_interface.set_lockstep(True)
-                        for i in range(10):
+                        for i in range(50):
                             bng_interface.state_poll() ## burn through the first few frames to stabilize the car
 
                         last_reset_time = bng_interface.timestamp # update the last reset time
@@ -177,7 +179,7 @@ def main(config_path=None, args=None):
                             dA_dt = 0.1*((Acc - last_A)/dt) + 0.9*last_dA_dt
                             last_dA_dt = np.copy(dA_dt)
                             last_A = np.copy(Acc)
-                            
+                            delta_steering = 0
                             if rollover_prevention:
                                 action[0], intervention, delta_steering, Rollover_detected = steering_limiter(
                                                                                         steer=action[0], 
@@ -197,7 +199,7 @@ def main(config_path=None, args=None):
                                 Rollover_detected = False
                             
                             bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = max_speed, Kp=speed_Kp, Ki=0.05, Kd=0.0, FF_gain=0.0)
-
+                            
                             result_states.append(np.hstack ( ( np.copy(state), bng_interface.flipped_over, rollover_prevention, intervention, Rollover_detected, delta_steering, turn_time, rotate_speed, ts) ))
                             if(start_turning and abs(state[3]) < 15/57.3): ## max value obtained before rollover.
                                 avg_ay.append(abs(state[10]))
@@ -212,7 +214,7 @@ def main(config_path=None, args=None):
                         if(not os.path.isdir(dir_name)):
                             os.makedirs(dir_name)
                         np.save(filename, result_states)
-                        bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = max_speed, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                        bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = max_speed, Kp=speed_Kp, Ki=0.05, Kd=0.0, FF_gain=0.0)
                         ## add one last data point because we reset the car
                 bng_interface.set_lockstep(False)
                 bng_interface.bng.resume()
@@ -235,7 +237,7 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Rollover_Config.yaml", help="name of the config file to use")
-    parser.add_argument("--remote", type=str, default="False", help="whether to connect to a remote beamng server")
+    parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
 
     args = parser.parse_args()

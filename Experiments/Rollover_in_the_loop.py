@@ -13,6 +13,7 @@ import yaml
 import os
 import argparse
 import cv2
+import math as m
 
 # torch.manual_seed(0)
 
@@ -33,9 +34,9 @@ def get_dynamics(model, Config):
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     if model == 'TerrainCNN':
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + Dynamics_config["model_weights"]
+        model_weights_path = LOGS_PATH / "small_island" / Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
-    elif model == 'slip3d':
+    elif model == 'slip3d' or model == 'slip3d_rp':
         Dynamics_config["type"] = "slip3d" ## just making sure 
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
     elif model == 'noslip3d':
@@ -43,36 +44,44 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["type"] = "slip3d"
-    elif model == 'slip3d_150':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 1.2 ## 150 % of the original D
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["D"] = temp_D ## change it back
-    elif model == 'slip3d_LPF':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.2 ## apply a LPF with tau = 0.2
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-    elif model == 'slip3d_LPF_drag':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.2 ## apply a LPF with tau = 0.2
-        temp_drag = Dynamics_config["drag_coeff"]
-        temp_res = Dynamics_config["res_coeff"]
-        Dynamics_config["drag_coeff"] = 0.02
-        Dynamics_config["res_coeff"] = 0.02
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-        Dynamics_config["drag_coeff"] = temp_drag
-        Dynamics_config["res_coeff"] = temp_res
     else:
         raise ValueError('Unknown model type')
     return dynamics
+
+
+def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0):
+    steering_setpoint = steer*max_steer
+    intervention = False
+    whspd2 = max(1.0, wheelspeed)
+    whspd2 *= whspd2
+    Aylim = t_h_ratio * max(1.0, abs(accBF[2]))
+
+    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.2*max_steer
+
+    if(abs(steering_setpoint) > steering_limit):
+        intervention = True
+        steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
+    delta_steering = 0
+    Ay = accBF[1]
+    Ay_error = 0
+    Ay_rate = -roll_rate*accBF[2]/(m.cos(roll)**2)
+    
+    TTR_condition = min(m.fabs(Aylim - m.fabs(Ay))/max(m.fabs(Ay_rate),0.01), 0.9) < 0.5
+    if(abs(Ay) > Aylim):
+        intervention = True
+        if(Ay >= 0):
+            Ay_error = min(Aylim - Ay,0)
+            delta_steering = 4.0*(Ay_error*accel_gain - roll_rate_gain*abs(accBF[2])*roll_rate) * (m.cos(steering_setpoint)**2) * wheelbase / whspd2
+            delta_steering = min(delta_steering, 0)
+        else:
+            Ay_error = max(-Aylim - Ay,0) 
+            delta_steering = 4.0*(Ay_error*accel_gain - roll_rate_gain*abs(accBF[2])*roll_rate) * (m.cos(steering_setpoint)**2) * wheelbase / whspd2
+            delta_steering = max(delta_steering, 0) ## this prevents the car from turning in the opposite direction and causing a rollover by mistake
+        steering_setpoint += delta_steering
+    steering_setpoint = steering_setpoint/max_steer
+    steering_setpoint = min(max(steering_setpoint, -1.0),1.0)
+    return steering_setpoint, intervention, delta_steering, TTR_condition
+
 
 def main(config_path=None, args=None):
     if config_path is None:
@@ -103,7 +112,7 @@ def main(config_path=None, args=None):
         if not os.path.isfile(WP_file):
             raise ValueError("Waypoint file for scenario {} does not exist".format(scenario))
     for models in Config["models"]:
-        if models not in ["TerrainCNN", "slip3d", "noslip3d", 'slip3d_LPF', 'slip3d_150', 'slip3d_LPF_drag']:
+        if models not in ["TerrainCNN", "slip3d", "noslip3d","slip3d_rp"]:
             raise ValueError("Model {} not supported".format(models))
     if Config["models"].count("TerrainCNN") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
@@ -148,7 +157,7 @@ def main(config_path=None, args=None):
     dtype = torch.float
     device = torch.device("cuda")
 
-    output_path = DATA_PATH / 'experiment_data' / Config["output_dir"]
+    output_path = DATA_PATH / 'rollover_data' / Config["output_dir"]
     output_path.mkdir(parents=True, exist_ok=True)
 
     timestamps = []
@@ -157,6 +166,14 @@ def main(config_path=None, args=None):
 
     total_experiments = len(Config["models"]) * len(Config["scenarios"]) * Config["num_iters"]
     experiment_count = 0
+
+    vehicle = Config["vehicles"]["flux"]
+    t_h_ratio = vehicle["track_width"]/(2*vehicle["cg_height"])
+    max_steer = vehicle["max_steer"]
+    wheelbase = vehicle["wheelbase"]
+    time_limit = Config["time_limit"]
+    roll_rate_gain = vehicle["roll_rate_gain"]
+    accel_gain = vehicle["accel_gain"]
 
     try:
         costs = SimpleCarCost(Cost_config, Map_config, device=device)
@@ -237,6 +254,20 @@ def main(config_path=None, args=None):
                         action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
+
+                        if(model=="slip3d_rp"):
+                            action[0], intervention, delta_steering, Rollover_detected = steering_limiter(
+                                                                                        steer=action[0], 
+                                                                                        wheelspeed=bng_interface.avg_wheelspeed, 
+                                                                                        roll = state_to_ctrl[3], 
+                                                                                        roll_rate= state_to_ctrl[12],
+                                                                                        accBF = state_to_ctrl[9:12],
+                                                                                        wheelbase = wheelbase,
+                                                                                        t_h_ratio = t_h_ratio, 
+                                                                                        max_steer = max_steer,
+                                                                                        accel_gain=accel_gain,
+                                                                                        roll_rate_gain=roll_rate_gain)
+
                         bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
                         damage = False
@@ -252,9 +283,8 @@ def main(config_path=None, args=None):
                         if success or bng_interface.flipped_over:
                             break ## break the for loop
 
-
                     result_states = np.array(result_states)
-                    dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + model
+                    dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/" + model
                     filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
                     if(not os.path.isdir(dir_name)):
                         os.makedirs(dir_name)
@@ -287,7 +317,7 @@ def main(config_path=None, args=None):
 if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
+    parser.add_argument("--config_name", type=str, default="Rollover_loop_config.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
 

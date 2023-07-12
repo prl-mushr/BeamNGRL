@@ -4,6 +4,7 @@ from pycuda.compiler import SourceModule
 import pycuda.gpuarray as gpuarray
 import pycuda.driver as cuda
 import numpy as np
+import time
 
 class SimpleCarDynamics:
     """
@@ -48,10 +49,13 @@ class SimpleCarDynamics:
         self.lf = np.float32(Dynamics_config["lf"])
         self.lr = np.float32(Dynamics_config["lr"])
         self.Iz = np.float32(Dynamics_config["Iz"])
+        self.LPF_tau = np.float32(Dynamics_config["LPF_tau"])
+        self.res_coeff = np.float32(Dynamics_config["res_coeff"])
+        self.drag_coeff = np.float32(Dynamics_config["drag_coeff"])
 
         self.car_l2 = np.float32(1.5)
         self.car_w2 = np.float32(0.75)
-        self.cg_height = np.float32(0.5)
+        self.cg_height = np.float32(0.75)
 
         # Set grid and block dimensions
         self.block_dim = MPPI_config["ROLLOUTS"]
@@ -76,11 +80,15 @@ class SimpleCarDynamics:
         controls = gpuarray.to_gpu(controls.squeeze(0).cpu().numpy())
         state_ = gpuarray.to_gpu(state.squeeze(0).cpu().numpy())
 
+        # now = time.time()
         # Launch the CUDA kernel
         self.rollout(state_, controls, self.BEVmap_height, self.BEVmap_normal, self.dt, self.K, self.T, self.NX, self.NC,
                 self.D, self. B, self.C, self.lf, self.lr, self.Iz, self.throttle_to_wheelspeed, self.steering_max,
-                self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.car_l2, self.car_w2, self.cg_height,
+                self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.car_l2, self.car_w2, self.cg_height, self.LPF_tau, self.res_coeff, self.drag_coeff,
                 block=(self.block_dim, 1, 1), grid=(self.grid_dim, 1))
+        cuda.Context.synchronize()
+        # dt = time.time() - now
+        # print(dt*1e3)
         # pack all values:
         self.states  = torch.from_numpy(state_.get()).unsqueeze(0).to(torch.device('cuda'))
 

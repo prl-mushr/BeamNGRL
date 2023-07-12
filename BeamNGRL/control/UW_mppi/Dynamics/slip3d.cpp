@@ -17,6 +17,9 @@
 #define st_index 0
 #define th_index 1
 #define GRAVITY 9.8f
+// very generous limits on acceleration and velocity:
+#define max_vel 40.0f
+#define max_acc 50.0f
 
 __device__ float nan_to_num(float x, float replace)
 {
@@ -27,6 +30,10 @@ __device__ float nan_to_num(float x, float replace)
     return x;
 }
 
+__device__ float clamp(float x, float lower, float upper)
+{
+    return fminf(fmaxf(x, lower), upper);
+}
 
 __device__ float map_to_elev(const float x, const float y, const float* elev, const int map_size_px, const float res_inv)
 {
@@ -62,7 +69,7 @@ __device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, floa
 
 __global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
                         const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
-                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height)
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     int state_index = k*timesteps*NX;
@@ -110,11 +117,8 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         get_footprint_z(fl, fr, bl, br, z, x, y, cy, sy, BEVmap_height, BEVmap_size_px, res_inv, car_l2, car_w2);
 
-        roll = atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2);
-        pitch = atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2);
-
-        // roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*0.2f + last_roll*0.8f;
-        // pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*0.2f + last_pitch*0.8f;
+        roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*LPF_tau + last_roll*(1 - LPF_tau);
+        pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*LPF_tau + last_pitch*(1 - LPF_tau);
 
         wx = (roll - last_roll)/dt;
         wy = (pitch - last_pitch)/dt;
@@ -142,25 +146,29 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         sigmar_y = nan_to_num( tanf(alphar) / (1 + Kr), 0.01);
         sigmar = fmaxf(sqrtf(sigmar_x * sigmar_x + sigmar_y * sigmar_y), 0.0001);
 
-        Nf = az*0.5 - ax*cg_height/(car_l2*2);
-        Nr = az*0.5 + ax*cg_height/(car_l2*2);
+        Nf = (az*lf - ax*cg_height)/(lf + lr);
+        Nr = (az*lr + ax*cg_height)/(lf + lr);
 
         Fr = Nr * D * sinf(C * atanf(B * sigmar));
         Ff = Nf * D * sinf(C * atanf(B * sigmaf));
 
-        Frx = Fr * sigmar_x / sigmar;
+        Frx = (Fr * sigmar_x / sigmar) - res_coeff*vr - drag_coeff*vr*fabsf(vr);
         Fry = Fr * sigmar_y / sigmar;
-        Ffx = Ff * sigmaf_x / sigmaf;
+        Ffx = (Ff * sigmaf_x / sigmaf) - res_coeff*vf - drag_coeff*vf*fabsf(vf) ;
         Ffy = Ff * sigmaf_y / sigmaf;
 
-        ax = Frx + Ffx * cosf(st) - Ffy * sinf(st) - sp*GRAVITY;
-        ay = Fry + Ffy * cosf(st) + Ffx * sinf(st) - sr*GRAVITY;
+        ax = Frx + Ffx * cosf(st) - Ffy * sinf(st) + sp*GRAVITY;
+        // ax = clamp(ax, -max_acc, max_acc);
+        ay = Fry + Ffy * cosf(st) + Ffx * sinf(st) + sr*GRAVITY;
+        // ay = clamp(ay, -max_acc, max_acc);
         az = GRAVITY*ct - vx*wy + vy*wx; // don't integrate this acceleration
-
+        // az = clamp(az, -max_acc, max_acc);
         alpha_z = (Ffx * sinf(st) * lf + Ffy * lf * cosf(st) - Fry * lr) / Iz;
 
         vx += (ax + vy*wz) * dt;
+        // vx = clamp(vx, -max_vel, max_vel);
         vy += (ay - vx*wz) * dt;
+        // vy = clamp(vy, -max_vel, max_vel);
         wz += alpha_z * dt;
         yaw += wz*dt;
         // updated cy sy

@@ -5,10 +5,13 @@ Dynamics_config:
   dt: 0.04
   D: 0.8
   B: 6.8
-  C: 1.5
+  C: 1.75
   lf: 1.3
   lr: 1.3
-  Iz: 1.0
+  Iz: 1.5
+  LPF_tau: 1.0
+  drag_coeff: 0.0
+  res_coeff: 0.0
   type: "slip3d" ## this will be overwritten during evaluation
   network:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -21,7 +24,7 @@ Dynamics_config:
       hidden_depth: 2
       hidden_dim: 32
       batch_norm: True
-  model_weights: "best_42.pth"
+  model_weights: "best_40.pth"
 
 MPPI_config:
   ROLLOUTS: 1024
@@ -39,8 +42,8 @@ Map_config:
     semantics: 3
     costmap: 1
 
-# models: ['TerrainCNN']
-models: ['unperturbed3d','noslip3d','slip3d']
+# models: ['slip3d_LPF_drag']
+models: ['noslip3d', 'slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
 
 vehicle:
   make: "sunburst"

@@ -6,7 +6,7 @@ dataset:
   #control_input_key: 'future_ctrls'
   #ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
 
-  name: 'small_island_manual'
+  name: 'experiment_data_mppi'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

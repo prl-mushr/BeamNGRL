@@ -1,23 +1,23 @@
 Cost_config:
     goal_w: 1.0 ## weight on the terminal goal cost
     speed_w: 0.0 ## weight with which target speed will be tracked
-    roll_w: 100.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+    roll_w: 1.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
     lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
     speed_target: 10.0 ## target speed in m/s
     critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
     critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
   
 Dynamics_config:
-  wheelbase: 2.6
-  throttle_to_wheelspeed: 20.0
-  steering_max: 0.6
-  dt: 0.04
-  D: 0.8
+  wheelbase: 0.33
+  throttle_to_wheelspeed: 15.0
+  steering_max: 0.5
+  dt: 0.02
+  D: 1.0
   B: 6.8
   C: 1.5
-  lf: 1.3
-  lr: 1.3
-  Iz: 1.0
+  lf: 0.14
+  lr: 0.18
+  Iz: 0.1
   type: "slip3d" ## this will be overwritten during evaluation
   network:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -32,40 +32,52 @@ Dynamics_config:
       batch_norm: True
   model_weights: "best_40.pth"
 
+vehicles:
+  "flux":
+    cg_height: 0.136
+    wheelbase: 0.33
+    track_width: 0.25
+    max_speed: 15.0
+    max_steer: 0.5 ## mushr's max steer is 0.47 actually. track width is 0.23 not 0.25. wheelbase is 0.295 not 0.3
+    mass: 4.0
+    make: "savage"
+    model: "flux"
+    rotate_speed: 5.0
+    accel_gain: 0.25
+    roll_rate_gain: 0.15
+
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
   scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
-  max_thr: 0.8
-  min_thr: -0.2
+  max_thr: 0.5
+  min_thr: 0.0
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 32
+  TIMESTEPS: 48
   BINS: 1
   u_per_command: 1
 
 Map_config:
-  map_size: 64
-  map_res: 0.25
-  elevation_range: 4.0
+  map_size: 16
+  map_res: 0.05
+  elevation_range: 2.0
   layers:
     color: 3
     elevation: 1
     semantics: 3
     costmap: 1
 
-models: ['noslip3d', 'slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
-scenarios: ['hill-0', 'hill-2', 'ditch-1']
-time_limit: [30.0,    40.0,     30.0,      50.0]  # (simulated) time limit for each scenario.
-lookahead:  [20.0,    20.0,     20.0,      10.0]  # lookahead on scenario by scenario basis
+wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-# scenarios: ['race-1']
-# time_limit: [80.0] ## (simulated) time limit for each scenario.
-# lookahead:  [20.0]  # lookahead on scenario by scenario basis
-num_iters: 5
+models: ["slip3d_rp"]
+scenarios: ['race-3']
+time_limit: [80.0] ## (simulated) time limit for each scenario.
+lookahead:  [10.0]  # lookahead on scenario by scenario basis
+num_iters: 1
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
@@ -75,9 +87,11 @@ map_name: "small_island"
 save_data: False
 run_lockstep: True
 
+vehicle_list: ["flux"]
+
 vehicle:
-  make: "sunburst"
-  model: "offroad"
+  make: "savage"
+  model: "flux"
 
 dataset:
   name: 'small_island_manual'
