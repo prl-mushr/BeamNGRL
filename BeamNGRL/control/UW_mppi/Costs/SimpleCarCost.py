@@ -84,7 +84,7 @@ class SimpleCarCost(torch.nn.Module):
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )
 
-        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - 4.0, 0, 10.0) + torch.clamp(torch.abs(vz) - 0.15, 0, 10.0)
+        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - 3.0, 0, 10.0) + torch.clamp(torch.abs(vz) - 0.15, 0, 10.0)
         
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 

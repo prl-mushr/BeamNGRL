@@ -77,7 +77,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
     int curr, next, ctrl_base;
 
-    float x, y, z, roll, pitch, last_roll, last_pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
+    float x, y, z, roll, pitch, last_roll=0, last_pitch=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
     float st, w;
 
     float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;

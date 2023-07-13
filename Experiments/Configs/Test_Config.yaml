@@ -4,7 +4,7 @@ Cost_config:
   roll_w: 100.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
   lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
   speed_target: 10.0 ## target speed in m/s
-  critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
+  critical_SA: 1.414 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
   critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
 
 Dynamics_config:
@@ -14,7 +14,7 @@ Dynamics_config:
   dt: 0.04
   D: 0.8
   B: 6.8
-  C: 1.75
+  C: 1.5
   lf: 1.3
   lr: 1.3
   Iz: 1.5
@@ -40,7 +40,7 @@ Sampling_config:
   noise_0: 1.0
   noise_1: 1.0
   scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
-  temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: 0.0
 
@@ -60,17 +60,17 @@ Map_config:
     semantics: 3
     costmap: 1
 
-models: ["slip3d_LPF_drag"]
-# models: ['noslip3d', 'slip3d_150', 'slip3d', 'slip3d_LPF', 'TerrainCNN']
+# models: ["slip3d_LPF"]
+models: ['slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
 scenarios: ['hill-0', 'hill-2', 'ditch-1', 'race-1']
-time_limit: [30.0,    40.0,     30.0,      50.0]  # (simulated) time limit for each scenario.
+time_limit: [20.0,    40.0,     20.0,      50.0]  # (simulated) time limit for each scenario.
 lookahead:  [20.0,    20.0,     20.0,      10.0]  # lookahead on scenario by scenario basis
 # time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,       60.0,     50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,       20.0,     10.0]  # lookahead on scenario by scenario basis
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-# scenarios: ['ditch-1']
-# time_limit: [10.0] ## (simulated) time limit for each scenario.
+# scenarios: ['hill-2']
+# time_limit: [20.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0]  # lookahead on scenario by scenario basis
 num_iters: 5
 start_pos: [-67, 336, 34.5]

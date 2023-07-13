@@ -179,12 +179,15 @@ class ContextMLP(DynamicsBase):
 
         bev_input = (bev_input.reshape((k*t, self.delta*2, self.delta*2)) - self.mean[10])/self.std[10]
 
+        now = time.time()
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
 
         vUc = torch.cat((vU, context), dim=-1)
 
         dV = self.main(vUc)
-
+        dt = time.time() - now
+        print(dt*1e3)
+        torch.cuda.synchronize()
         states_next[..., 6] = states_next[..., 6] + dV[..., 0]*12.5 * dt
         states_next[..., 7] = states_next[..., 7] + dV[..., 1]*12.5 * dt
         states_next[..., 8] = states_next[..., 8] + dV[..., 2]*12.5 * dt

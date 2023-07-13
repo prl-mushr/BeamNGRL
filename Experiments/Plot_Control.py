@@ -88,15 +88,17 @@ def Plot_metircs(Config):
 
 
     # plot the average cost per unit time and success rate for all scenarios for each model:
-    fig, axs = plt.subplots(1,2)
+    fig, axs = plt.subplots(1,3)
     fig.set_size_inches(25.5, 5.5)
     fig.suptitle("Average Success Rate and Cost per unit time for all scenarios")
     axs[0].set_title("Success Rate")
-    axs[1].set_title("Cost per unit time")
+    axs[1].set_title("Cost accrued normalized by maximum time allotted")
+    axs[2].set_title("time taken")
     
     for model in Config["models"]:
         avg_success_rate = []
         avg_cost_per_unit_time = []
+        avg_time_taken = []
         scenario_count = 0
         for scenario in Config["scenarios"]:
             scenario_time_limit = time_limit[scenario_count]
@@ -117,10 +119,10 @@ def Plot_metircs(Config):
                 roll = data[:, 3]
                 pitch = data[:, 4]
                 if roll.any() > np.pi/2:
-                    time_taken.append(scenario_time_limit)
+                    time_taken.append(1.0)
                     damage_rate.append(1)
                 else:
-                    time_taken.append(data[:, -3].max().mean())
+                    time_taken.append(data[:, -3].max().mean()/scenario_time_limit)
                     damage_rate.append(data[:, -1].max().mean())
 
                 ay = data[:, 10]
@@ -132,6 +134,7 @@ def Plot_metircs(Config):
                 cost_per_unit_time.append(cost.sum())
             avg_success_rate.append(np.array(success_rate).mean())
             avg_cost_per_unit_time.append(np.array(cost_per_unit_time).mean())
+            avg_time_taken.append(np.array(time_taken).mean())
         ## now plot the data:
         avg_success_rate = np.array(avg_success_rate)
         avg_cost_per_unit_time = np.array(avg_cost_per_unit_time)
@@ -140,9 +143,14 @@ def Plot_metircs(Config):
         avg_success_rate_std = avg_success_rate.std()
         avg_cost_per_unit_time_mean = avg_cost_per_unit_time.mean()
         avg_cost_per_unit_time_std = avg_cost_per_unit_time.std()
+        avg_time_taken_mean = np.array(avg_time_taken).mean()
+        avg_time_taken_std = np.array(avg_time_taken).std()
         ## plot the data:
         axs[0].bar(model, avg_success_rate_mean, yerr=avg_success_rate_std, align='center', alpha=0.5, ecolor='black', capsize=10)
         axs[1].bar(model, avg_cost_per_unit_time_mean, yerr=avg_cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
+        axs[2].bar(model, avg_time_taken_mean, yerr=avg_time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
+
+
     fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + "avg_success_rate_cost_per_unit_time.png")
     plt.close(fig)
 

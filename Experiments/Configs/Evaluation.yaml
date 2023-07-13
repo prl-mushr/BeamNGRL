@@ -42,8 +42,8 @@ Map_config:
     semantics: 3
     costmap: 1
 
-# models: ['slip3d_LPF_drag']
-models: ['noslip3d', 'slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
+models: ['TerrainCNN']
+# models: ['noslip3d', 'slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
 
 vehicle:
   make: "sunburst"

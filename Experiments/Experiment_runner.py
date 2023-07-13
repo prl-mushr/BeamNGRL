@@ -108,6 +108,11 @@ def main(config_path=None, args=None):
     if Config["models"].count("TerrainCNN") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
             raise ValueError("Model weights for TerrainCNN do not exist")
+
+    if not Config["save_data"]:
+        print("WARNING: Data will not be saved!")
+    if Config["run_lockstep"]:
+        print("Running in lockstep mode")
     
     if not args.remote:
         print("running local")
