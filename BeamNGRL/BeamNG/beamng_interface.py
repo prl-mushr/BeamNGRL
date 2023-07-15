@@ -207,12 +207,12 @@ class beamng_interface():
         self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-        time.sleep(2)
+        # time.sleep(2)
         if(car_make == 'savage'):
             self.attach_accelerometer(pos=(0,0,0.1))
         else:
             self.attach_accelerometer()
-        time.sleep(2)
+        # time.sleep(2)
         # self.attach_camera(name='camera')
         # time.sleep(2)
         # self.attach_lidar(name='lidar')

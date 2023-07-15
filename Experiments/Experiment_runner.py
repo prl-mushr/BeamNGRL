@@ -64,8 +64,8 @@ def get_dynamics(model, Config):
         Dynamics_config["LPF_tau"] = 0.2 ## apply a LPF with tau = 0.2
         temp_drag = Dynamics_config["drag_coeff"]
         temp_res = Dynamics_config["res_coeff"]
-        Dynamics_config["drag_coeff"] = 0.02
-        Dynamics_config["res_coeff"] = 0.02
+        Dynamics_config["drag_coeff"] = 0.01
+        Dynamics_config["res_coeff"] = 0.01
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["LPF_tau"] = temp_LPF ## change it back
         Dynamics_config["drag_coeff"] = temp_drag
@@ -189,10 +189,12 @@ def main(config_path=None, args=None):
 
                 temp_lethal_w = torch.clone(controller.Costs.lethal_w)
                 temp_roll_w = torch.clone(controller.Costs.roll_w)
+                temp_scaled_dt = torch.clone(controller.Sampling.scaled_dt)
 
                 if scenario.split('-')[0] == "race":
                     controller.Costs.lethal_w = torch.tensor(10.0, device=device)
                     controller.Costs.roll_w = torch.tensor(1.0, device=device) ## reduce weighting on physics costs
+                    controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
 
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
@@ -214,7 +216,6 @@ def main(config_path=None, args=None):
                     
                     experiment_count += 1
                     print("Experiment: {}/{}".format(experiment_count, total_experiments), end='\r')
-
 
                     while ts < time_limit:
                         for _ in range(int(skips)):
@@ -242,7 +243,7 @@ def main(config_path=None, args=None):
                         action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
-                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
                         damage = False
                         if(type(bng_interface.broken) == dict ):
@@ -276,6 +277,7 @@ def main(config_path=None, args=None):
                 
                 controller.Costs.lethal_w = temp_lethal_w
                 controller.Costs.roll_w = temp_roll_w
+                controller.Sampling.scaled_dt = temp_scaled_dt
                 ## reset the weights
     except KeyboardInterrupt:
         pass

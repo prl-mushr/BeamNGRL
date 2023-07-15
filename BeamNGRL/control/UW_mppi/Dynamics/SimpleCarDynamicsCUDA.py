@@ -61,7 +61,7 @@ class SimpleCarDynamics:
         self.block_dim = MPPI_config["ROLLOUTS"]
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
-        file_path = '/home/stark/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])
+        file_path = '/root/catkin_ws/src/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])
 
         with open(file_path, 'r') as file:
             self.cuda_code = file.read()

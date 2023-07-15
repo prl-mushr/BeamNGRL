@@ -43,12 +43,14 @@ def Plot_metircs(Config):
                 ## extract the time taken using the last timestamp:
                 roll = data[:, 3]
                 pitch = data[:, 4]
-                if roll.any() > np.pi/2:
-                    time_taken.append(scenario_time_limit)
-                    damage_rate.append(1)
+                if roll.any() > np.pi/2 or data[:, -2].any() != 1:
+                    time_taken.append(1)
+                    if roll.any() > np.pi/2:
+                        damage_rate.append(1)
                 else:
-                    time_taken.append(data[:, -3].max().mean())
+                    time_taken.append(data[:, -3].max().mean()/scenario_time_limit)
                     damage_rate.append(data[:, -1].max().mean())
+
 
                 ay = data[:, 10]
                 az = data[:, 11]

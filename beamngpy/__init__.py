@@ -15,7 +15,7 @@ from .procedural import *
 from .road import *
 from .scenario import *
 from .vehicle import *
-from .visualiser import *
+# from .visualiser import *
 
 
 def read(fil):
