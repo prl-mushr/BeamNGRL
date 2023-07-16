@@ -11,4 +11,7 @@ Iz: 1.0
 LPF_tau: 1.0
 res_coeff: 0.0
 drag_coeff: 0.0
+car_length: 3.0
+car_width: 1.5
+cg_height: 0.5
 type: "noslip3d" ## other option is noslip3d

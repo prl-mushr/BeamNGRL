@@ -53,15 +53,15 @@ class SimpleCarDynamics:
         self.res_coeff = np.float32(Dynamics_config["res_coeff"])
         self.drag_coeff = np.float32(Dynamics_config["drag_coeff"])
 
-        self.car_l2 = np.float32(1.5)
-        self.car_w2 = np.float32(0.75)
-        self.cg_height = np.float32(0.75)
+        self.car_l2 = np.float32(Dynamics_config["car_length"]/2)
+        self.car_w2 = np.float32(Dynamics_config["car_width"]/2)
+        self.cg_height = np.float32(Dynamics_config["cg_height"])
 
         # Set grid and block dimensions
-        self.block_dim = MPPI_config["ROLLOUTS"]
+        self.block_dim = 1024 # use 32 for jetson, use 1024 for RTX GPUs
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
-        file_path = '/root/catkin_ws/src/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])
+        file_path = '/home/stark/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])
 
         with open(file_path, 'r') as file:
             self.cuda_code = file.read()

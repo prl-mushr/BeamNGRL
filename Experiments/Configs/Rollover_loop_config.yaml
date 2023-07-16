@@ -1,5 +1,5 @@
 Cost_config:
-    goal_w: 1.0 ## weight on the terminal goal cost
+    goal_w: 1.5 ## weight on the terminal goal cost
     speed_w: 0.0 ## weight with which target speed will be tracked
     roll_w: 1.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
     lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
@@ -18,6 +18,12 @@ Dynamics_config:
   lf: 0.14
   lr: 0.18
   Iz: 0.1
+  LPF_tau: 1.0
+  res_coeff: 0.0
+  drag_coeff: 0.0
+  car_length: 0.3
+  car_width: 0.25
+  cg_height: 0.136
   type: "slip3d" ## this will be overwritten during evaluation
   network:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -50,9 +56,9 @@ Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
-  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
-  temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
-  max_thr: 0.5
+  scaled_dt: 0.04 ## this is dt * bandwidth of the physical actuators (in what units?)
+  temperature: 0.04 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  max_thr: 0.8
   min_thr: 0.0
 
 MPPI_config:
@@ -74,7 +80,7 @@ Map_config:
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 models: ["slip3d_rp"]
-scenarios: ['race-3']
+scenarios: ['race-4']
 time_limit: [80.0] ## (simulated) time limit for each scenario.
 lookahead:  [10.0]  # lookahead on scenario by scenario basis
 num_iters: 1
