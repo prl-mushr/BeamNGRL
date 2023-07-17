@@ -5,7 +5,7 @@ from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDyn
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
 from BeamNGRL.utils.visualisation import costmap_vis
-from BeamNGRL.utils.planning import update_goal
+from BeamNGRL.utils.planning import update_goal, find_closest_index
 from BeamNGRL import DATA_PATH, LOGS_PATH
 from typing import List
 import torch
@@ -186,11 +186,7 @@ def main(config_path=None, args=None):
 
             controller = MPPI(dynamics, costs, sampling, MPPI_config, device)
             scenario_count = 0
-
-            if(model == "TerrainCNN"):
-                controller.Sampling.temperature = torch.tensor(0.05, device=device)
-            else:
-                controller.Sampling.temperature = temp_temperature
+                
 
             for scenario in Config["scenarios"]:
                 # load the scenario waypoints:
@@ -201,18 +197,30 @@ def main(config_path=None, args=None):
 
                 temp_lethal_w = torch.clone(controller.Costs.lethal_w)
                 temp_roll_w = torch.clone(controller.Costs.roll_w)
+                temp_temperature = torch.clone(controller.Sampling.temperature)
+
+                
 
                 if scenario.split('-')[0] == "race":
                     controller.Costs.lethal_w = torch.tensor(10.0, device=device)
                     controller.Costs.roll_w = torch.tensor(1.0, device=device) ## reduce weighting on physics costs
+                    controller.Sampling.temperature = torch.tensor(0.04, device=device)
 
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
                 scenario_count += 1
 
+                use_elevation = False
+
                 for trial in range(Config["num_iters"]):
                     trial_pos = np.copy(start_pos)
                     trial_pos[:2] += np.random.uniform(-Config["start_pose_noise"], Config["start_pose_noise"], size=2)
+                    if map_name == "smallgrid":
+                        use_elevation = False
+                        trial_pos[2] = 0.1
+                    else:
+                        use_elevation = True
+                        trial_pos[2] += 0.1
                     bng_interface.reset(start_pos=trial_pos, start_quat=start_quat)
                     current_wp_index = 0  # initialize waypoint index with 0
                     goal = None
@@ -221,12 +229,19 @@ def main(config_path=None, args=None):
                     success = False
                     result_states = []
 
-                    last_reset_time = bng_interface.timestamp # update the last reset time
-                    ts = bng_interface.timestamp - last_reset_time
                     
                     experiment_count += 1
                     print("Experiment: {}/{}".format(experiment_count, total_experiments), end='\r')
 
+                    # initialization
+                    for i in range(int(1/Dynamics_config["dt"])):
+                        bng_interface.state_poll()
+                        last_reset_time = bng_interface.timestamp # update the last reset time
+                        state = np.copy(bng_interface.state)
+                        ts = bng_interface.timestamp - last_reset_time
+                        timestamps.append(ts)
+                        state_data.append(state)
+                        reset_data.append(False)
 
                     while ts < time_limit:
                         for _ in range(int(skips)):
@@ -240,8 +255,9 @@ def main(config_path=None, args=None):
                         pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                         goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=Config["wp_radius"])
                         ## get robot_centric BEV (not rotated into robot frame)
-                        BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
-                        BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
+
+                        BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)*use_elevation
+                        BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)*use_elevation
                         BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255
                         controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                         controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
@@ -280,7 +296,26 @@ def main(config_path=None, args=None):
 
                         result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), np.copy(ts), success, damage ) ))
                         
-                        if success or bng_interface.flipped_over:
+                        if bng_interface.flipped_over:
+                            closest_index = find_closest_index(pos, target_WP)
+                            reset_pos = target_WP[closest_index,:3]
+                            if map_name == "smallgrid":
+                                reset_pos[2] = 0.1
+                            else:
+                                reset_pos[2] += 0.1
+                            reset_quat = target_WP[closest_index, 3:]
+                            bng_interface.reset(start_pos=reset_pos, start_quat=reset_quat)
+                            ## give it 1 second penalty. This also helps the car stabilize after being "dropped"
+                            for i in range(int(1/Dynamics_config["dt"])):
+                                bng_interface.state_poll()
+                                state = np.copy(bng_interface.state)
+                                ts = bng_interface.timestamp - last_reset_time
+                                timestamps.append(ts)
+                                state_data.append(state)
+                                reset_data.append(False)
+                                controller.reset()
+
+                        if success:
                             break ## break the for loop
 
                     result_states = np.array(result_states)
@@ -301,6 +336,7 @@ def main(config_path=None, args=None):
                 
                 controller.Costs.lethal_w = temp_lethal_w
                 controller.Costs.roll_w = temp_roll_w
+                controller.Sampling.temperature = temp_temperature
                 ## reset the weights
     except KeyboardInterrupt:
         pass

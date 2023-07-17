@@ -64,14 +64,14 @@ Map_config:
     costmap: 1
 
 models: ['slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
-scenarios: ['hill-0', 'hill-2', 'ditch-0' ,'ditch-1', 'race-0', 'race-1']
-time_limit: [20.0,    40.0,     20.0,       20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
-lookahead:  [20.0,    20.0,     20.0,       20.0,      20.0,     15.0]  # lookahead on scenario by scenario basis
+scenarios: ['hill-0', 'hill-2' ,'ditch-1', 'race-0', 'race-1']
+time_limit: [20.0,    40.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
+lookahead:  [20.0,    20.0,     20.0,      20.0,     15.0]  # lookahead on scenario by scenario basis
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 # scenarios: ['race-1']
 # time_limit: [80.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0]  # lookahead on scenario by scenario basis
-num_iters: 1
+num_iters: 10
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0

@@ -22,3 +22,6 @@ def update_goal(goal, pos, target_WP, current_wp_index, lookahead, step_size=1, 
                 break
         
         return target_WP[current_wp_index, :2], terminate, current_wp_index  ## new goal
+
+def find_closest_index(pos, target_WP):
+    return np.argmin(np.linalg.norm(target_WP[:,:2] - pos, axis=1))

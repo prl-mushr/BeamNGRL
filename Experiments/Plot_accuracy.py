@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import argparse
 
-def remove_outliers(data, threshold=3):
+def remove_outliers(data, threshold=2):
     # Calculate the z-scores for each data point
     z_scores = (data - np.mean(data, axis=1, keepdims=True)) / np.std(data, axis=1, keepdims=True)
 
@@ -22,8 +22,8 @@ def remove_outliers(data, threshold=3):
 
 def create_error_plot(errors, timesteps, model, ax, plot='mean'):
     plot_error = np.linalg.norm(errors, axis=2)
-    # plot_error = remove_outliers(plot_error)
     mean = np.mean(plot_error, axis=0)
+    plot_error = remove_outliers(plot_error)
     std = np.std(plot_error, axis=0)
     # calculate the RMSE:
     rmse = np.sqrt(np.mean(plot_error**2, axis=0))

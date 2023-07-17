@@ -113,12 +113,12 @@ class SimpleCarCost(torch.nn.Module):
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bly_px, blx_px,0]))
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bry_px, brx_px,0]))
 
-        state_cost[torch.where(state_cost > 4*0.81)] = 100
+        # state_cost[torch.where(state_cost > 0.81)] = 100
         vel_cost = torch.clamp((vx - self.speed_target),0, 100)
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )
 
-        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - 3.5, 0, 10.0) + 10*torch.clamp(torch.abs(vz) - 0.15, 0, 10.0)
+        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - 10.0, 0, 10.0) + 2*torch.clamp(torch.abs(vz) - 0.15, 0, 10.0)
         
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 
