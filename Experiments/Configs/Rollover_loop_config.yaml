@@ -16,8 +16,8 @@ Dynamics_config:
   throttle_to_wheelspeed: 15.0
   steering_max: 0.5
   dt: 0.02
-  D: 1.2
-  B: 2.0
+  D: 1.0
+  B: 6.8
   C: 1.5
   lf: 0.14
   lr: 0.18
@@ -83,11 +83,11 @@ Map_config:
 
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-models: ["slip3d_rp"]
+models: ["slip3d", "slip3d_rp"]
 scenarios: ['roll-0', 'race-4']
-time_limit: [30.0, 60.0] ## (simulated) time limit for each scenario.
+time_limit: [60.0, 60.0] ## (simulated) time limit for each scenario.
 lookahead:  [8.0, 8.0]  # lookahead on scenario by scenario basis
-num_iters: 1
+num_iters: 10
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
