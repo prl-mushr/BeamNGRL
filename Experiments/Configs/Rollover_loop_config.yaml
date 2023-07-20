@@ -16,8 +16,8 @@ Dynamics_config:
   throttle_to_wheelspeed: 15.0
   steering_max: 0.5
   dt: 0.02
-  D: 1.0
-  B: 6.8
+  D: 1.2
+  B: 2.0
   C: 1.5
   lf: 0.14
   lr: 0.18
@@ -48,7 +48,7 @@ vehicles:
     wheelbase: 0.33
     track_width: 0.25
     max_speed: 15.0
-    max_steer: 0.5 ## mushr's max steer is 0.47 actually. track width is 0.23 not 0.25. wheelbase is 0.295 not 0.3
+    max_steer: 0.488 ## mushr's max steer is 0.47 actually. track width is 0.23 not 0.25. wheelbase is 0.295 not 0.3
     mass: 4.0
     make: "savage"
     model: "flux"
@@ -67,7 +67,7 @@ Sampling_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 48
+  TIMESTEPS: 40
   BINS: 1
   u_per_command: 1
 
@@ -83,16 +83,16 @@ Map_config:
 
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-models: ["slip3d", "slip3d_rp"]
+models: ["slip3d_rp"]
 scenarios: ['roll-0', 'race-4']
-time_limit: [30.0, 30.0] ## (simulated) time limit for each scenario.
+time_limit: [30.0, 60.0] ## (simulated) time limit for each scenario.
 lookahead:  [8.0, 8.0]  # lookahead on scenario by scenario basis
-num_iters: 10
+num_iters: 1
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 output_dir: "train"
-map_name: "small_island"
+map_name: "smallgrid"
 
 save_data: True
 run_lockstep: True

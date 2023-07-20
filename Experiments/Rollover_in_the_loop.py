@@ -49,16 +49,17 @@ def get_dynamics(model, Config):
     return dynamics
 
 
-def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0):
+def steering_limiter(steer=0, wheelspeed=0, roll=0, rotBF=np.zeros(3),  accBF=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0):
     steering_setpoint = steer*max_steer
     intervention = False
     whspd2 = max(1.0, wheelspeed)
     whspd2 *= whspd2
     Aylim = t_h_ratio * max(1.0, abs(accBF[2]))
+    roll_rate = rotBF[0]
 
-    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.2*max_steer
+    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.4*max_steer
 
-    if(abs(steering_setpoint) > steering_limit):
+    if(abs(steering_setpoint) > steering_limit and rotBF[2]*accBF[1] > 0):
         intervention = True
         steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
     delta_steering = 0
@@ -276,7 +277,7 @@ def main(config_path=None, args=None):
                                                                                         steer=action[0], 
                                                                                         wheelspeed=bng_interface.avg_wheelspeed, 
                                                                                         roll = state_to_ctrl[3], 
-                                                                                        roll_rate= state_to_ctrl[12],
+                                                                                        rotBF = state_to_ctrl[12:15],
                                                                                         accBF = state_to_ctrl[9:12],
                                                                                         wheelbase = wheelbase,
                                                                                         t_h_ratio = t_h_ratio, 
