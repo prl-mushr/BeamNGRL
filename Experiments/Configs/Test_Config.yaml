@@ -6,7 +6,11 @@ Cost_config:
   speed_target: 10.0 ## target speed in m/s
   critical_SA: 1.414 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
   critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
-
+  car_bb_width: 2.0
+  car_bb_length: 3.0
+  critical_vert_acc: 3.5
+  critical_vert_spd: 0.15
+  
 Dynamics_config:
   wheelbase: 2.6
   throttle_to_wheelspeed: 20.0

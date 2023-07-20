@@ -7,3 +7,7 @@ lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise
 speed_target: 10.0 ## target speed in m/s
 critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
 critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
+car_bb_width: 2.0
+car_bb_length: 3.0
+critical_vert_acc: 3.5
+critical_vert_spd: 0.15

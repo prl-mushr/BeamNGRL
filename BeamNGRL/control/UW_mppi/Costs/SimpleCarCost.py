@@ -20,6 +20,8 @@ class SimpleCarCost(torch.nn.Module):
         self.speed_target = torch.tensor(Cost_config["speed_target"], dtype=self.dtype, device=self.d)
         self.critical_RI = torch.tensor(Cost_config["critical_RI"], dtype=self.dtype, device=self.d)
         self.lethal_w = torch.tensor(Cost_config["lethal_w"], dtype=self.dtype, device=self.d)
+        self.critical_vert_acc = torch.tensor(Cost_config["critical_vert_acc"], dtype=self.dtype, device=self.d)
+        self.critical_vert_spd = torch.tensor(Cost_config["critical_vert_spd"], dtype=self.dtype, device=self.d)
         self.goal_w = torch.tensor(Cost_config["goal_w"], dtype=self.dtype, device=self.d)
         self.speed_w = torch.tensor(Cost_config["speed_w"], dtype=self.dtype, device=self.d)
         self.roll_w = torch.tensor(Cost_config["roll_w"], dtype=self.dtype, device=self.d)
@@ -38,8 +40,8 @@ class SimpleCarCost(torch.nn.Module):
 
         self.goal_state = torch.zeros(2, device = self.d, dtype=self.dtype)
 
-        self.car_l2 = torch.tensor(1.5, dtype=self.dtype, device=self.d)
-        self.car_w2 = torch.tensor(0.75, dtype=self.dtype, device=self.d)
+        self.car_w2 = torch.tensor(Cost_config["car_bb_width"]/2, dtype=self.dtype, device=self.d)
+        self.car_l2 = torch.tensor(Cost_config["car_bb_length"]/2, dtype=self.dtype, device=self.d)
 
     @torch.jit.export
     def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_path):
@@ -47,7 +49,6 @@ class SimpleCarCost(torch.nn.Module):
         BEVmap_height, BEVmap_normal are robot-centric elevation and normal maps.
         BEV_path is the x,y,z coordinate at the center of the map. Technically this could just be x,y, but its easier to just remove it from all dims at once.
         '''
-        assert BEVmap_height.shape[0] == self.BEVmap_size_px
         self.BEVmap_height = BEVmap_height
         self.BEVmap_normal = BEVmap_normal
         self.BEVmap_path = BEV_path  # translate the state into the center of the costmap.
@@ -55,6 +56,10 @@ class SimpleCarCost(torch.nn.Module):
     @torch.jit.export
     def set_goal(self, goal_state):
         self.goal_state = goal_state[:2]
+
+    @torch.jit.export
+    def set_speed_limit(self, speed_lim):
+        self.speed_target = torch.tensor(speed_lim, dtype=self.dtype, device=self.d)
 
     def meters_to_px(self, meters):
         return torch.clamp( ((meters + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0, self.BEVmap_size_px - 1)
@@ -118,7 +123,7 @@ class SimpleCarCost(torch.nn.Module):
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )
 
-        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - 10.0, 0, 10.0) + 2*torch.clamp(torch.abs(vz) - 0.15, 0, 10.0)
+        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - self.critical_vert_acc, 0, 10.0) + 2*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
         
         terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
 

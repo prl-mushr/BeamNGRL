@@ -208,7 +208,7 @@ class beamng_interface():
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
         # time.sleep(2)
-        if(car_make == 'savage'):
+        if(car_make[:6] == 'savage'):
             self.attach_accelerometer(pos=(0,0,0.1))
         else:
             self.attach_accelerometer()
@@ -445,7 +445,7 @@ class beamng_interface():
         else:
             acc = (self.vel_wf - self.last_vel_wf)/self.dt
             self.last_vel_wf = np.copy(self.vel_wf)
-            self.A = 0.8*np.matmul(self.Tnb, acc + self.Gravity) + 0.2*self.last_A
+            self.A = 0.2*np.matmul(self.Tnb, acc + self.Gravity) + 0.8*self.last_A
             self.last_A = np.copy(self.A)
 
     def set_lockstep(self, lockstep):

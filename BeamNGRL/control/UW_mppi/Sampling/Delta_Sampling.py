@@ -44,6 +44,7 @@ class Delta_Sampling(torch.nn.Module):
 
         self.max_thr = torch.tensor(sampling_config["max_thr"], dtype=self.dtype, device = self.d)
         self.min_thr = torch.tensor(sampling_config["min_thr"], dtype=self.dtype, device = self.d)
+        self.cost_total = 0
 
     def sample(self, state, U):
         '''
@@ -84,6 +85,7 @@ class Delta_Sampling(torch.nn.Module):
         return controls, delta_controls
         '''
         beta = torch.min(cost_total)
+        self.cost_total = cost_total.clone()
         cost_total_non_zero = torch.exp((-1 / self.temperature) * (cost_total - beta))
 
         eta = torch.sum(cost_total_non_zero)
