@@ -72,12 +72,16 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
                         const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if(k > rollouts)
+    {
+        return;
+    }
     int state_index = k*timesteps*NX;
     int control_index = k*timesteps*NC;
 
     int curr, next, ctrl_base;
 
-    float x, y, z, roll, pitch, last_roll=0, last_pitch=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
+    float x, y, z=0, roll, pitch, last_roll=0, last_pitch=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
     float st, w;
 
     float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
@@ -86,6 +90,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
     float res_inv = 1.0f/BEVmap_res;
     float Nf, Nr;
 
+    __syncthreads();
     for(int t = 0; t < timesteps-1; t++)
     {
         curr = t*NX + state_index;

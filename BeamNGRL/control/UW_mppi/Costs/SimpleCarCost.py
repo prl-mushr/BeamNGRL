@@ -20,6 +20,7 @@ class SimpleCarCost(torch.nn.Module):
         self.speed_target = torch.tensor(Cost_config["speed_target"], dtype=self.dtype, device=self.d)
         self.critical_RI = torch.tensor(Cost_config["critical_RI"], dtype=self.dtype, device=self.d)
         self.lethal_w = torch.tensor(Cost_config["lethal_w"], dtype=self.dtype, device=self.d)
+        self.stop_w   = torch.tensor(Cost_config["stop_w"], dtype=self.dtype, device=self.d)
         self.critical_vert_acc = torch.tensor(Cost_config["critical_vert_acc"], dtype=self.dtype, device=self.d)
         self.critical_vert_spd = torch.tensor(Cost_config["critical_vert_spd"], dtype=self.dtype, device=self.d)
         self.goal_w = torch.tensor(Cost_config["goal_w"], dtype=self.dtype, device=self.d)
@@ -107,7 +108,6 @@ class SimpleCarCost(torch.nn.Module):
         brx_px = self.meters_to_px(brx)
         bry_px = self.meters_to_px(bry)
         
-        # state_cost = torch.square(torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) / (self.critical_SA)) - 1, 0, 10) ) ## don't go fast over uneven terrain
         # state_cost = state_cost + torch.clamp(torch.square(self.BEVmap_height[img_Y, img_X]) - 0.09, 0, 10)
         # state_cost = torch.square(self.BEVmap_path[img_Y, img_X,0])
         # evaluate state cost using footprint
@@ -117,8 +117,8 @@ class SimpleCarCost(torch.nn.Module):
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[fry_px, frx_px,0]))
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bly_px, blx_px,0]))
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bry_px, brx_px,0]))
+        state_cost = state_cost + self.stop_w*torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) - (self.critical_SA)), 0, 10) ## lethal costs go here.
 
-        # state_cost[torch.where(state_cost > 0.81)] = 100
         vel_cost = torch.clamp((vx - self.speed_target),0, 100)
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )

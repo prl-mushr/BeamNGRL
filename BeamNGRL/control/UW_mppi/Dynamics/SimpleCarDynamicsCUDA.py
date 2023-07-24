@@ -56,7 +56,7 @@ class SimpleCarDynamics:
         self.cg_height = np.float32(Dynamics_config["cg_height"])
 
         # Set grid and block dimensions
-        self.block_dim = 32 # use 32 for jetson, use 1024 for RTX GPUs
+        self.block_dim = min(MPPI_config["ROLLOUTS"], 1024) # use 32 for jetson, use 1024 for RTX GPUs
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
         file_path = '/root/catkin_ws/src/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])

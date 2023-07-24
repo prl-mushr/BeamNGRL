@@ -50,7 +50,7 @@ def create_bng_scenario(map_name, make, model, start_pos, start_quat, args):
     bng_interface.set_lockstep(True)
     return bng_interface
 
-def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros(3), dA_dt=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0, rollover_prevention=1):
+def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros(3), dA_dt=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0, rollover_prevention=1, steer_slack=0.2):
     steering_setpoint = steer*max_steer
     intervention = False
     whspd2 = max(1.0, wheelspeed)
@@ -67,7 +67,7 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros
         steering_setpoint = min(max(steering_setpoint, -1.0),1.0)
         return steering_setpoint, intervention, delta_steering, 0
 
-    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.2*max_steer
+    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + steer_slack*max_steer
 
     if(abs(steering_setpoint) > steering_limit):
         intervention = True
@@ -132,6 +132,7 @@ def main(config_path=None, args=None):
                 roll_rate_gain = vehicle["roll_rate_gain"]
                 accel_gain = vehicle["accel_gain"]
                 speed_Kp = vehicle["speed_Kp"]
+                steer_slack = vehicle["steer_slack"]
 
                 bng_interface = create_bng_scenario(scenario, make, model, start_pos, start_quat, args)
 
@@ -151,7 +152,7 @@ def main(config_path=None, args=None):
                         experiment_count += 1
                         print("Experiment: {}/{}".format(experiment_count, total_experiments)) #, end='\r')
 
-                        rotate_speed = rotate_speed_default*(0.8 + 0.4*float(trial/num_iters)) ## 
+                        rotate_speed = rotate_speed_default* (0.8 + 0.4*float(trial/num_iters)) ## 
 
                         start_turning = False
                         last_A = np.array([0,0,9.81])
@@ -193,7 +194,8 @@ def main(config_path=None, args=None):
                                                                                         max_steer = max_steer,
                                                                                         accel_gain=accel_gain,
                                                                                         roll_rate_gain=roll_rate_gain,
-                                                                                        rollover_prevention=rollover_prevention,)
+                                                                                        rollover_prevention=rollover_prevention,
+                                                                                        steer_slack = steer_slack)
 
                             else:
                                 Rollover_detected = False
@@ -201,8 +203,8 @@ def main(config_path=None, args=None):
                             bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = max_speed, Kp=speed_Kp, Ki=0.05, Kd=0.0, FF_gain=0.0)
                             
                             result_states.append(np.hstack ( ( np.copy(state), bng_interface.flipped_over, rollover_prevention, intervention, Rollover_detected, delta_steering, turn_time, rotate_speed, ts) ))
-                            if(start_turning and abs(state[3]) < 15/57.3): ## max value obtained before rollover.
-                                avg_ay.append(abs(state[10]))
+                            if(start_turning and abs(state[3]) < 10/57.3): ## max value obtained before rollover.
+                                avg_ay.append(abs(state[10] - 9.8*np.sin(state[3])))
                             if bng_interface.flipped_over:
                                 print("rollover!")
                                 break ## break the while loop and reset the car
