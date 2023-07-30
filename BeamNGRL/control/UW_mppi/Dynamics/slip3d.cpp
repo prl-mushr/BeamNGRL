@@ -85,6 +85,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
     float st, w;
 
     float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
+    float roll_rate, pitch_rate, yaw_rate;
     float cp, sp, cr, sr, cy, sy, ct;
     float fl[3], fr[3], bl[3], br[3];
     float res_inv = 1.0f/BEVmap_res;
@@ -108,8 +109,8 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         vy = state[curr + vy_index];
         vz = 0;
 
-        wx = 0;
-        wy = 0;
+        wx = state[curr + wx_index];
+        wy = state[curr + wy_index];
         wz = state[curr + wz_index];
 
         last_roll = state[curr + roll_index];
@@ -125,14 +126,17 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*LPF_tau + last_roll*(1 - LPF_tau);
         pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*LPF_tau + last_pitch*(1 - LPF_tau);
 
-        wx = (roll - last_roll)/dt;
-        wy = (pitch - last_pitch)/dt;
+        roll_rate = (roll - last_roll)/dt;
+        pitch_rate = (pitch - last_pitch)/dt;
 
         cp = cosf(pitch);
         sp = sinf(pitch);
         cr = cosf(roll);
         sr = sinf(roll);
         ct = nan_to_num(sqrtf(1 - (sp*sp) - (sr*sr)), 0.0); // if roll and pitch are super large at the same time this can go nan.
+
+        wx = roll_rate - sp*yaw_rate;
+        wy = cp*sr*yaw_rate + cr*pitch_rate;
 
         vf = (vx * cosf(st) + vy * sinf(st));
         vr = vx;
@@ -175,7 +179,10 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         vy += (ay - vx*wz) * dt;
         // vy = clamp(vy, -max_vel, max_vel);
         wz += alpha_z * dt;
-        yaw += wz*dt;
+
+        yaw_rate = wy*(sr/cp) + wz*(cr/cp);
+
+        yaw += yaw_rate*dt;
         // updated cy sy
         cy = cosf(yaw);
         sy = sinf(yaw);
