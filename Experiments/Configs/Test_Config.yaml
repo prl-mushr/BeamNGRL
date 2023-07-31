@@ -10,7 +10,7 @@ Cost_config:
   car_bb_width: 2.0
   car_bb_length: 3.0
   critical_vert_acc: 3.5
-  critical_vert_spd: 0.15
+  critical_vert_spd: 0.2
   
 Dynamics_config:
   wheelbase: 2.6
@@ -68,26 +68,26 @@ Map_config:
     semantics: 3
     costmap: 1
 
-# models: ["slip3d_LPF_drag"]
-models: ['slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
-scenarios: ['hill-0', 'hill-2', 'ditch-0' ,'ditch-1', 'race-0', 'race-1']
-time_limit: [20.0,    40.0,     20.0,       20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
-lookahead:  [20.0,    20.0,     20.0,       20.0,      20.0,     15.0]  # lookahead on scenario by scenario basis
+models: ["TerrainCNN"]
+# models: ['slip3d_150', 'slip3d', 'TerrainCNN']
+scenarios: ['hill-2', 'ditch-1', 'race-0', 'race-1']
+time_limit: [20.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
+lookahead:  [20.0,     20.0,      20.0,     10.0]  # lookahead on scenario by scenario basis
 # time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,       60.0,     50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,       20.0,     10.0]  # lookahead on scenario by scenario basis
-wp_radius: 5.0 ## waypoint radius for terminal condition
+wp_radius: 10.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 # scenarios: ['race-0', 'race-1']
 # time_limit: [60.0, 50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0, 15.0]  # lookahead on scenario by scenario basis
-num_iters: 10
+num_iters: 1
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 output_dir: "train"
 map_name: "small_island"
 
-save_data: True
+save_data: False
 run_lockstep: True
 
 vehicle:

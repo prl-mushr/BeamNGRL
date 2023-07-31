@@ -296,7 +296,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
-    parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
+    parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name
