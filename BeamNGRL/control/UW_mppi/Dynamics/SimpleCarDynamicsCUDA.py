@@ -5,7 +5,8 @@ import pycuda.gpuarray as gpuarray
 import pycuda.driver as cuda
 import numpy as np
 import time
-
+import os
+import sys
 
 class SimpleCarDynamics:
     """
@@ -59,7 +60,17 @@ class SimpleCarDynamics:
         self.block_dim = 32 #min(MPPI_config["ROLLOUTS"], 1024) # use 32 for jetson, use 1024 for RTX GPUs
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
-        file_path = '/home/stark/BeamNGRL/BeamNGRL/control/UW_mppi/Dynamics/{}.cpp'.format(Dynamics_config["type"])
+        folder_name = 'BeamNGRL'
+
+        # Check each directory in sys.path for the folder
+        for path in sys.path:
+            folder_path = os.path.join(path, folder_name)
+            if os.path.exists(folder_path):
+                break
+        else:
+            print("Did you forget to add BeamNGRL to your PYTHONPATH?")
+
+        file_path = '{}/control/UW_mppi/Dynamics/{}.cpp'.format(folder_path, Dynamics_config["type"])
        
         with open(file_path, 'r') as file:
             self.cuda_code = file.read()
