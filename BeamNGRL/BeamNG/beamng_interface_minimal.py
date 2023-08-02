@@ -8,11 +8,11 @@ def main(map_name, start_pos, start_quat):
     map_size = 16 # 16 x 16 map
 
     bng_interface = get_beamng_default(
-        car_model='flux',
+        car_model='offroad',
         start_pos=start_pos,
         start_quat=start_quat,
         map_name=map_name,
-        car_make='savage',
+        car_make='sunburst',
         beamng_path=BNG_HOME,
         map_res=map_res,
         map_size=map_size
