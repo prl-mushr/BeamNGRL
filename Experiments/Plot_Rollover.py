@@ -4,7 +4,10 @@ import yaml
 from pathlib import Path
 import os
 import argparse
+import seaborn as sns
 
+# Set Seaborn color palette to "colorblind"
+sns.set_palette("colorblind")
 
 def Plot_metrics(Config):
 
@@ -13,10 +16,10 @@ def Plot_metrics(Config):
     fig, axs = plt.subplots(rows,cols)
     fig.set_size_inches(18.5, 10.5)
     fig.suptitle("Ratio of Lateral Acceleration to Vertical Acceleration on different surfaces in different vehicles")
-    for sc in ["offroad", "flat_ground"]:
+    for sc in ["offroad", "flat"]:
         if sc == "offroad":
             scenario = "small_island"
-        if sc == "flat_ground":
+        if sc == "flat":
             scenario = "smallgrid"
         for vn in ["small car", "big car"]:
             if vn == "small car":
@@ -38,6 +41,7 @@ def Plot_metrics(Config):
                 average_lat_ratio = []
                 rollover = []
                 min_az = []
+                track_width = Config["vehicles"][vehicle_name]["track_width"]/2
                 for trial in range(Config["num_iters"]):
                     dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/{}/".format(str(rollover_prevention))
                     filename = dir_name + "/{}-{}-{}.npy".format(scenario, vehicle_name, str(trial))
@@ -47,8 +51,8 @@ def Plot_metrics(Config):
                     ay = data[turn_index, 10]
                     az = data[turn_index, 11]
                     roll = data[turn_index, 3]
-                    index = np.where(np.abs(roll) < 0.5)[0]
-                    ay = ay[index]
+                    index = np.where(np.abs(roll) < 1.5)[0]
+                    ay = ay[index] + track_width*data[index, 12]**2
                     az = az[index]
                     average_lat_ratio.append(np.mean(np.abs(ay))/np.mean(np.abs(az)) )
                     min_az.append(np.min(np.abs(az)))
@@ -58,7 +62,9 @@ def Plot_metrics(Config):
                 rollover_rate = np.mean(np.array(rollover))
                 min_az = np.mean(np.array(min_az))
                 axs[Config["scenarios"].index(scenario), Config["vehicle_list"].index(vehicle_name)].bar(RP, mean_LTR, yerr=std_LTR, align='center', alpha=0.5, ecolor='black', capsize=10)
-                print("Scenario: {}, Vehicle: {}, Rollover Prevention: {}, Mean Lateral Ratio: {}, Std Lateral Ratio: {}, Rollover Rate: {}".format(scenario, vehicle_name, RP, mean_LTR, std_LTR, rollover_rate))
+                axs[Config["scenarios"].index(scenario), Config["vehicle_list"].index(vehicle_name)].grid(True, linestyle='--', alpha=0.7)
+                # axs[Config["scenarios"].index(scenario), Config["vehicle_list"].index(vehicle_name)].set_visible(False)
+                # print("Scenario: {}, Vehicle: {}, Rollover Prevention: {}, Mean Lateral Ratio: {}, Std Lateral Ratio: {}, Rollover Rate: {}".format(scenario, vehicle_name, RP, mean_LTR, std_LTR, rollover_rate))
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/Results.png")
     plt.show()
 

@@ -12,7 +12,7 @@ def Plot_metircs(Config):
     scenario_count = 0
 
     for scenario in Config["scenarios"]:
-        fig, axs = plt.subplots(1,4)
+        fig, axs = plt.subplots(1,2)
         fig.set_size_inches(25.5, 5.5)
         fig.suptitle(scenario)
         axs[0].set_title("Success Rate")

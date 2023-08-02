@@ -23,8 +23,7 @@ def remove_outliers(data, threshold=2):
 def create_error_plot(errors, timesteps, model, ax, plot='mean'):
     plot_error = np.linalg.norm(errors, axis=2)
     mean = np.mean(plot_error, axis=0)
-    plot_error = remove_outliers(plot_error)
-    std = np.std(plot_error, axis=0)
+    std = np.abs(np.percentile(errors, 2.5, axis=0) - np.percentile(errors, 97.5, axis=0))[:,0]/2
     # calculate the RMSE:
     rmse = np.sqrt(np.mean(plot_error**2, axis=0))
     if plot == 'mean':

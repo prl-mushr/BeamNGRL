@@ -86,7 +86,7 @@ wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 models: ["slip3d", "slip3d_rp"]
 scenarios: ['roll-0', 'race-4']
-time_limit: [60.0, 60.0] ## (simulated) time limit for each scenario.
+time_limit: [20.0, 30.0] ## (simulated) time limit for each scenario.
 lookahead:  [8.0, 8.0]  # lookahead on scenario by scenario basis
 num_iters: 10
 start_pos: [-67, 336, 34.5]

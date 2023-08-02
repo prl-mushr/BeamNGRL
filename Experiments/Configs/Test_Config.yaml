@@ -9,8 +9,8 @@ Cost_config:
   critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
   car_bb_width: 2.0
   car_bb_length: 3.0
-  critical_vert_acc: 3.5
-  critical_vert_spd: 0.2
+  critical_vert_acc: 3.0
+  critical_vert_spd: 0.15
   
 Dynamics_config:
   wheelbase: 2.6
@@ -41,13 +41,13 @@ Dynamics_config:
       hidden_depth: 2
       hidden_dim: 32
       batch_norm: True
-  model_weights: "best_52.pth"
+  model_weights: "best_40.pth"
 
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
-  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  scaled_dt: 0.2 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: 0.0
@@ -68,26 +68,26 @@ Map_config:
     semantics: 3
     costmap: 1
 
-models: ["TerrainCNN"]
-# models: ['slip3d_150', 'slip3d', 'TerrainCNN']
-scenarios: ['hill-2', 'ditch-1', 'race-0', 'race-1']
+models: ["slip3d_LPF_drag"]
+# models: ['noslip3d','slip3d_150', 'slip3d', 'TerrainCNN']
+scenarios: ['hill-0', 'ditch-1', 'race-0', 'race-1']
 time_limit: [20.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
 lookahead:  [20.0,     20.0,      20.0,     10.0]  # lookahead on scenario by scenario basis
 # time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,       60.0,     50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,       20.0,     10.0]  # lookahead on scenario by scenario basis
-wp_radius: 10.0 ## waypoint radius for terminal condition
+wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 # scenarios: ['race-0', 'race-1']
 # time_limit: [60.0, 50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0, 15.0]  # lookahead on scenario by scenario basis
-num_iters: 1
+num_iters: 10
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 output_dir: "train"
 map_name: "small_island"
 
-save_data: False
+save_data: True
 run_lockstep: True
 
 vehicle:
