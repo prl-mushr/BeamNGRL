@@ -29,6 +29,10 @@ def Plot_metircs(Config):
         time_taken_mean = []
         time_taken_std = []
         scenario_count = 0
+        if(model == "slip3d_rp"):
+            model_name = "RPS ON"
+        if(model == "slip3d"):
+            model_name = "RPS OFF"
         for scenario in Config["scenarios"]:
             scenario_time_limit = time_limit[scenario_count]
             scenario_count += 1
@@ -48,7 +52,7 @@ def Plot_metircs(Config):
             time_taken = np.array(time_taken)
             time_taken_mean.append(time_taken.mean())
             time_taken_std.append(abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken,97.5))/2)
-        plt.bar(X + bar_width*(models - model_count - 1), time_taken_mean, yerr=time_taken_std, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=model)
+        plt.bar(X + bar_width*(models - model_count - 1), time_taken_mean, yerr=time_taken_std, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=model_name)
         plt.grid(True, linestyle='--', alpha=0.7)
         model_count += 1
     plt.xticks(X, combinations)
@@ -80,9 +84,11 @@ def Plot_metircs(Config):
         wp_y = target_WP[:, 1] - target_WP[0, 1]
 
         start = target_WP[0,:] - target_WP[0,:]
-        damage_x =[]
-        damage_y =[]
-        axs[Config["scenarios"].index(scenario)].scatter(wp_x[::10], wp_y[::10], s=100, label="Waypoints")
+        damage_x_ON =[]
+        damage_y_ON =[]
+        damage_x_OFF =[]
+        damage_y_OFF =[]
+        axs[Config["scenarios"].index(scenario)].plot(wp_x[::10], wp_y[::10], linewidth=2, label="Target trajectory", color='red')
 
         for model in Config["models"]:
             x = []
@@ -99,16 +105,21 @@ def Plot_metircs(Config):
                 X = data[:, 0] - target_WP[0, 0]
                 Y = data[:, 1] - target_WP[0, 1]
                 damage_index = np.where(np.fabs(data[:, 3]) > np.pi/2 - 0.1)[0]
-                damage_x.extend(X[damage_index].tolist())
-                damage_y.extend(Y[damage_index].tolist())
+                if model_name == "RPS ON":
+                    damage_x_ON.extend(X[damage_index].tolist())
+                    damage_y_ON.extend(Y[damage_index].tolist())
+                if model_name == "RPS OFF":
+                    damage_x_OFF.extend(X[damage_index].tolist())
+                    damage_y_OFF.extend(Y[damage_index].tolist())
                 x.extend(X[::5].tolist())
                 y.extend(Y[::5].tolist())
-            axs[Config["scenarios"].index(scenario)].scatter(x,y, s=10, label=model_name)
+            axs[Config["scenarios"].index(scenario)].scatter(x,y, s=5, label=model_name)
 
-        axs[Config["scenarios"].index(scenario)].scatter(start[0], start[1], s=100, label="Start")
-        axs[Config["scenarios"].index(scenario)].scatter(damage_x, damage_y, s=100, label="Reset")
+        # axs[Config["scenarios"].index(scenario)].scatter(start[0], start[1], s=100, label="Start")
+        axs[Config["scenarios"].index(scenario)].scatter(damage_x_ON, damage_y_ON, s=100, label="Reset for RPS ON")
+        axs[Config["scenarios"].index(scenario)].scatter(damage_x_OFF, damage_y_OFF, s=100, label="Reset for RPS OFF")
 
-        axs[Config["scenarios"].index(scenario)].legend(bbox_to_anchor=(0, 1), loc='upper left', borderaxespad=0.)
+        axs[Config["scenarios"].index(scenario)].legend(bbox_to_anchor=(0, 1), loc='upper left', borderaxespad=0., fontsize="10")
         axs[Config["scenarios"].index(scenario)].set_xlabel("X (East) (m)", size='large')
         axs[Config["scenarios"].index(scenario)].set_ylabel("Y (North) (m)", rotation=90, size='large')
 
