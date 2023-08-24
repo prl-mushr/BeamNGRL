@@ -6,6 +6,7 @@ import os
 import argparse
 import matplotlib.style as style
 style.use('seaborn-colorblind')
+from scipy.stats import mannwhitneyu
 
 def Plot_metircs(Config):
     # create a new graph for each scenario:
@@ -14,7 +15,7 @@ def Plot_metircs(Config):
     combinations = []
     for scenario in Config["scenarios"]:
         if scenario == "race-4":
-            scn = "Shallow truns"
+            scn = "Shallow turns"
         if scenario == "roll-0":
             scn = "Tight turns"
         combinations.append(scn)
@@ -24,6 +25,8 @@ def Plot_metircs(Config):
     bar_width = 0.2
     model_count = 0
     time_limit = Config["time_limit"]
+
+    time_taken_list = []
 
     for model in Config["models"]:
         time_taken_mean = []
@@ -43,7 +46,7 @@ def Plot_metircs(Config):
                 ## data has structure: state(17), goal(2), timestamp(1), success(1), damage(1)
                 data = np.load(filename)
                 ## extract the success and damage:
-                time_taken.append((data[-1, -3] - data[0,-3])/scenario_time_limit)
+                time_taken.append((data[-1, -3] - data[0,-3]))
                 ay = data[:, 10]
                 az = data[:, 11]
                 az_denom = np.clip(np.fabs(az),1,25)
@@ -52,6 +55,7 @@ def Plot_metircs(Config):
             time_taken = np.array(time_taken)
             time_taken_mean.append(time_taken.mean())
             time_taken_std.append(abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken,97.5))/2)
+            time_taken_list.append(time_taken)
         plt.bar(X + bar_width*(models - model_count - 1), time_taken_mean, yerr=time_taken_std, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=model_name)
         plt.grid(True, linestyle='--', alpha=0.7)
         model_count += 1
@@ -60,6 +64,11 @@ def Plot_metircs(Config):
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/In_the_loop.png")
     # plt.show()
     plt.close()
+
+    statistic, p_value = mannwhitneyu(time_taken_list[0], time_taken_list[2])
+    print("p value tight turns: ", p_value)
+    statistic, p_value = mannwhitneyu(time_taken_list[1], time_taken_list[3])
+    print("p value shallow turns: ", p_value)
 
     fig, axs = plt.subplots(1,2)
     fig.set_size_inches(18, 9)
@@ -77,6 +86,8 @@ def Plot_metircs(Config):
         axs[Config["scenarios"].index(scenario)].axis('equal')
 
 
+    shallow_incidents = 0
+    tight_incidents = 0
     for scenario in Config["scenarios"]:
         WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
         target_WP = np.load(WP_file)[:,:2]
@@ -111,6 +122,7 @@ def Plot_metircs(Config):
                 if model_name == "RPS OFF":
                     damage_x_OFF.extend(X[damage_index].tolist())
                     damage_y_OFF.extend(Y[damage_index].tolist())
+
                 x.extend(X[::5].tolist())
                 y.extend(Y[::5].tolist())
             axs[Config["scenarios"].index(scenario)].scatter(x,y, s=5, label=model_name)
@@ -123,6 +135,7 @@ def Plot_metircs(Config):
         axs[Config["scenarios"].index(scenario)].set_xlabel("X (East) (m)", size='large')
         axs[Config["scenarios"].index(scenario)].set_ylabel("Y (North) (m)", rotation=90, size='large')
 
+        print(len(damage_x_ON), len(damage_x_OFF))
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/trajectories.png")
     # plt.show()
     plt.close(fig)

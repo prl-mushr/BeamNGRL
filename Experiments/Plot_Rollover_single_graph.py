@@ -5,14 +5,14 @@ from pathlib import Path
 import os
 import argparse
 import seaborn as sns
-
 # Set Seaborn color palette to "colorblind"
 sns.set_palette("colorblind")
+from scipy.stats import mannwhitneyu
 
 def Plot_metrics(Config):
     plt.figure().set_size_inches(10.5, 5.5)
 
-    RPS = ["Static limiter", "No prevention", "Static limiter with feedback"]
+    RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
     combinations = []
     for scenario in Config["scenarios"]:
@@ -27,12 +27,15 @@ def Plot_metrics(Config):
                 vn = "Big car"
             combinations.append("{}-{}".format(scn, vn))
     rps_count = 0
+
+    lat_acc_list = []
+
     for RP in RPS:
         if RP == "No prevention":
             rollover_prevention = 0
         if RP == "Static limiter":
             rollover_prevention = 2
-        if RP == "Static limiter with feedback":
+        if RP == "Full RPS":
             rollover_prevention = 1
         scenario_count = 0
         total_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
@@ -66,6 +69,8 @@ def Plot_metrics(Config):
                 min_az = np.mean(np.array(min_az))
                 mean_bar.append(mean_LTR)
                 std_bar.append(std_LTR)
+                lat_acc_list.append(np.array(average_lat_ratio))
+                print(vehicle_name, scenario, RP)
         plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, yerr=std_bar, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=RP)
         plt.grid(True, linestyle='--', alpha=0.7)
         rps_count += 1
@@ -76,10 +81,15 @@ def Plot_metrics(Config):
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_isolated.png")
     plt.show()
 
+    num_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
+    for i in range(num_scenarios):
+        statistic, p_value = mannwhitneyu(lat_acc_list[i+num_scenarios], lat_acc_list[i+2*num_scenarios])
+        print("p value: ", p_value)
+    
 
     plt.figure().set_size_inches(10.5, 5.5)
 
-    RPS = ["Static limiter", "No prevention", "Static limiter with feedback"]
+    RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
     combinations = []
     for scenario in Config["scenarios"]:
@@ -99,7 +109,7 @@ def Plot_metrics(Config):
             rollover_prevention = 0
         if RP == "Static limiter":
             rollover_prevention = 2
-        if RP == "Static limiter with feedback":
+        if RP == "Full RPS":
             rollover_prevention = 1
         scenario_count = 0
         total_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
@@ -133,6 +143,8 @@ def Plot_metrics(Config):
 
     fig, axs = plt.subplots(1,1)
     fig.set_size_inches(18.5, 10.5)
+    SI_vert_acc_list = []
+    full_vert_acc_list = []
     # fig.suptitle("Minimum Vertical Acceleration vs Rollover Rate")
     for vn in ["small car", "big car"]:
         if vn == "small car":
@@ -143,7 +155,7 @@ def Plot_metrics(Config):
         axs.set_ylabel("Rollover Rate")
         axs.set_xlabel("Minimum Vertical Acceleration")
         for scenario in Config["scenarios"]:
-            for RP in ["static", "static+dynamic", "none"]:
+            for RP in ["static", "static+dynamic"]:
                 if RP == "none":
                     rollover_prevention = 0
                 if RP == "static":
@@ -160,17 +172,24 @@ def Plot_metrics(Config):
                     turn_index = np.where(data[:,-1] >= data[-1, 22])[0]
                     az = data[turn_index, 11]
                     roll = data[turn_index, 3]
-                    index = np.where(np.abs(roll) < 0.5)[0]
+                    index = np.where(np.abs(roll) < 10/57.3)[0]
                     az = az[index]
                     min_az.append(np.min(np.abs(az)))
                     rollover.append(data[-1, 17])
+                    if(scenario == "small_island"):
+                        SI_vert_acc_list.append(np.min(np.abs(az)))
+                    else:
+                        full_vert_acc_list.append(np.min(np.abs(az)))
+
                 min_az = np.mean(np.array(min_az))
                 rollover_rate = np.mean(np.array(rollover))
                 if(RP != "none"):
                     axs.scatter(min_az, rollover_rate, label=RP)
                 print("Scenario: {}, Vehicle: {}, Minimum Vertical Acceleration: {}, Rollover Rate: {}".format(scenario, vehicle_name, min_az, rollover_rate))
     # axs.legend()
-    plt.show()
+    # plt.show()
+    print("SI_min_vert_acc", np.mean(np.array(SI_vert_acc_list)))
+    print("full_min_vert_acc", np.mean(np.array(full_vert_acc_list)))
 
 if __name__ == "__main__":
     ## add a parser:
