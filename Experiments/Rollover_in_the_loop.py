@@ -49,19 +49,25 @@ def get_dynamics(model, Config):
     return dynamics
 
 
-def steering_limiter(steer=0, wheelspeed=0, roll=0, rotBF=np.zeros(3),  accBF=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0):
+def steering_limiter(steer=0, wheelspeed=0, roll=0, rotBF=np.zeros(3),  accBF=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0, steer_slack=0.1):
     steering_setpoint = steer*max_steer
     intervention = False
     whspd2 = max(1.0, wheelspeed)
     whspd2 *= whspd2
     Aylim = t_h_ratio * max(1.0, abs(accBF[2]))
     roll_rate = rotBF[0]
+    GRAVITY = 9.8
+    steering_limit_max = m.atan2(wheelbase * (Aylim - GRAVITY*m.sin(roll)), whspd2) + steer_slack*max_steer
+    steering_limit_min = -m.atan2(wheelbase * (Aylim + GRAVITY*m.sin(roll)), whspd2) - steer_slack*max_steer
 
-    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + 0.4*max_steer
-
-    if(abs(steering_setpoint) > steering_limit and rotBF[2]*accBF[1] > 0):
+    temp = steering_setpoint
+    steering_setpoint = min(steering_limit_max, max(steering_limit_min, steering_setpoint))
+    if abs(temp - steering_setpoint) > 0.001:
         intervention = True
-        steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
+
+    # if(abs(steering_setpoint) > steering_limit and rotBF[2]*accBF[1] > 0):
+    #     intervention = True
+    #     steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
     delta_steering = 0
     Ay = accBF[1]
     Ay_error = 0
@@ -175,6 +181,7 @@ def main(config_path=None, args=None):
     time_limit = Config["time_limit"]
     roll_rate_gain = vehicle["roll_rate_gain"]
     accel_gain = vehicle["accel_gain"]
+    steer_slack = vehicle["steer_slack"]
 
     try:
         costs = SimpleCarCost(Cost_config, Map_config, device=device)
@@ -283,7 +290,8 @@ def main(config_path=None, args=None):
                                                                                         t_h_ratio = t_h_ratio, 
                                                                                         max_steer = max_steer,
                                                                                         accel_gain=accel_gain,
-                                                                                        roll_rate_gain=roll_rate_gain)
+                                                                                        roll_rate_gain=roll_rate_gain,
+                                                                                        steer_slack=steer_slack)
 
                         bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=1, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
@@ -355,8 +363,8 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Rollover_loop_config.yaml", help="name of the config file to use")
-    parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
-    parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
+    parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
+    parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name

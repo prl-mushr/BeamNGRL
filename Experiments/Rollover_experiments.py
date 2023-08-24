@@ -57,26 +57,32 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros
     whspd2 *= whspd2
     Aylim = t_h_ratio * max(1.0, abs(accBF[2]))
     delta_steering = 0
+    GRAVITY = 9.81
+
+    steering_limit_max = m.atan2(wheelbase * (Aylim - GRAVITY*m.sin(roll)), whspd2)
+    steering_limit_min = -m.atan2(wheelbase * (Aylim + GRAVITY*m.sin(roll)), whspd2)
     if(rollover_prevention == 2): ## only static limiter
-        steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2))
-        if(abs(steering_setpoint) > steering_limit):
+        temp = steering_setpoint
+        steering_setpoint = min(steering_limit_max, max(steering_limit_min, steering_setpoint))
+        if abs(temp - steering_setpoint) > 0.001:
             intervention = True
-            steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
         delta_steering = steering_setpoint - steer*max_steer
         steering_setpoint = steering_setpoint/max_steer
         steering_setpoint = min(max(steering_setpoint, -1.0),1.0)
         return steering_setpoint, intervention, delta_steering, 0
 
-    steering_limit = abs(m.atan2(wheelbase * Aylim, whspd2)) + steer_slack*max_steer
+    steering_limit_max += steer_slack*max_steer
+    steering_limit_min -= steer_slack*max_steer
 
-    if(abs(steering_setpoint) > steering_limit):
+    temp = steering_setpoint
+    steering_setpoint = min(steering_limit_max, max(steering_limit_min, steering_setpoint))
+    if abs(temp - steering_setpoint) > 0.001:
         intervention = True
-        steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
+
     delta_steering = 0
     Ay = accBF[1]
     Ay_error = 0
     Ay_rate = -roll_rate*accBF[2]/(m.cos(roll)**2)
-    
     TTR_condition = min(m.fabs(Aylim - m.fabs(Ay))/max(m.fabs(Ay_rate),0.01), 0.9) < 0.5
     if(abs(Ay) > Aylim):
         intervention = True
@@ -203,12 +209,12 @@ def main(config_path=None, args=None):
                             bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = max_speed, Kp=speed_Kp, Ki=0.05, Kd=0.0, FF_gain=0.0)
                             
                             result_states.append(np.hstack ( ( np.copy(state), bng_interface.flipped_over, rollover_prevention, intervention, Rollover_detected, delta_steering, turn_time, rotate_speed, ts) ))
-                            if(start_turning and abs(state[3]) < 10/57.3): ## max value obtained before rollover.
-                                avg_ay.append(abs(state[10] - 9.8*np.sin(state[3])))
+                            if(start_turning): ## max value obtained before rollover.
+                                avg_ay.append(abs(state[10] + track_width*state[12]**2))
                             if bng_interface.flipped_over:
                                 print("rollover!")
                                 break ## break the while loop and reset the car
-                        
+
                         print("Average ay: ", np.mean(np.array(avg_ay)) )
                         result_states = np.array(result_states)
                         dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/{}/".format(str(rollover_prevention))
@@ -239,8 +245,8 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Rollover_Config.yaml", help="name of the config file to use")
-    parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
-    parser.add_argument("--host_IP", type=str, default="10.18.172.189", help="host ip address if using remote beamng")
+    parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
+    parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name

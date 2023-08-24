@@ -56,13 +56,14 @@ vehicles:
     rotate_speed: 5.0
     accel_gain: 0.25
     roll_rate_gain: 0.15
+    steer_slack: 0.3
 
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
   scaled_dt: 0.08 ## this is dt * bandwidth of the physical actuators (in what units?)
-  temperature: 0.02 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: 0.0
 
@@ -88,7 +89,7 @@ models: ["slip3d", "slip3d_rp"]
 scenarios: ['roll-0', 'race-4']
 time_limit: [20.0, 30.0] ## (simulated) time limit for each scenario.
 lookahead:  [8.0, 8.0]  # lookahead on scenario by scenario basis
-num_iters: 10
+num_iters: 50
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
