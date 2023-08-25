@@ -18,13 +18,15 @@ vehicles:
     max_speed: 20.0
     max_steer: 0.5
     mass: 1500.0
-    rotate_speed: 12.0
+    rotate_speed: 13.0
     make: "sunburst"
     model: "rollover_test"
     accel_gain: 0.25
     roll_rate_gain: 0.25
     speed_Kp: 3.0
     steer_slack: 0.3
+    rollover_speed_max: 18.0
+
   "flux":
     cg_height: 0.125
     wheelbase: 0.33
@@ -34,13 +36,15 @@ vehicles:
     mass: 4.0
     make: "savage"
     model: "flux"
-    rotate_speed: 6.0
+    rotate_speed: 5.0
     accel_gain: 0.25
     roll_rate_gain: 0.25
-    speed_Kp: 2.0
+    speed_Kp: 5.0
     steer_slack: 0.3
+    rollover_speed_max: 10.0
 
 dt: 0.02
-scenarios: ["smallgrid","small_island"] ## we will save waypoint files corresponding to each map
+scenarios: ["small_island"] ## we will save waypoint files corresponding to each map
 time_limit: 12.0
-num_iters: 50
+num_iters: 5
+speed_iters: 5
