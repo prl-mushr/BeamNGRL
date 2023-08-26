@@ -10,8 +10,8 @@ from scipy.stats import mannwhitneyu
 
 def Plot_metircs(Config):
     # create a new graph for each scenario:
-    plt.figure().set_size_inches(6, 4.5)
-    # plt.title("Ratio of time taken to reach final goal to maximum alloted time")
+    plt.figure().set_size_inches(6, 4)
+    plt.subplots_adjust(left=0.1, right=0.99)  # Adjust the values as needed
     combinations = []
     for scenario in Config["scenarios"]:
         if scenario == "race-4":
@@ -27,7 +27,9 @@ def Plot_metircs(Config):
     time_limit = Config["time_limit"]
 
     time_taken_list = []
-
+    speed_max_shallow = 0
+    speed_max_tight = 0
+    plt.ylabel("time taken (s)")
     for model in Config["models"]:
         time_taken_mean = []
         time_taken_std = []
@@ -51,6 +53,11 @@ def Plot_metircs(Config):
                 az = data[:, 11]
                 az_denom = np.clip(np.fabs(az),1,25)
                 lat_ratio = np.fabs(ay/az)
+                speed = data[:,6].max()
+                if(scenario=="race-4"):
+                    speed_max_shallow = max(speed_max_shallow, speed)
+                else:
+                    speed_max_tight = max(speed_max_tight, speed)
             ## take mean and std for all:
             time_taken = np.array(time_taken)
             time_taken_mean.append(time_taken.mean())
@@ -64,6 +71,8 @@ def Plot_metircs(Config):
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/In_the_loop.png")
     # plt.show()
     plt.close()
+    print("speed_max_tight: ", speed_max_tight)
+    print("speed_max_shallow: ", speed_max_shallow)
 
     statistic, p_value = mannwhitneyu(time_taken_list[0], time_taken_list[2])
     print("p value tight turns: ", p_value)
@@ -71,9 +80,10 @@ def Plot_metircs(Config):
     print("p value shallow turns: ", p_value)
 
     fig, axs = plt.subplots(1,2)
-    fig.set_size_inches(18, 9)
+    fig.set_size_inches(10, 5)
+    plt.subplots_adjust(left=0.07, right=0.99)  # Adjust the values as needed
     ## use a big font size:
-    plt.rcParams.update({'font.size': 17})
+    plt.rcParams.update({'font.size': 12})
     ## use a big font for the ticks on X and Y axes:
     # fig.suptitle("Trajectory comparison with RPS ON vs with RPS OFF")
     # keep the X and Y axes equal:

@@ -44,7 +44,7 @@ vehicles:
     rollover_speed_max: 10.0
 
 dt: 0.02
-scenarios: ["small_island"] ## we will save waypoint files corresponding to each map
+scenarios: ["smallgrid", "small_island"] ## we will save waypoint files corresponding to each map
 time_limit: 12.0
-num_iters: 5
+num_iters: 4
 speed_iters: 5
