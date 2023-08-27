@@ -9,6 +9,9 @@ import seaborn as sns
 sns.set_palette("colorblind")
 from scipy.stats import mannwhitneyu
 
+def conf(data):
+    return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
+
 def Plot_metrics(Config, Config_crash):
     plt.figure().set_size_inches(6, 4)
     plt.subplots_adjust(left=0.09, right=0.99)  # Adjust the values as needed
@@ -62,9 +65,10 @@ def Plot_metrics(Config, Config_crash):
                     az = az[index]
                     average_lat_ratio.append(np.mean(np.abs(ay))/np.mean(np.abs(az)) )
                     min_az.append(np.min(np.abs(az)))
-                    rollover.append(data[-1, 17])
+                    rollover.append(data[-1, 17])\
+                ## this isn't 95 percentile!
                 mean_LTR = np.mean(np.array(average_lat_ratio))
-                std_LTR = np.std(np.array(average_lat_ratio))
+                std_LTR = conf(np.array(average_lat_ratio))
                 rollover_rate = np.mean(np.array(rollover))
                 min_az = np.mean(np.array(min_az))
                 mean_bar.append(mean_LTR)
