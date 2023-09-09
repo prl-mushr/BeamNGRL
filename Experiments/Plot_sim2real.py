@@ -10,6 +10,9 @@ import torch
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDynamics
 import sys
+from scipy.stats import mannwhitneyu
+from matplotlib import rc
+rc('font', family='Times New Roman', size=14)
 
 def get_dynamics(model, Config):
     Dynamics_config = Config["Dynamics_config"]
@@ -52,6 +55,7 @@ def evaluator(config, real, tn_args):
             states = states.repeat(dynamics.M, dynamics.K, dynamics.T, 1)
             controls = controls_tn.repeat((dynamics.K, 1, 1)).clone()
             pred_states = dynamics.forward(states, controls)[0,0,:,:15].cpu().numpy()
+            print(pred_states[:,11])
             
             errors[i:i+MPPI_config["TIMESTEPS"],:] = (pred_states - gt_states)
             predict_states[i:i+MPPI_config["TIMESTEPS"],:] = pred_states
@@ -93,37 +97,58 @@ def Plot_metrics(Config):
 	np.save(dir_name + 'BeamNG.npy', BeamNG)
 	# evaluator(Config, real, tensor_args)
 
-	acc = real[:,9:12]
+	acc = signal.lfilter(b, a, real[:,9:12],axis=0)
 	gyro= real[:,12:15]
 	vel = real[:,6:9]
 	max_acc = np.max(acc)
 	max_gyro= np.max(gyro)
 	max_vel = np.max(vel)
+	print(max_acc)
+	print(max_vel)
+	print(max_gyro)
 
 	i = 0
 	fig = plt.figure()
-	fig.set_size_inches(5, 5)
+	fig.set_size_inches(8, 3)
+	plt.subplots_adjust(left=0.08, right=0.99, top=0.99, bottom=0.1)
 	X = np.arange(3)
 	methods = ["BeamNG", "slip3d", "noslip3d"]
 	metrics = ["Acceleration", "Rotation rate", "Velocity"]
-	bar_width = 0.3
+	bar_width = 0.25
+	acc_err = np.zeros((len(BeamNG),3))
+	rot_err = np.zeros((len(BeamNG),3))
+	vel_err = np.zeros((len(BeamNG),3))
 	for data in methods:
-		error = np.load(dir_name + '{}.npy'.format(data))
-		acc_err = np.linalg.norm(signal.lfilter(b, a, error[:,9:12], axis=0), axis=1)/max_acc
-		rot_err = np.linalg.norm(signal.lfilter(b, a, error[:,12:15], axis=0), axis=1)/max_gyro
-		vel_err = np.linalg.norm(signal.lfilter(b, a, error[:,6:9], axis=0), axis=1)/max_vel
+		error = np.load(dir_name + 'err_{}.npy'.format(data))
+		acc_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,9:12], axis=0), axis=1)/max_acc
+		rot_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,12:15], axis=0), axis=1)/max_gyro
+		vel_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,6:9], axis=0), axis=1)/max_vel
 		color = plt.cm.tab10(i)  # Choose the same color from the 'tab10' colormap
-		plt.bar(0 + bar_width*(1 - i), acc_err.mean(), yerr=conf(acc_err), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
-		plt.bar(1 + bar_width*(1 - i), rot_err.mean(), yerr=conf(rot_err), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
-		plt.bar(2 + bar_width*(1 - i), vel_err.mean(), yerr=conf(acc_err), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=data, color=color)
+		plt.bar(0 + bar_width*(1 - i), acc_err[...,i].mean(), yerr=conf(acc_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
+		plt.bar(1 + bar_width*(1 - i), rot_err[...,i].mean(), yerr=conf(rot_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
+		plt.bar(2 + bar_width*(1 - i), vel_err[...,i].mean(), yerr=conf(acc_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=data, color=color)
 		i += 1
 
-	plt.ylabel("normalized error")
+	print(mannwhitneyu(acc_err[...,0], acc_err[...,1]))
+	print(mannwhitneyu(acc_err[...,2], acc_err[...,1]))
+	print(mannwhitneyu(acc_err[...,0], acc_err[...,2]))
+
+	print(mannwhitneyu(rot_err[...,0], rot_err[...,1]))
+	print(mannwhitneyu(rot_err[...,2], rot_err[...,1]))
+	print(mannwhitneyu(rot_err[...,0], rot_err[...,2]))
+
+	print(mannwhitneyu(vel_err[...,0], vel_err[...,1]))
+	print(mannwhitneyu(vel_err[...,2], vel_err[...,1]))
+	print(mannwhitneyu(vel_err[...,0], vel_err[...,2]))
+
+
+	plt.ylabel("Normalized error")
 	plt.xticks(X, metrics)
 	plt.grid(True, linestyle='--', alpha=0.7)
 	plt.legend()
-	plt.show()
 	plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Sim2Real/sim2real_comp.png")
+	# plt.show()
+	plt.close()
 
 
 if __name__ == "__main__":
