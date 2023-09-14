@@ -10,7 +10,7 @@ import torch
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDynamics
 import sys
-from scipy.stats import mannwhitneyu
+from scipy.stats import mannwhitneyu, t as student_t
 from matplotlib import rc
 rc('font', family='Times New Roman', size=14)
 
@@ -55,7 +55,7 @@ def evaluator(config, real, tn_args):
             states = states.repeat(dynamics.M, dynamics.K, dynamics.T, 1)
             controls = controls_tn.repeat((dynamics.K, 1, 1)).clone()
             pred_states = dynamics.forward(states, controls)[0,0,:,:15].cpu().numpy()
-            print(pred_states[:,11])
+            # print(pred_states[:,11])
             
             errors[i:i+MPPI_config["TIMESTEPS"],:] = (pred_states - gt_states)
             predict_states[i:i+MPPI_config["TIMESTEPS"],:] = pred_states
@@ -74,8 +74,25 @@ def evaluator(config, real, tn_args):
         np.save(filename, errors)
 
 def conf(data):
-	return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
-
+	# return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
+	# Sample size
+	n = len(data)
+	s = np.std(data, ddof=1)  # Use ddof=1 to get the sample standard deviation
+	# Confidence level
+	C = 0.95  # 95%
+	# Significance level, α
+	alpha = 1 - C
+	# Number of tails
+	tails = 2
+	# Quantile (the cumulative probability)
+	q = 1 - (alpha / tails)
+	# Degrees of freedom
+	dof = n - 1
+	# Critical t-statistic, calculated using the percent-point function (aka the
+	# quantile function) of the t-distribution
+	t_star = student_t.ppf(q, dof)
+	# Confidence interval
+	return t_star * s / np.sqrt(n)
 
 def Plot_metrics(Config):
 
@@ -94,8 +111,8 @@ def Plot_metrics(Config):
 	BeamNG_2 = np.load(dir_name + 'BeamNG_23.npy')[:24*50,:]
 	real = np.concatenate((real_0, real_1, real_2), axis=0)
 	BeamNG = np.concatenate((BeamNG_0, BeamNG_1, BeamNG_2), axis=0)
-	np.save(dir_name + 'BeamNG.npy', BeamNG)
-	# evaluator(Config, real, tensor_args)
+	np.save(dir_name + 'err_BeamNG.npy', BeamNG)
+	evaluator(Config, real, tensor_args)
 
 	acc = signal.lfilter(b, a, real[:,9:12],axis=0)
 	gyro= real[:,12:15]
@@ -120,13 +137,26 @@ def Plot_metrics(Config):
 	vel_err = np.zeros((len(BeamNG),3))
 	for data in methods:
 		error = np.load(dir_name + 'err_{}.npy'.format(data))
-		acc_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,9:12], axis=0), axis=1)/max_acc
-		rot_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,12:15], axis=0), axis=1)/max_gyro
-		vel_err[...,i] = np.linalg.norm(signal.lfilter(b, a, error[:,6:9], axis=0), axis=1)/max_vel
+		acc_err[...,i] = np.linalg.norm(error[:,9:12], axis=1)
+		rot_err[...,i] = np.linalg.norm(error[:,12:15], axis=1)
+		vel_err[...,i] = np.linalg.norm(error[:,6:8], axis=1)
+		print(data)
+		print("vel_err:",vel_err[...,i].mean())
+		print("acc_err:",acc_err[...,i].mean())
+		print("rot_err:",rot_err[...,i].mean())
+		i += 1
+	acc_max = max(acc_err.mean(axis=0))
+	vel_max = max(vel_err.mean(axis=0))
+	rot_max = max(rot_err.mean(axis=0))
+
+	i = 0
+	print(real.shape)
+	for data in methods:
+		error = np.load(dir_name + 'err_{}.npy'.format(data))
 		color = plt.cm.tab10(i)  # Choose the same color from the 'tab10' colormap
-		plt.bar(0 + bar_width*(1 - i), acc_err[...,i].mean(), yerr=conf(acc_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
-		plt.bar(1 + bar_width*(1 - i), rot_err[...,i].mean(), yerr=conf(rot_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, color=color)
-		plt.bar(2 + bar_width*(1 - i), vel_err[...,i].mean(), yerr=conf(acc_err[...,i]), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=data, color=color)
+		plt.bar(0 + bar_width*(1 - i), acc_err[...,i].mean()/acc_max, yerr=conf(acc_err[...,i])/acc_max, width=bar_width, alpha=1.0, ecolor='black', capsize=10, color=color)
+		plt.bar(1 + bar_width*(1 - i), rot_err[...,i].mean()/rot_max, yerr=conf(rot_err[...,i])/rot_max, width=bar_width, alpha=1.0, ecolor='black', capsize=10, color=color)
+		plt.bar(2 + bar_width*(1 - i), vel_err[...,i].mean()/vel_max, yerr=conf(vel_err[...,i])/vel_max, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=data, color=color)
 		i += 1
 
 	print(mannwhitneyu(acc_err[...,0], acc_err[...,1]))
@@ -142,10 +172,11 @@ def Plot_metrics(Config):
 	print(mannwhitneyu(vel_err[...,0], vel_err[...,2]))
 
 
-	plt.ylabel("Normalized error")
+	plt.ylabel("Relative error")
 	plt.xticks(X, metrics)
 	plt.grid(True, linestyle='--', alpha=0.7)
-	plt.legend()
+	legend_position = (0.55, 0.6)  # Specify the position as (x, y)
+	plt.legend(loc=legend_position)
 	plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Sim2Real/sim2real_comp.png")
 	# plt.show()
 	plt.close()

@@ -7,16 +7,34 @@ import argparse
 import seaborn as sns
 # Set Seaborn color palette to "colorblind"
 sns.set_palette("colorblind")
-from scipy.stats import mannwhitneyu
+from scipy.stats import mannwhitneyu, t as student_t
 from matplotlib import rc
-rc('font', family='Times New Roman', size=14)
+rc('font', family='Times New Roman', size=16)
 
 def conf(data):
-    return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
+    # return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
+    # Sample size
+    n = len(data)
+    s = np.std(data, ddof=1)  # Use ddof=1 to get the sample standard deviation
+    # Confidence level
+    C = 0.95  # 95%
+    # Significance level, α
+    alpha = 1 - C
+    # Number of tails
+    tails = 2
+    # Quantile (the cumulative probability)
+    q = 1 - (alpha / tails)
+    # Degrees of freedom
+    dof = n - 1
+    # Critical t-statistic, calculated using the percent-point function (aka the
+    # quantile function) of the t-distribution
+    t_star = student_t.ppf(q, dof)
+    # Confidence interval
+    return t_star * s / np.sqrt(n)
 
 def Plot_metrics(Config, Config_crash):
     plt.figure().set_size_inches(6, 4)
-    plt.subplots_adjust(left=0.1, right=0.99, top=0.99)  # Adjust the values as needed
+    plt.subplots_adjust(left=0.12, right=0.99, top=0.94, bottom=0.08)  # Adjust the values as needed
     RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
     combinations = []
@@ -27,9 +45,9 @@ def Plot_metrics(Config, Config_crash):
             scn = "Offroad"
         for vehicle_name in Config["vehicle_list"]:
             if vehicle_name == "flux":
-                vn = "Small car"
+                vn = "Small"
             if vehicle_name == "rollover_test":
-                vn = "Big car"
+                vn = "Big"
             combinations.append("{}-{}".format(scn, vn))
     rps_count = 0
 
@@ -67,8 +85,7 @@ def Plot_metrics(Config, Config_crash):
                     az = az[index]
                     average_lat_ratio.append(np.mean(np.abs(ay))/np.mean(np.abs(az)) )
                     min_az.append(np.min(np.abs(az)))
-                    rollover.append(data[-1, 17])\
-                ## this isn't 95 percentile!
+                    rollover.append(data[-1, 17])
                 mean_LTR = np.mean(np.array(average_lat_ratio))
                 std_LTR = conf(np.array(average_lat_ratio))
                 rollover_rate = np.mean(np.array(rollover))
@@ -76,12 +93,14 @@ def Plot_metrics(Config, Config_crash):
                 mean_bar.append(mean_LTR)
                 std_bar.append(std_LTR)
                 lat_acc_list.append(np.array(average_lat_ratio))
-        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, yerr=std_bar, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=RP)
+        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, yerr=std_bar, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=RP)
+        print(RP, mean_bar)
         plt.grid(True, linestyle='--', alpha=0.7)
         rps_count += 1
     plt.xticks(X, combinations)
     plt.ylabel("Ratio of peak lateral to vertical acceleration")
-    plt.legend()
+    legend_position = (0.5, 0.77)  # Specify the position as (x, y)
+    plt.legend(loc=legend_position)
     # plt.title("Ratio of Lateral Acceleration to Vertical Acceleration on different surfaces in different vehicles")
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_isolated.png")
     # plt.show()
@@ -94,7 +113,7 @@ def Plot_metrics(Config, Config_crash):
     
 
     plt.figure().set_size_inches(6, 4)
-    plt.subplots_adjust(left=0.1, right=0.99, top=0.99)  # Adjust the values as needed
+    plt.subplots_adjust(left=0.12, right=0.99, top=0.96, bottom=0.08)  # Adjust the values as needed
 
     RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
@@ -106,9 +125,9 @@ def Plot_metrics(Config, Config_crash):
             scn = "Offroad"
         for vehicle_name in Config["vehicle_list"]:
             if vehicle_name == "flux":
-                vn = "Small car"
+                vn = "Small"
             if vehicle_name == "rollover_test":
-                vn = "Big car"
+                vn = "Big"
             combinations.append("{}-{}".format(scn, vn))
     rps_count = 0
     for RP in RPS:
@@ -137,12 +156,12 @@ def Plot_metrics(Config, Config_crash):
                     rollover.append(data[-1, 17])
                 rollover_rate = np.mean(np.array(rollover))
                 mean_bar.append(rollover_rate)
-        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=RP)
+        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=RP)
         plt.grid(True, linestyle='--', alpha=0.7)
         rps_count += 1
     plt.xticks(X, combinations)
     plt.ylabel("Rollover Rate")
-    legend_position = (0.5, 0.75)  # Specify the position as (x, y)
+    legend_position = (0.5, 0.77)  # Specify the position as (x, y)
     plt.legend(loc=legend_position)
     # plt.title("Ratio of Lateral Acceleration to Vertical Acceleration on different surfaces in different vehicles")
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_rate_isolated.png")
@@ -183,30 +202,37 @@ def Plot_metrics(Config, Config_crash):
                     else:
                         Flat_big.append(np.min(np.abs(az)))
 
-    rc('font', family='Times New Roman', size=12)
+    rc('font', family='Times New Roman', size=18)
 
     Off_small = np.array(Off_small)
     Off_big = np.array(Off_big)
     Flat_small = np.array(Flat_small)
     Flat_big = np.array(Flat_big)
 
-    plt.figure().set_size_inches(3, 3)
-    plt.subplots_adjust(left=0.15, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
+    plt.figure().set_size_inches(2.5, 5)
+    plt.subplots_adjust(left=0.2, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
     plt.ylabel("Min vertical acceleration in m/s/s")
-    plt.bar(0 + bar_width*0, Off_small.mean(), yerr=conf(Off_small), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label="Offroad")
-    plt.bar(0 + bar_width*1, Flat_small.mean(), yerr=conf(Flat_small), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label="Flat")
-    plt.bar(1 + bar_width*0, Off_big.mean(), yerr=conf(Off_big), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label="Offroad")
-    plt.bar(1 + bar_width*1, Flat_big.mean(), yerr=conf(Flat_big), width=bar_width, alpha=0.5, ecolor='black', capsize=10, label="Flat")
+    legend_dict = {}
+    offroad = "Offroad"
+    flat = "Flat"
+    legend_dict[offroad] = plt.bar(0 + bar_width*0, Off_small.mean(), yerr=conf(Off_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Offroad", color='#0072b2')
+    legend_dict[flat] = plt.bar(0 + bar_width*1, Flat_small.mean(), yerr=conf(Flat_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
+    legend_dict[offroad] = plt.bar(1 + bar_width*0, Off_big.mean(), yerr=conf(Off_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Offroad", color='#0072b2')
+    legend_dict[flat] = plt.bar(1 + bar_width*1, Flat_big.mean(), yerr=conf(Flat_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
     plt.grid(True, linestyle='--', alpha=0.7)
-    plt.xticks([0, 1], ["Small car", "Big car"])
-    plt.legend()
+    plt.xticks([0, 1], ["Small", "Big"])
+    unique_labels, unique_handles = zip(*[(label, handle) for label, handle in legend_dict.items()])
+    legend_position = (0.1, 0.5)  # Specify the position as (x, y)
+    plt.legend(unique_handles, unique_labels, loc=legend_position)
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_vert_acc.png")
     # plt.show()
     plt.close()
 
+    rc('font', family='Times New Roman', size=14)
+    sns.set_palette("colorblind")
     fig, ax1 = plt.subplots(1,1)
-    fig.set_size_inches(3, 3)
-    plt.subplots_adjust(left=0.18, right=1.00, top=0.85, bottom=0.15)  # Adjust the values as needed
+    fig.set_size_inches(3, 4)
+    plt.subplots_adjust(left=0.2, right=1.0, top=0.87, bottom=0.13)  # Adjust the values as needed
 
     ax2 = ax1.twiny()
     ax1.set_ylabel("Rollover Rate")

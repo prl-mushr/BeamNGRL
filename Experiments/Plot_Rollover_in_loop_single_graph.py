@@ -7,14 +7,35 @@ import os
 import argparse
 import matplotlib.style as style
 style.use('seaborn-colorblind')
-from scipy.stats import mannwhitneyu
+from scipy.stats import mannwhitneyu, t as student_t
 from matplotlib import rc
+
+def conf(data):
+    # return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
+    # Sample size
+    n = len(data)
+    s = np.std(data, ddof=1)  # Use ddof=1 to get the sample standard deviation
+    # Confidence level
+    C = 0.95  # 95%
+    # Significance level, α
+    alpha = 1 - C
+    # Number of tails
+    tails = 2
+    # Quantile (the cumulative probability)
+    q = 1 - (alpha / tails)
+    # Degrees of freedom
+    dof = n - 1
+    # Critical t-statistic, calculated using the percent-point function (aka the
+    # quantile function) of the t-distribution
+    t_star = student_t.ppf(q, dof)
+    # Confidence interval
+    return t_star * s / np.sqrt(n)
 
 def Plot_metircs(Config):
     # create a new graph for each scenario:
-    rc('font', family='Times New Roman', size=12)
-    plt.figure().set_size_inches(3, 3)
-    plt.subplots_adjust(left=0.2, right=0.99, top=0.99, bottom=0.11)  # Adjust the values as needed
+    rc('font', family='Times New Roman', size=18)
+    plt.figure().set_size_inches(3, 4)
+    plt.subplots_adjust(left=0.26, right=0.94, top=1.0, bottom=0.13)  # Adjust the values as needed
     combinations = []
     for scenario in Config["scenarios"]:
         if scenario == "race-4":
@@ -64,9 +85,10 @@ def Plot_metircs(Config):
             ## take mean and std for all:
             time_taken = np.array(time_taken)
             time_taken_mean.append(time_taken.mean())
-            time_taken_std.append(abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken,97.5))/2)
+            # time_taken_std.append(abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken,97.5))/2)
+            time_taken_std.append(conf(time_taken))
             time_taken_list.append(time_taken)
-        plt.bar(X + bar_width*(models - model_count - 1), time_taken_mean, yerr=time_taken_std, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=model_name)
+        plt.bar(X + bar_width*(models - model_count - 1), time_taken_mean, yerr=time_taken_std, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=model_name)
         plt.grid(True, linestyle='--', alpha=0.7)
         model_count += 1
     plt.xticks(X, combinations)
@@ -82,8 +104,8 @@ def Plot_metircs(Config):
     statistic, p_value = mannwhitneyu(time_taken_list[1], time_taken_list[3])
     print("p value shallow turns: ", p_value)
 
-    plt.figure().set_size_inches(3, 3)
-    plt.subplots_adjust(left=0.2, right=0.99, top=0.99, bottom=0.11)  # Adjust the values as needed
+    plt.figure().set_size_inches(3, 4)
+    plt.subplots_adjust(left=0.26, right=0.94, top=1.0, bottom=0.13)  # Adjust the values as needed
     combinations = []
     for scenario in Config["scenarios"]:
         if scenario == "race-4":
@@ -121,9 +143,10 @@ def Plot_metircs(Config):
             ## take mean and std for all:
             yaw_alpha = np.array(yaw_alpha)
             yaw_alpha_mean.append(yaw_alpha.mean())
-            yaw_alpha_std.append(abs(np.percentile(yaw_alpha, 2.5) - np.percentile(yaw_alpha,97.5))/2)
+            # yaw_alpha_std.append(abs(np.percentile(yaw_alpha, 2.5) - np.percentile(yaw_alpha,97.5))/2)
+            yaw_alpha_std.append(conf(yaw_alpha))
             yaw_alpha_list.append(yaw_alpha)
-        bar = plt.bar(X + bar_width*(models - model_count - 1), yaw_alpha_mean, yerr=yaw_alpha_std, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=model_name)
+        bar = plt.bar(X + bar_width*(models - model_count - 1), yaw_alpha_mean, yerr=yaw_alpha_std, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=model_name)
         # print(mcolors.rgb2hex(bar[0].get_facecolor()))
         plt.grid(True, linestyle='--', alpha=0.7)
         model_count += 1
@@ -165,7 +188,7 @@ def Plot_metircs(Config):
         damage_y_ON =[]
         damage_x_OFF =[]
         damage_y_OFF =[]
-        axs[Config["scenarios"].index(scenario)].plot(wp_x[::10], wp_y[::10], linewidth=2, label="Target trajectory", color='red')
+        axs[Config["scenarios"].index(scenario)].plot(wp_x[::10], wp_y[::10], linewidth=2, label="Target trajectory", color='red', alpha=1.0)
 
         for model in Config["models"]:
             x = []
@@ -191,11 +214,11 @@ def Plot_metircs(Config):
 
                 x.extend(X[::5].tolist())
                 y.extend(Y[::5].tolist())
-            axs[Config["scenarios"].index(scenario)].scatter(x,y, s=40, label=model_name)
+            axs[Config["scenarios"].index(scenario)].scatter(x,y, s=40, label=model_name, alpha=1.0)
 
         # axs[Config["scenarios"].index(scenario)].scatter(start[0], start[1], s=100, label="Start")
-        axs[Config["scenarios"].index(scenario)].scatter(damage_x_ON, damage_y_ON, s=100, label="Reset for RPS ON")
-        axs[Config["scenarios"].index(scenario)].scatter(damage_x_OFF, damage_y_OFF, s=100, label="Reset for RPS OFF")
+        axs[Config["scenarios"].index(scenario)].scatter(damage_x_ON, damage_y_ON, s=100, label="Reset for RPS ON", alpha=1.0)
+        axs[Config["scenarios"].index(scenario)].scatter(damage_x_OFF, damage_y_OFF, s=100, label="Reset for RPS OFF", alpha=1.0)
 
         axs[Config["scenarios"].index(scenario)].set_xlabel("X (East) (m)", size='large')
         axs[Config["scenarios"].index(scenario)].set_ylabel("Y (North) (m)", rotation=90, size='large')
@@ -212,22 +235,24 @@ def Plot_metircs(Config):
     # plt.show()
     plt.close(fig)
 
-    rc('font', family='Times New Roman', size=12)
+    rc('font', family='Times New Roman', size=18)
 
     fig, ax = plt.subplots(1, 1)
-    fig.set_size_inches(3, 3)
-    plt.subplots_adjust(left=0.2, right=0.99, top=0.99, bottom=0.1)  # Adjust the values as needed
+    fig.set_size_inches(3, 4)
+    plt.subplots_adjust(left=0.26, right=0.94, top=1.0, bottom=0.13)  # Adjust the values as needed
     ax.set_ylabel("Rollovers")
     legend_dict = {}
     rps_off = "RPS_OFF"
     rps_on = "RPS_ON"
-    legend_dict[rps_on] = ax.bar(0 + bar_width * 1, damage_on_tight, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=rps_on, color='#0072b2')
-    legend_dict[rps_off] = ax.bar(0 + bar_width * 0, damage_off_tight, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=rps_off, color='#009e73')
-    legend_dict[rps_on] = ax.bar(1 + bar_width * 1, damage_on_shallow, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=rps_on, color='#0072b2')
-    legend_dict[rps_off] = ax.bar(1 + bar_width * 0, damage_off_shallow, width=bar_width, alpha=0.5, ecolor='black', capsize=10, label=rps_off, color='#009e73')
+    legend_dict[rps_on] = ax.bar(0 + bar_width * 1, damage_on_tight, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=rps_on, color='#0072b2')
+    legend_dict[rps_off] = ax.bar(0 + bar_width * 0, damage_off_tight, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=rps_off, color='#009e73')
+    legend_dict[rps_on] = ax.bar(1 + bar_width * 1, damage_on_shallow, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=rps_on, color='#0072b2')
+    legend_dict[rps_off] = ax.bar(1 + bar_width * 0, damage_off_shallow, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=rps_off, color='#009e73')
     plt.xticks([0, 1], ["Tight turns", "Shallow turns"])
     unique_labels, unique_handles = zip(*[(label, handle) for label, handle in legend_dict.items()])
-    ax.legend(unique_handles, unique_labels)
+    legend_position = (0.1, 0.5)  # Specify the position as (x, y)
+    ax.legend(unique_handles, unique_labels, loc=legend_position)
+    ax.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_rate_closed.png")
     # plt.show()
     plt.close()

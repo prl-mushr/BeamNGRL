@@ -49,7 +49,7 @@ bagdir: "/root/catkin_ws/src/bags"
 bag_name: "hound_23.bag"
 
 Dynamics_config:
-  wheelbase: 0.30
+  wheelbase: 0.29
   throttle_to_wheelspeed: 17.0
   steering_max: 0.488
   dt: 0.02
