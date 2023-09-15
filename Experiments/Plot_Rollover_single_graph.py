@@ -42,7 +42,7 @@ def Plot_metrics(Config, Config_crash):
         if scenario == "smallgrid":
             scn = "Flat"
         if scenario == "small_island":
-            scn = "Offroad"
+            scn = "Off-road"
         for vehicle_name in Config["vehicle_list"]:
             if vehicle_name == "flux":
                 vn = "Small"
@@ -122,7 +122,7 @@ def Plot_metrics(Config, Config_crash):
         if scenario == "smallgrid":
             scn = "Flat"
         if scenario == "small_island":
-            scn = "Offroad"
+            scn = "Off-road"
         for vehicle_name in Config["vehicle_list"]:
             if vehicle_name == "flux":
                 vn = "Small"
@@ -213,11 +213,11 @@ def Plot_metrics(Config, Config_crash):
     plt.subplots_adjust(left=0.2, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
     plt.ylabel("Min vertical acceleration in m/s/s")
     legend_dict = {}
-    offroad = "Offroad"
+    offroad = "Off-road"
     flat = "Flat"
-    legend_dict[offroad] = plt.bar(0 + bar_width*0, Off_small.mean(), yerr=conf(Off_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Offroad", color='#0072b2')
+    legend_dict[offroad] = plt.bar(0 + bar_width*0, Off_small.mean(), yerr=conf(Off_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Off-road", color='#0072b2')
     legend_dict[flat] = plt.bar(0 + bar_width*1, Flat_small.mean(), yerr=conf(Flat_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
-    legend_dict[offroad] = plt.bar(1 + bar_width*0, Off_big.mean(), yerr=conf(Off_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Offroad", color='#0072b2')
+    legend_dict[offroad] = plt.bar(1 + bar_width*0, Off_big.mean(), yerr=conf(Off_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Off-road", color='#0072b2')
     legend_dict[flat] = plt.bar(1 + bar_width*1, Flat_big.mean(), yerr=conf(Flat_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.xticks([0, 1], ["Small", "Big"])
@@ -249,7 +249,7 @@ def Plot_metrics(Config, Config_crash):
             if scenario == "smallgrid":
                 scn = "Flat"
             if scenario == "small_island":
-                scn = "Offroad"
+                scn = "Off-road"
             for RP in ["static+dynamic"]:
                 if RP == "none":
                     rollover_prevention = 0
