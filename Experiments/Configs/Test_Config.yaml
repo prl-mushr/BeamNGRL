@@ -59,14 +59,17 @@ MPPI_config:
   u_per_command: 1
 
 Map_config:
+  map_name: "small_island"
   map_size: 64
   map_res: 0.25
+  map_res_hitl: 0.25
   elevation_range: 4.0
   layers:
     color: 3
     elevation: 1
     semantics: 3
     costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
 
 models: ["slip3d_LPF_drag"]
 # models: ['noslip3d','slip3d_150', 'slip3d', 'TerrainCNN']
@@ -80,14 +83,14 @@ wp_radius: 5.0 ## waypoint radius for terminal condition
 # scenarios: ['race-0', 'race-1']
 # time_limit: [60.0, 50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0, 15.0]  # lookahead on scenario by scenario basis
-num_iters: 10
+num_iters: 1
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 output_dir: "train"
 map_name: "small_island"
 
-save_data: True
+save_data: False
 run_lockstep: True
 
 vehicle:

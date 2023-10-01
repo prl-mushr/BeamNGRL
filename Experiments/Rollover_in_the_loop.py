@@ -65,14 +65,14 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, rotBF=np.zeros(3),  accBF=np
     if abs(temp - steering_setpoint) > 0.001:
         intervention = True
 
-    # if(abs(steering_setpoint) > steering_limit and rotBF[2]*accBF[1] > 0):
-    #     intervention = True
-    #     steering_setpoint = min(steering_limit, max(-steering_limit, steering_setpoint))
     delta_steering = 0
     Ay = accBF[1]
     Ay_error = 0
     Ay_rate = -roll_rate*accBF[2]/(m.cos(roll)**2)
     
+    ## this was a side experiment that we conducted to see if TTR could improve performance; TL;DR: it did not provide measureable improvement.
+    ## adding TTR can also lead to more interference because it forces the system to act before something is even about to happen, 
+    ## and makes it more sensitive to noise from the IMU, which is more prevelant in the real world and less so in simulation.
     TTR_condition = min(m.fabs(Aylim - m.fabs(Ay))/max(m.fabs(Ay_rate),0.01), 0.9) < 0.5
     if(abs(Ay) > Aylim):
         intervention = True
@@ -90,25 +90,27 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, rotBF=np.zeros(3),  accBF=np
     return steering_setpoint, intervention, delta_steering, TTR_condition
 
 
-def main(config_path=None, args=None):
+def main(config_path=None, hal_config_path=None, args=None):
     if config_path is None:
-        print("no config file provided")
+        print("no config file provided!")
         exit()
-        
+    if hal_config_path is None:
+        print("no hal config file provided!")
+        exit()
+
     with open(config_path) as f:
         Config = yaml.safe_load(f)
+    with open(hal_config_path) as f:
+        hal_Config = yaml.safe_load(f)
+
     Dynamics_config = Config["Dynamics_config"]
     Cost_config = Config["Cost_config"]
     Sampling_config = Config["Sampling_config"]
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     vehicle = Config["vehicle"]
-    map_name = Config["map_name"]
     start_pos = np.array(Config["start_pos"]) ## some default start position which will be overwritten by the scenario file
     start_quat = np.array(Config["start_quat"])
-    map_res = Map_config["map_res"]
-    map_size = Map_config["map_size"]
-
 
     # Check that the config file is valid because we run the experiment for a long time and don't want it to fail halfway through
     # I have had this happen to me before and it is very annoying
@@ -124,42 +126,24 @@ def main(config_path=None, args=None):
     if Config["models"].count("TerrainCNN") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
             raise ValueError("Model weights for TerrainCNN do not exist")
+
+    if(Config["save_data"] != True):
+        print("data will not be saved!")
     
-    if not args.remote:
-        print("running local")
-        bng_interface = get_beamng_default(
-            car_model=vehicle["model"],
-            start_pos=start_pos,
-            start_quat=start_quat,
-            map_name=map_name,
-            car_make=vehicle["make"],
-            beamng_path=BNG_HOME,
-            map_res=map_res,
-            map_size=map_size,
-            elevation_range=Map_config["elevation_range"]
-        )
-        bng_interface.burn_time = 0.02
-    else:
-        print("running remote")
-        if args.host_IP is None:
-            raise ValueError("Host IP must be specified when running remote")
-
-        bng_interface = get_beamng_remote(
-            car_model=vehicle["model"],
-            start_pos=start_pos,
-            start_quat=start_quat,
-            map_name=map_name,
-            car_make=vehicle["make"],
-            beamng_path=BNG_HOME,
-            map_res=map_res,
-            map_size=map_size,
-            elevation_range=Map_config["elevation_range"],
-            host_IP=args.host_IP
-        )
-        bng_interface.burn_time = 0.02
-
-    if(Config["run_lockstep"]):
-        bng_interface.set_lockstep(True)
+    bng_interface = get_beamng_default(
+        car_model=vehicle["model"],
+        start_pos=start_pos,
+        start_quat=start_quat,
+        car_make=vehicle["make"],
+        map_config=Map_config,
+        host_IP=args.host_IP,
+        remote=args.remote,
+        camera_config=hal_Config["camera"],
+        lidar_config=hal_Config["lidar"],
+        accel_config=hal_Config["mavros"],
+        burn_time=0.02,
+        run_lockstep=Config["run_lockstep"],
+    )
 
     dtype = torch.float
     device = torch.device("cuda")
@@ -174,7 +158,7 @@ def main(config_path=None, args=None):
     total_experiments = len(Config["models"]) * len(Config["scenarios"]) * Config["num_iters"]
     experiment_count = 0
 
-    vehicle = Config["vehicles"]["flux"]
+    vehicle = Config["vehicles"]["flux"] ## TODO: change this to HOUND
     t_h_ratio = vehicle["track_width"]/(2*vehicle["cg_height"])
     max_steer = vehicle["max_steer"]
     wheelbase = vehicle["wheelbase"]
@@ -223,7 +207,7 @@ def main(config_path=None, args=None):
                 for trial in range(Config["num_iters"]):
                     trial_pos = np.copy(start_pos)
                     trial_pos[:2] += np.random.uniform(-Config["start_pose_noise"], Config["start_pose_noise"], size=2)
-                    if map_name == "smallgrid":
+                    if Map_config["map_name"] == "smallgrid":
                         use_elevation = False
                         trial_pos[2] = 0.1
                     else:
@@ -277,7 +261,7 @@ def main(config_path=None, args=None):
                         state_to_ctrl[15:17] = action ## adhoc wheelspeed.
                         action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
-                        costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
+                        costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / Map_config["map_res"])
 
                         if(model=="slip3d_rp"):
                             action[0], intervention, delta_steering, Rollover_detected = steering_limiter(
@@ -308,7 +292,7 @@ def main(config_path=None, args=None):
                         if bng_interface.flipped_over:
                             closest_index = find_closest_index(pos, target_WP)
                             reset_pos = target_WP[closest_index,:3]
-                            if map_name == "smallgrid":
+                            if Map_config["map_name"] == "smallgrid":
                                 reset_pos[2] = 0.1
                             else:
                                 reset_pos[2] += 0.1
@@ -363,11 +347,15 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Rollover_loop_config.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="hound.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
+
+    hal_config_name = args.hal_config_name
+    hal_config_path = str(Path(os.getcwd()).parent.absolute()) + "/Configs/" + hal_config_name
     with torch.no_grad():
-        main(config_path=config_path, args=args) ## we run for 3 iterations because science
+        main(config_path=config_path, hal_config_path=hal_config_path, args=args) ## we run for 3 iterations because science

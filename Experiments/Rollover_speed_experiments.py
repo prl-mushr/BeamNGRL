@@ -12,42 +12,21 @@ in this experiment i just need the car to drive straight until it reaches a spec
 We basically increase the turn angle with each "iteration" of the experiment and test the rollover prevention
 I wont be using the MPPI controller here since it is not needed.
 '''
-def create_bng_scenario(map_name, make, model, start_pos, start_quat, args):
-    print("creating beamng scenario")
-    if args.remote:
-        if args.host_IP is None:
-            raise ValueError("Host IP must be specified when running remote")
-
-        bng_interface = get_beamng_remote(
-            car_model=model,
-            start_pos=start_pos,
-            start_quat=start_quat,
-            map_name=map_name,
-            car_make=make,
-            beamng_path=BNG_HOME,
-            map_res=0.25,
-            map_size=16,
-            elevation_range=2.0,
-            host_IP=args.host_IP
-        )
-        bng_interface.burn_time = 0.02  ## remote connection takes up a lot of time, so we don't need to burn time
-        bng_interface.set_lockstep(False)
-        return bng_interface
-
-    print("starting beamng locally")
+def create_bng_scenario(Map_config, make, model, start_pos, start_quat, args, hal_Config):
     bng_interface = get_beamng_default(
         car_model=model,
         start_pos=start_pos,
         start_quat=start_quat,
-        map_name=map_name,
         car_make=make,
-        beamng_path=BNG_HOME,
-        map_res=0.25,
-        map_size=16,
-        elevation_range=2.0,
+        map_config=Map_config,
+        host_IP=args.host_IP,
+        remote=args.remote,
+        camera_config=hal_Config[model]["camera"],
+        lidar_config=hal_Config[model]["lidar"],
+        accel_config=hal_Config[model]["mavros"],
+        burn_time=0.02,
+        run_lockstep=True,
     )
-    bng_interface.burn_time = 0.02
-    bng_interface.set_lockstep(True)
     return bng_interface
 
 def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros(3), dA_dt=np.zeros(3), wheelbase=2.6, t_h_ratio=0.5, max_steer=0.5, accel_gain=1.0, roll_rate_gain=1.0, rollover_prevention=1, steer_slack=0.2):
@@ -100,20 +79,31 @@ def steering_limiter(steer=0, wheelspeed=0, roll=0, roll_rate=0,  accBF=np.zeros
     return steering_setpoint, intervention, delta_steering, TTR_condition
 
 
-def main(config_path=None, args=None):
+def main(config_path=None, hal_config_path=None, args=None):
     if config_path is None:
-        print("no config file provided")
+        print("no config file provided!")
         exit()
-        
+    if hal_config_path is None:
+        print("no hal config file provided!")
+        exit()
+
     with open(config_path) as f:
         Config = yaml.safe_load(f)
+    with open(hal_config_path) as f:
+        hal_Config = yaml.safe_load(f)
 
+    Map_config = Config["Map_config"]
     total_experiments = len(Config["vehicle_list"]) * len(Config["scenarios"]) * Config["num_iters"] * 2
     experiment_count = 0
     bng_interface = None
+
+    if Config["save_data"] == False:
+        print("data will not be saved!")
+
     try:
         for scenario in Config["scenarios"]:
             ## check the map for the scenario:
+            Map_config["map_name"] = scenario
 
             for vehicle_name in Config["vehicle_list"]:
                 
@@ -142,7 +132,7 @@ def main(config_path=None, args=None):
                 rollover_speed_max = vehicle["rollover_speed_max"]
                 speed_iters = Config["speed_iters"]
 
-                bng_interface = create_bng_scenario(scenario, make, model, start_pos, start_quat, args)
+                bng_interface = create_bng_scenario(Map_config, make, model, start_pos, start_quat, args, hal_Config)
 
                 for attempt in range(speed_iters):
                     for trial in range(num_iters):
@@ -225,11 +215,11 @@ def main(config_path=None, args=None):
                             result_states = np.array(result_states)
                             dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/speed_crash_{}/".format(str(rollover_prevention))
                             filename = dir_name + "/{}-{}-{}-{}.npy".format(scenario, vehicle_name, str(trial), str(attempt))
-                            if(not os.path.isdir(dir_name)):
-                                os.makedirs(dir_name)
-                            np.save(filename, result_states)
                             bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = max_speed, Kp=speed_Kp, Ki=0.05, Kd=0.0, FF_gain=0.0)
-                            ## add one last data point because we reset the car
+                            if Config["save_data"]:
+                                if(not os.path.isdir(dir_name)):
+                                    os.makedirs(dir_name)
+                                np.save(filename, result_states)
                 bng_interface.set_lockstep(False)
                 bng_interface.bng.resume()
                 
@@ -251,10 +241,13 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Rollover_speed_crash_Config.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="combined_rollover.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
-    main(config_path=config_path, args=args) ## we run for 3 iterations because science
+    hal_config_name = args.hal_config_name
+    hal_config_path = str(Path(os.getcwd()).parent.absolute()) + "/Configs/" + hal_config_name
+    main(config_path=config_path, hal_config_path=hal_config_path, args=args) ## we run for 3 iterations because science

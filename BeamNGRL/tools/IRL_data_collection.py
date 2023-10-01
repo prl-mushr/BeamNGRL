@@ -7,7 +7,7 @@ def main(map_name, start_point, start_quat, BeamNG_dir='/home/sasha/libraries/')
     map_size = 16 # 16 x 16 map
 
     bng_interface = beamng_interface(BeamNG_dir=BeamNG_dir)
-    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='RACER',
+    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='offroad',
                                 start_pos=start_point, start_rot=start_quat)
     bng_interface.set_map_attributes(map_size=map_size, resolution=map_res, path_to_maps='/home/sasha/projects/offroad_mbrl')
 

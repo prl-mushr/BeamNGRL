@@ -9,14 +9,19 @@ import rosbag
 import os
 from tf.transformations import euler_from_quaternion
 
-
-def main(config_path=None, args=None):
+## TODO: make this script run over the collected data in one shot.
+def main(config_path=None, hal_config_path=None, args=None):
     if config_path is None:
-        print("no config file provided")
+        print("no config file provided!")
         exit()
-        
+    if hal_config_path is None:
+        print("no hal config file provided!")
+        exit()
+
     with open(config_path) as f:
         Config = yaml.safe_load(f)
+    with open(hal_config_path) as f:
+        hal_Config = yaml.safe_load(f)
 
     dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Sim2Real/"
 
@@ -82,20 +87,20 @@ def main(config_path=None, args=None):
     start_pos = np.zeros(3)
     start_quat = np.array([0,0,0,1])
 
-    bng_interface = get_beamng_remote(
-        car_model="flux",
+    bng_interface = get_beamng_default(
+        car_model=vehicle["model"],
         start_pos=start_pos,
         start_quat=start_quat,
-        map_name="smallgrid",
-        car_make="savage_low_f",
-        beamng_path=BNG_HOME,
-        map_res=0.25,
-        map_size=16,
-        elevation_range=2.0,
-        host_IP=args.host_IP
+        car_make=vehicle["make"],
+        map_config=Map_config,
+        host_IP=args.host_IP,
+        remote=args.remote,
+        camera_config=hal_Config["camera"],
+        lidar_config=hal_Config["lidar"],
+        accel_config=hal_Config["mavros"],
+        burn_time=0.02,
+        run_lockstep=Config["run_lockstep"],
     )
-    bng_interface.burn_time = 0.02  ## remote connection takes up a lot of time, so we don't need to burn time
-    bng_interface.set_lockstep(True)
 
     for i in range(50):
         bng_interface.state_poll() ## burn through the first few frames to stabilize the car
@@ -135,13 +140,17 @@ def main(config_path=None, args=None):
 
 
 if __name__ == "__main__":
-    # do the args thingy:
+    # TODO: Test this script
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="sim2real_Config.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="hound.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
+
 
     args = parser.parse_args()
     config_name = args.config_name
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
-    main(config_path=config_path, args=args) ## we run for 3 iterations because science
+    hal_config_name = args.hal_config_name
+    hal_config_path = str(Path(os.getcwd()).parent.absolute()) + "/Configs/" + hal_config_name
+    main(config_path=config_path, hal_config_path=hal_config_path, args=args) ## we run for 3 iterations because science

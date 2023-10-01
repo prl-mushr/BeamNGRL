@@ -13,7 +13,7 @@ def main():
 
     scenario = Scenario('small_island', name="test integration")
 
-    vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/RACER.pc')
+    vehicle = Vehicle('ego_vehicle', model='sunburst', partConfig='vehicles/sunburst/offroad.pc')
     
     NE = np.array([400,  400, 100])
     SW = np.array([-400, -400, 100])

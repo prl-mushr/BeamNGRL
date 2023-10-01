@@ -79,7 +79,7 @@ def collect_mppi_data(args):
         )
 
         bng = get_beamng_default(
-            car_model='RACER',
+            car_model='offroad',
             start_pos=np.array(args.start_pos),
             start_quat=np.array(args.start_quat),
             map_name=args.map_name,

@@ -14,8 +14,6 @@ import os
 import argparse
 import cv2
 
-# torch.manual_seed(0)
-
 def update_npy_datafile(buffer: List, filepath):
     buff_arr = np.array(buffer)
     if filepath.is_file():
@@ -27,7 +25,7 @@ def update_npy_datafile(buffer: List, filepath):
         np.save(filepath, buff_arr)
     return [] # empty buffer
 
-
+## TODO: move this to some kind of utils folder because this is used both in the loop as well as open-loop. 
 def get_dynamics(model, Config):
     Dynamics_config = Config["Dynamics_config"]
     MPPI_config = Config["MPPI_config"]
@@ -74,13 +72,18 @@ def get_dynamics(model, Config):
         raise ValueError('Unknown model type')
     return dynamics
 
-def main(config_path=None, args=None):
+def main(config_path=None, hal_config_path=None, args=None):
     if config_path is None:
-        print("no config file provided")
+        print("no config file provided!")
         exit()
-        
+    if hal_config_path is None:
+        print("no hal config file provided!")
+        exit()
+
     with open(config_path) as f:
         Config = yaml.safe_load(f)
+    with open(hal_config_path) as f:
+        hal_Config = yaml.safe_load(f)
     Dynamics_config = Config["Dynamics_config"]
     Cost_config = Config["Cost_config"]
     Sampling_config = Config["Sampling_config"]
@@ -93,9 +96,6 @@ def main(config_path=None, args=None):
     map_res = Map_config["map_res"]
     map_size = Map_config["map_size"]
 
-
-    # Check that the config file is valid because we run the experiment for a long time and don't want it to fail halfway through
-    # I have had this happen to me before and it is very annoying
     assert len(Config["time_limit"]) == len(Config["scenarios"]), "Time limit must be specified for each scenario"
     assert len(Config["lookahead"]) == len(Config["scenarios"]), "Lookahead must be specified for each scenario"
     for scenario in Config["scenarios"]:
@@ -113,42 +113,21 @@ def main(config_path=None, args=None):
         print("WARNING: Data will not be saved!")
     if Config["run_lockstep"]:
         print("Running in lockstep mode")
-    
-    if not args.remote:
-        print("running local")
-        bng_interface = get_beamng_default(
-            car_model=vehicle["model"],
-            start_pos=start_pos,
-            start_quat=start_quat,
-            map_name=map_name,
-            car_make=vehicle["make"],
-            beamng_path=BNG_HOME,
-            map_res=map_res,
-            map_size=map_size,
-            elevation_range=Map_config["elevation_range"]
-        )
-        bng_interface.burn_time = 0.02
-    else:
-        print("running remote")
-        if args.host_IP is None:
-            raise ValueError("Host IP must be specified when running remote")
 
-        bng_interface = get_beamng_remote(
-            car_model=vehicle["model"],
-            start_pos=start_pos,
-            start_quat=start_quat,
-            map_name=map_name,
-            car_make=vehicle["make"],
-            beamng_path=BNG_HOME,
-            map_res=map_res,
-            map_size=map_size,
-            elevation_range=Map_config["elevation_range"],
-            host_IP=args.host_IP
-        )
-        bng_interface.burn_time = 0.02
-
-    if(Config["run_lockstep"]):
-        bng_interface.set_lockstep(True)
+    bng_interface = get_beamng_default(
+        car_model=vehicle["model"],
+        start_pos=start_pos,
+        start_quat=start_quat,
+        car_make=vehicle["make"],
+        map_config=Map_config,
+        host_IP=args.host_IP,
+        remote=args.remote,
+        camera_config=hal_Config["camera"],
+        lidar_config=hal_Config["lidar"],
+        accel_config=hal_Config["mavros"],
+        burn_time=0.02,
+        run_lockstep=Config["run_lockstep"],
+    )
 
     dtype = torch.float
     device = torch.device("cuda")
@@ -295,11 +274,15 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="offroad.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()
     config_name = args.config_name
     config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
+
+    hal_config_name = args.hal_config_name
+    hal_config_path = str(Path(os.getcwd()).parent.absolute()) + "/Configs/" + hal_config_name
     with torch.no_grad():
-        main(config_path=config_path, args=args) ## we run for 3 iterations because science
+        main(config_path = config_path, hal_config_path = hal_config_path, args = args) ## we run for 3 iterations because science

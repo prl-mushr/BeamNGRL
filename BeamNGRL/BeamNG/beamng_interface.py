@@ -12,7 +12,7 @@ import BeamNGRL
 from BeamNGRL.utils.visualisation import Vis
 from beamngpy import BeamNGpy, Scenario, Vehicle
 from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer, Damage
-
+import threading
 
 ROOT_PATH = Path(BeamNGRL.__file__).parent
 DATA_PATH = ROOT_PATH.parent / 'data'
@@ -20,93 +20,63 @@ BNG_HOME = os.environ.get('BNG_HOME')
 
 
 def get_beamng_default(
-        car_model='RACER',
+        car_model='offroad',
         start_pos=None,
         start_quat=None,
-        map_name=None,
         car_make='sunburst',
         beamng_path=BNG_HOME,
-        map_res=0.05,
-        map_size=16, # 16 x 16 map
-        elevation_range=2.0,
+        map_config=None,
         path_to_maps=DATA_PATH.__str__(),
-):
-
-    if(start_pos is None):
-        print("please provide a start pos! I can not spawn a car in the ether!")
-        exit()
-    if(start_quat is None):
-        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
-        exit()
-    if(map_name is None):
-        print("please provide a map_name! I can not spawn a car in the ether!")
-        exit()
-        
-    bng = beamng_interface(BeamNG_path=beamng_path)
-
-    bng.load_scenario(
-        scenario_name=map_name, car_make=car_make, car_model=car_model,
-        start_pos=start_pos, start_rot=start_quat,
-    )
-    bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
-    )
-
-    return bng
-
-def get_beamng_remote(
-        car_model='RACER',
-        start_pos=None,
-        start_quat=None,
-        map_name=None,
-        car_make='sunburst',
-        beamng_path=BNG_HOME,
-        map_res=0.05,
-        map_size=16, # 16 x 16 map
-        elevation_range=2.0,
-        path_to_maps=DATA_PATH.__str__(),
-        remote=True,
+        remote=False,
         host_IP=None,
+        camera_config=None,
+        lidar_config=None,
+        accel_config=None,
+        burn_time=0.02,
+        run_lockstep=False,
 ):
 
-    if(host_IP is None):
-        print("please provide a host IP!")
-        exit()
     if(start_pos is None):
         print("please provide a start pos! I can not spawn a car in the ether!")
         exit()
     if(start_quat is None):
         print("please provide a start quat! I can not spawn a car's rotation in the ether!")
         exit()
-    if(map_name is None):
-        print("please provide a map_name! I can not spawn a car in the ether!")
+    if(map_config is None):
+        print("please provide a map_config! I can not spawn a car in the ether!")
         exit()
         
     bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP)
-
     bng.load_scenario(
-        scenario_name=map_name, car_make=car_make, car_model=car_model,
+        scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
+        camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config
     )
     bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps,
     )
-
+    bng.burn_time = burn_time
+    bng.set_lockstep(run_lockstep)
     return bng
 
 ## this is the equivalent of None pizza with left beef joke. Yes I'd like one beamng simulator without the beamng simulator.
+## https://en.wikipedia.org/wiki/None_pizza_with_left_beef
 def get_beamng_nobeam(
         Dynamics,
-        car_model='RACER',
+        car_model='offroad',
         start_pos=None,
         start_quat=None,
-        map_name=None,
         car_make='sunburst',
         beamng_path=BNG_HOME,
-        map_res=0.05,
-        map_size=16, # 16 x 16 map
-        elevation_range=2.0,
+        map_config=None,
         path_to_maps=DATA_PATH.__str__(),
+        remote=False, ## these options have no effect but are here for "compatibility"
+        host_IP=None,
+        camera_config=None,
+        lidar_config=None,
+        accel_config=None,
+        burn_time=0.02,
+        run_lockstep=False,
 ):
 
     if(start_pos is None):
@@ -115,28 +85,35 @@ def get_beamng_nobeam(
     if(start_quat is None):
         print("please provide a start quat! I can not spawn a car's rotation in the ether!")
         exit()
-    if(map_name is None):
-        print("please provide a map_name! I can not spawn a car in the ether!")
+    if(map_config is None):
+        print("please provide a map_config! I can not spawn a car in the ether!")
         exit()
         
     bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
-
     bng.load_scenario(
-        scenario_name=map_name, car_make=car_make, car_model=car_model,
+        scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.set_map_attributes(
-        map_size=map_size, resolution=map_res, elevation_range=elevation_range, path_to_maps=path_to_maps,
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps,
     )
-
+    bng.burn_time = burn_time
+    bng.set_lockstep(run_lockstep)
     return bng
 
 
 class beamng_interface():
-    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None, shell_mode=False):
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None, shell_mode=False, HITL_mode=False, async_mode=False):
         self.lockstep   = False
         self.lidar_list = []
+        self.lidar_fps = 10
+        self.new_lidar = False
+        self.last_lidar_time = 0
         self.camera_list = []
+        self.camera_fps = 30
+        self.new_cam = False
+        self.last_cam_time = 0
+        self.cam_segmt = False
         self.state_init = False
         self.A = np.array([0,0,9.81])
         self.last_A     = np.copy(self.A)
@@ -153,7 +130,7 @@ class beamng_interface():
         self.state      = None
         self.BEV_center = np.zeros(3)
         self.avg_wheelspeed = 0
-        self.dt = 0.016
+        self.dt = 0.02
         self.last_whspd_error = 0
         self.whspd_error_sigma = 0
         self.whspd_error_diff = 0
@@ -161,12 +138,21 @@ class beamng_interface():
         self.burn_time = 0.02
         self.use_vel_diff = True
         self.paused = False
+        self.remote = remote
+        self.lidar_config = None
+        self.camera_config = None
+        self.camera = False
+        self.lidar = False
+        self.use_sgmt = False
 
         self.use_beamng = use_beamng
         if self.use_beamng:
-            if(remote==True and host_IP is not None):
+            if remote==True and host_IP is not None:
                 self.bng = BeamNGpy(host_IP, 64256, remote=True)
                 self.bng.open(launch=False, deploy=False)
+            elif remote==True and host_IP is None:
+                print("~Ara Ara! Trying to run BeamNG remotely without providing any host IP?")
+                exit()
             else:
                 self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
                 self.bng.open()
@@ -175,9 +161,10 @@ class beamng_interface():
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
 
-    def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='RACER',
+    def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='offroad',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
-                      time_of_day=1200, hide_hud=False, fps=60):
+                      camera_config=None, lidar_config=None, accel_config=None,
+                      time_of_day=1200, hide_hud=False):
         self.start_pos = start_pos
         self.start_quat = start_rot
         if not self.use_beamng:
@@ -207,21 +194,38 @@ class beamng_interface():
         self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
-        # time.sleep(2)
-        if(car_make[:6] == 'savage'):
-            self.attach_accelerometer(pos=(0,0,0.1))
+
+        if accel_config == None:
+            base_pos = (0,0,0.8)
         else:
-            self.attach_accelerometer()
-        # time.sleep(2)
-        # self.attach_camera(name='camera')
-        # time.sleep(2)
-        # self.attach_lidar(name='lidar')
-        # time.sleep(2)
+            base_pos = self.ROS2BNG_bf_pos(accel_config["pos"],(0,0,0))
+
+        self.camera_config = camera_config
+        self.lidar_config = lidar_config
+
+        if self.camera_config is not None and self.camera_config["enable"]:
+            self.camera = True
+            self.camera_fps = self.camera_config["fps"]
+            cam_pos = self.ROS2BNG_bf_pos(self.camera_config["pos"], base_pos)
+            self.use_sgmt = self.camera_config["annotation"]
+            self.attach_camera(name='camera', pos=cam_pos, update_frequency=self.camera_fps, dir=self.camera_config["dir"], up=self.camera_config["up"], 
+                               field_of_view_y=self.camera_config["fov"], resolution=(self.camera_config["width"],self.camera_config["height"]),
+                               annotation=self.use_sgmt)
+
+        if self.lidar_config is not None and self.lidar_config["enable"]:
+            self.lidar = True
+            self.lidar_fps = self.lidar_config["fps"]
+            lidar_pos = self.ROS2BNG_bf_pos(self.lidar_config["pos"], base_pos)
+            self.attach_lidar("lidar", pos=lidar_pos, dir=self.lidar_config["dir"], up=self.lidar_config["up"], vertical_resolution=self.lidar_config["channels"],
+                             vertical_angle = self.lidar_config["vertical_angle"], rays_per_second_per_scan=self.lidar_config["rays_per_second_per_scan"],
+                             update_frequency=self.lidar_fps, max_distance=self.lidar_config["max_distance"])
+
         self.state_poll()
         self.flipped_over = False
 
-
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0):
+        ## TODO: map config should correspond to map name.
+        ## TODO: auto-construct map using windows camera stuff.
         self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
         self.color_map_full = cv2.imread(path_to_maps + '/map_data/color_map.png')
         self.segmt_map_full = cv2.imread(path_to_maps + '/map_data/segmt_map.png')
@@ -250,7 +254,6 @@ class beamng_interface():
         self.mask        = cv2.circle(mask, self.map_size_px, self.map_size_px[0], 255, thickness=-1)
         self.mask_center = (self.map_size_px[0], self.map_size_px[1])
 
-    ## this "nested" function uses variables from the intrinsic data, be careful if you move this function out
     def get_map_bf_no_rp(self, map_img):
         if(len(map_img.shape)==3):
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max, :]
@@ -276,15 +279,14 @@ class beamng_interface():
         O = np.matmul(R, V)
         x, y = O[0,:], O[1,:]
         return x, y
+
+    def ROS2BNG_bf_pos(self, pos, base_pos):
+        return  (pos[1] + base_pos[1], -pos[0] + base_pos[1], pos[2] + base_pos[2])
  
     def gen_BEVmap(self):
 
         self.img_X = np.clip(int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
         self.img_Y = np.clip(int( self.pos[1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
-
-        # self.img_X = int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2)
-        # self.img_Y = int( self.pos[1]*self.resolution_inv + self.image_shape[1]//2)
-
 
         self.Y_min = int(self.img_Y - self.map_size*self.resolution_inv)
         self.Y_max = int(self.img_Y + self.map_size*self.resolution_inv)
@@ -331,9 +333,9 @@ class beamng_interface():
 
     def rpy_from_quat(self, quat):
         y = np.zeros(3)
-        y[0] = np.arctan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2));
+        y[0] = np.arctan2((2.0*(quat[2]*quat[3]+quat[0]*quat[1])) , (quat[0]**2 - quat[1]**2 - quat[2]**2 + quat[3]**2))
         y[1] = -np.arcsin(2.0*(quat[1]*quat[3]-quat[0]*quat[2]));
-        y[2] = np.arctan2((2.0*(quat[1]*quat[2]+quat[0]*quat[3])) , (quat[0]**2 + quat[1]**2 - quat[2]**2 - quat[3]**2));
+        y[2] = np.arctan2((2.0*(quat[1]*quat[2]+quat[0]*quat[3])) , (quat[0]**2 + quat[1]**2 - quat[2]**2 - quat[3]**2))
         return y
 
     def quat_from_rpy(self, rpy):
@@ -395,18 +397,18 @@ class beamng_interface():
         return img
 
     def attach_lidar(self, name, pos=(0,0,1.5), dir=(0,-1,0), up=(0,0,1), vertical_resolution=3, vertical_angle=26.9,
-                     rays_per_second_per_scan=5000, update_frequency=10):
+                     rays_per_second_per_scan=5000, update_frequency=10, max_distance=10.0):
         lidar = Lidar(name, self.bng, self.vehicle, pos = pos, dir=dir, up=up,requested_update_time=0.001, is_visualised=False,
-                        vertical_resolution=3, vertical_angle=5, rays_per_second=vertical_resolution*rays_per_second_per_scan,
-                        frequency=update_frequency, update_priority = 0,is_using_shared_memory=True)
+                        vertical_resolution=3, vertical_angle=5, rays_per_second=vertical_resolution*rays_per_second_per_scan, max_distance=max_distance,
+                        frequency=update_frequency, update_priority = 0,is_using_shared_memory=(not self.remote))
         self.lidar_list.append(lidar)
         print("lidar attached")
 
-    def attach_camera(self, name, pos=(0,-2,1.4), dir=(0,-1,0), field_of_view_y=87, resolution=(640,480),
-                      depth=True, color=True, annotation=False, instance=False, near_far_planes=(1,60.0), update_frequency = 30, static=False):
-        camera = Camera(name, self.bng, self.vehicle, pos=pos, field_of_view_y=field_of_view_y, resolution=resolution, update_priority=0,
-                         is_render_colours=color, is_render_depth=depth, is_render_annotations=annotation,is_visualised=False,
-                         requested_update_time=0.01, near_far_planes=near_far_planes, is_using_shared_memory=True,
+    def attach_camera(self, name, pos=(0,-2,1.4), dir=(0,-1,0), up=(0,0,1), field_of_view_y=87, resolution=(640,480),
+                      depth=True, color=True, annotation=False, instance=False, near_far_planes=(0.15,60.0), update_frequency = 30, static=False):
+        camera = Camera(name, self.bng, self.vehicle, pos=pos, dir=dir, up=up, field_of_view_y=field_of_view_y, resolution=resolution, update_priority=0,
+                         is_render_colours=color, is_render_depth=depth, is_render_annotations=annotation,is_visualised=True,
+                         requested_update_time=0.01, near_far_planes=near_far_planes, is_using_shared_memory=(not self.remote),
                          is_render_instance=instance,  is_static=static)
         self.camera_list.append(camera)
         print("camera attached")
@@ -416,30 +418,38 @@ class beamng_interface():
         print("accel attached")
 
     def camera_poll(self, index):
+        ## TODO: this function should "return" the images corresponding to that sensor, not just store them in "self.color/depth"
         try:
             camera_readings = self.camera_list[index].poll()
             color = camera_readings['colour']
             self.color = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
             self.depth = camera_readings['depth']
-            self.segmt = camera_readings['annotation']
+            if self.use_sgmt:
+                self.segmt = camera_readings['annotation']
         except Exception as e:
             print(traceback.format_exc())
 
     def lidar_poll(self, index):
+        ## TODO: this function should "return" the images corresponding to that sensor
         try:
-            self.lidar_pts = np.copy(self.lidar_list[index].poll())
-        except:
-            pass
+            points = self.lidar_list[index].poll()
+            self.lidar_pts = np.copy(points['pointCloud'])
+        except Exception as e:
+            print(traceback.format_exc())
 
     def Accelerometer_poll(self):
+        ## TODO: this function should return the readings, not store them in a class variable to accomodate multi-agent simulation in the future.
         if not self.use_vel_diff:
             try:
                 acc = self.accel.poll()
-                temp_acc = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
-                g_bf = np.matmul(self.Tnb, self.Gravity)
-                if( np.all(temp_acc) != 0):
-                    self.last_A = self.A
-                    self.A = temp_acc + g_bf
+                if 'axis1' in acc: ## simulator tends to provide empty message on failure
+                    temp_acc = np.array([acc['axis1'], acc['axis3'], -acc['axis2']])
+                    if np.all(temp_acc) != 0: ## in case you're using my modified version of the simulator which sends all 0s on fault.
+                        g_bf = np.matmul(self.Tnb, self.Gravity)
+                        self.last_A = self.A
+                        self.A = temp_acc + g_bf
+                ## only update acceleration if we have a valid new reading.
+                ## the accelerometer in bng 0.26 is unreliable, so I recommend using vel_diff method
             except Exception:
                 print(traceback.format_exc())
         else:
@@ -472,21 +482,17 @@ class beamng_interface():
                 assert self.burn_time != 0, "step time can't be 0"
                 self.bng.set_steps_per_second(int(1/self.burn_time)) ## maximum steps per second; we can only guarantee this if running on a high perf. system.
                 self.handle_timing()
-                # self.camera_poll(0)
-                # self.lidar_poll(0)
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.state_init = True
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
                 self.timestamp = self.vehicle.sensors['timer']['time']
-                print("beautiful day, __init__?")
-                time.sleep(1)
+                print("beautiful day, __init__?") ## being cheeky are we?
             else:
                 self.handle_timing()
-                # self.camera_poll(0)
-                # self.lidar_poll(0)                
-                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.Accelerometer_poll()
+                self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.02)
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
@@ -501,23 +507,10 @@ class beamng_interface():
                 self.last_quat = self.quat
                 self.G = np.array([diff[1]*2/self.dt, diff[2]*2/self.dt, diff[3]*2/self.dt])  # gx gy gz
                 self.G = np.matmul(self.Tnb, self.G)
-
-                ## wheel ordering is FR BR FL BL
-                wheeldownforce = self.vehicle.sensors['electrics']['wheeldownforce']
-                wheelhorizontalforce = self.vehicle.sensors['electrics']['wheelhorizontalforce']
-                wheelslip = self.vehicle.sensors['electrics']['wheelslip']
-                wheelsideslip = self.vehicle.sensors['electrics']['wheelsideslip']
-                wheelspeed = self.vehicle.sensors['electrics']['wheelspeed_individual']
-                self.wheeldownforce = np.array([wheeldownforce[0.0], wheeldownforce[1.0], wheeldownforce[2.0], wheeldownforce[3.0]])
-                self.wheelhorizontalforce = np.array([wheelhorizontalforce[0.0], wheelhorizontalforce[1.0], wheelhorizontalforce[2.0], wheelhorizontalforce[3.0]])
-                self.wheelslip = np.array([wheelslip[0.0], wheelslip[1.0], wheelslip[2.0], wheelslip[3.0]])
-                self.wheelsideslip = np.array([wheelsideslip[0.0], wheelsideslip[1.0], wheelsideslip[2.0], wheelsideslip[3.0]])
-                self.wheelspeed = np.array([wheelspeed[0.0], wheelspeed[1.0], wheelspeed[2.0], wheelspeed[3.0]])
                 sign = np.sign(self.vehicle.sensors['electrics']['gear_index'])
                 if sign == 0:
                     sign = 1 ## special case just to make sure we don't consider 0 speed in neutral gear
                 self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed'] * sign
-
                 self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
                 brake = float(self.vehicle.sensors['electrics']['brake'])
@@ -526,6 +519,17 @@ class beamng_interface():
                 self.gen_BEVmap()
                 if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
                     self.flipped_over = True
+
+                if self.camera:
+                    if self.timestamp - self.last_cam_time > 1/self.camera_fps:
+                        self.camera_poll(0)
+                        self.last_cam_time = self.timestamp
+                if self.lidar:
+                    if self.timestamp - self.last_lidar_time > 1/self.lidar_fps:
+                        self.lidar_poll(0)
+                        self.last_lidar_time = self.timestamp
+                        self.lidar_pts -= self.pos
+                        self.lidar_pts = np.matmul(self.lidar_pts, self.Tnb.T)
         except Exception:
             print(traceback.format_exc())
 

@@ -17,7 +17,7 @@ from xml.etree.ElementTree import Element, SubElement
 import numpy as np
 from beamngpy.beamngcommon import LOGGER_ID, BNGValueError
 from PIL import Image, ImageDraw, ImageFont
-
+import time
 
 class Camera:
 
@@ -377,36 +377,16 @@ class Camera:
         processed_readings = dict(type='Camera')
 
         if self.is_render_colours:
-            colour = []
-            for i in range(len(binary['colour'])):
-                colour.append(np.uint8(binary['colour'][i]))
-            processed_readings['colour'] = self._convert_to_image(colour, width, height, 4, np.uint8)
+            processed_readings['colour'] = self._convert_to_image(binary['colour'], width, height, 4, np.uint8)
 
         if self.is_render_annotations:
-            annotation = []
-            for i in range(len(binary['annotation'])):
-                annotation.append(np.uint8(binary['annotation'][i]))
-            processed_readings['annotation'] = self._convert_to_image(annotation, width, height, 4, np.uint8)
+            processed_readings['annotation'] = self._convert_to_image(binary['annotation'], width, height, 4, np.uint8)
 
         if self.is_render_instance:
-            instance = []
-            for i in range(len(binary['instance'])):
-                instance.append(np.uint8(binary['instance'][i]))
-            processed_readings['instance'] = self._convert_to_image(instance, width, height, 4, np.uint8)
+            processed_readings['instance'] = self._convert_to_image(binary['instance'], width, height, 4, np.uint8)
 
         if self.is_render_depth:
-            depth = np.zeros(int(len(binary['depth']) / 4))
-            ctr = 0
-            for i in range(0, int(len(binary['depth'])), 4):
-                depth[ctr] = struct.unpack('f', binary['depth'][i:i + 4])[0]
-                ctr = ctr + 1
-            # processed_values = self._depth_buffer_processing(depth)
-            reshaped_data = processed_values.reshape(height, width)
-            image = Image.fromarray(reshaped_data)
-            if self.is_static:
-                images['depth'] = image
-            else:
-                images['depth'] = np.fliplr(np.flipud(image))
+            processed_readings['depth'] = self._convert_to_image(binary['depth'], width, height, 1, np.float32)
 
         return processed_readings
 

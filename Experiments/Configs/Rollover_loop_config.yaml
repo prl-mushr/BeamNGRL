@@ -74,14 +74,17 @@ MPPI_config:
   u_per_command: 1
 
 Map_config:
+  map_name: "smallgrid"
   map_size: 16
   map_res: 0.05
-  elevation_range: 2.0
+  map_res_hitl: 0.25
+  elevation_range: 4.0
   layers:
     color: 3
     elevation: 1
     semantics: 3
     costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
 
 wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:

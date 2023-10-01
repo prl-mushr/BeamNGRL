@@ -12,7 +12,7 @@ from logging import DEBUG, getLogger
 
 import numpy as np
 from beamngpy.beamngcommon import LOGGER_ID
-
+import time
 # The maximum number of LiDAR points which can be used.
 # TODO: Make this more efficient by instead computing the number of LiDAR points based on the sensor parameter values.
 MAX_LIDAR_POINTS = 2000000
@@ -93,25 +93,9 @@ class Lidar:
             (dict): A dictionary containing the point cloud and colour data.
         """
         processed_readings = dict(type='Lidar')
-
-        # Format the point cloud data.
-        floats = np.zeros(int(len(binary['pointCloud']) / 4))
-        ctr = 0
-        # Convert the binary string to a float array.
-        for i in range(0, int(len(binary['pointCloud'])), 4):
-            floats[ctr] = struct.unpack('f', binary['pointCloud'][i:i + 4])[0]
-            ctr = ctr + 1
-        points = []
-        # Convert the floats to points by collecting each triplet.
-        for i in range(0, int(len(floats) / 3), 3):
-            points.append([floats[i], floats[i + 1], floats[i + 2]])
-        processed_readings['pointCloud'] = points
-
-        # Format the corresponding colour data.
-        colour = []
-        for i in range(len(binary['colours'])):
-            colour.append(np.uint8(binary['colours'][i]))
-        processed_readings['colours'] = colour
+        points = np.frombuffer(bytes(binary['pointCloud']), dtype=np.float32)
+        processed_readings['pointCloud'] = np.reshape(points, (len(points)//3, 3))
+        processed_readings['colours'] = np.frombuffer(bytes(binary['colours']), dtype=np.uint8)
 
         return processed_readings
 
@@ -149,16 +133,16 @@ class Lidar:
             point_cloud_data = self.point_cloud_shmem.read(self.point_cloud_shmem_size)
             point_cloud_data = np.frombuffer(point_cloud_data, dtype=np.float32)
             processed_readings['pointCloud'] = point_cloud_data
-            self.logger.debug('Lidar - point cloud data read from shared memory: 'f'{self.name}')
+            # self.logger.debug('Lidar - point cloud data read from shared memory: 'f'{self.name}')
 
             self.colour_shmem.seek(0)
             colour_data = self.colour_shmem.read(self.colour_shmem_size)
             colour_data = np.frombuffer(colour_data, dtype=np.uint8)
             processed_readings['colours'] = colour_data
-            self.logger.debug('Lidar - colour data read from shared memory: 'f'{self.name}')
+            # self.logger.debug('Lidar - colour data read from shared memory: 'f'{self.name}')
         else:
             binary = self.bng.poll_lidar(self.name, self.is_using_shared_memory)['data']
-            self.logger.debug('Lidar - LiDAR data read from socket: 'f'{self.name}')
+            # self.logger.debug('Lidar - LiDAR data read from socket: 'f'{self.name}')
             processed_readings = self._convert_binary_to_array(binary)
 
         return processed_readings

@@ -58,14 +58,17 @@ MPPI_config:
   u_per_command: 1
 
 Map_config:
+  map_name: "small_island"
   map_size: 64
   map_res: 0.25
+  map_res_hitl: 0.25
   elevation_range: 4.0
   layers:
     color: 3
     elevation: 1
     semantics: 3
     costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
 
 models: ['slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
 scenarios: ['hill-0', 'hill-2' ,'ditch-1', 'race-0', 'race-1']

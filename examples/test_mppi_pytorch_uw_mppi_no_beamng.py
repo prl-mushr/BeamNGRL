@@ -50,7 +50,7 @@ def main(map_name, start_pos, start_quat, config_path, BeamNG_dir="/home/stark/"
 
         bng_interface = get_beamng_nobeam(
             dynamics_sim,
-            car_model='RACER',
+            car_model='offroad',
             start_pos=start_pos,
             start_quat=start_quat,
             map_name=map_name,
