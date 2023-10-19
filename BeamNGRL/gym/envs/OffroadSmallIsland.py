@@ -25,6 +25,12 @@ class OffroadSmallIsland(gym.Env):
         Map_config = Config["Map_config"]
         scenario = Config["scenario"] ## TODO: WP_file_offroad does not contain heading data
 
+        self.speed_max = Config["speed_max"]
+        self.speed_kp = Config["speed_kp"]
+        self.speed_ki = Config["speed_ki"]
+        self.speed_kd = Config["speed_kd"]
+        self.speed_FF = Config["speed_FF"]
+
         WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
         self.target_WP = np.load(WP_file)[:100] ## this was up to the first 100 points to prevent trying to perform the full loop.
 
@@ -78,10 +84,9 @@ class OffroadSmallIsland(gym.Env):
 
     def step(self, action):
         try:
-            self.bng_interface.send_ctrl(action)
+            self.bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = self.speed_max, Kp=self.speed_kp, Ki=self.speed_ki, Kd=self.speed_kd, FF_gain=self.speed_FF)
             self.bng_interface.state_poll() ## this steps the environment forward (it is the equivalent of doing a "step")
             state = self.bng_interface.state
-            print(self.bng_interface.BEV_heght.dtype, self.bng_interface.BEV_normal.dtype, self.bng_interface.BEV_color.dtype, state.dtype)
             observations = {
                 'height': self.bng_interface.BEV_heght,
                 'normal': self.bng_interface.BEV_normal,
@@ -101,7 +106,7 @@ class OffroadSmallIsland(gym.Env):
 
             damage = len(self.bng_interface.broken)
 
-            reward = np.linalg.norm(goal - pos) + 100.0 * damage
+            reward = -(np.linalg.norm(goal - pos) + 100.0 * damage)
 
             info = dict({'timestamp': self.bng_interface.timestamp})
 

@@ -1,11 +1,13 @@
 # BeamNGRL
 
 ## Installation:
-1) Download the map folder from [here](https://drive.google.com/drive/folders/1sZ8aDUqtnTomdXn6bxoryJ8X4yT7RS06). Extract the 'BeamNG' outside the BeamNGRL folder(usually `/home/username/` directory, for instance. Put the map_data folder in a directory called "BeamNGRL/data" (you would have to make this directory for now)
+1) Download the map folder, and the content folder from [here](https://drive.google.com/drive/folders/1sZ8aDUqtnTomdXn6bxoryJ8X4yT7RS06). Extract the 'BeamNG' outside the BeamNGRL folder(usually `/home/username/` directory, for instance. Put the map_data folder in a directory called "BeamNGRL/data" (you would have to make this directory for now).
 ```bash
 cd ~/BeamNGRL
 mkdir data
 ```
+
+Put the content/vehicles/ files in the BeamNG/BeamNG/content/vehicles/ folder. Do the same for "levels" if that folder isn't empty on the google drive.
 
 2) Environment setup:
 put this in your bash:
@@ -18,23 +20,112 @@ export PYTHONPATH="${PYTHONPATH}:/absolute/path/to/BeamNGRL"
 
 ### Executing minimal example
 ```bash
-cd ~/BeamNGRL
+cd ~/BeamNGRL/examples
 python3 beamng_interface_minimal.py
 ```
 ### Minimal example explained
-The interface spoofs the birds-eye-view elevation map, semantic map, color map, and path map. Currently we only support map-spoofing for the small-island map. The smallgrid map is an empty map, so the elevation map, color map, semantic map and path map are always blank for it.
+You need to provide a start pos/quat for the vehicle. This would require knowing the exact height where the car needs to be placed. If you place the car at the wrong "height" it will either drop from the sky or drop below the map. This is something I'm working on fixing, such that in the future the correct Z height is extracted from the BEV map itself.
 ```python
-    map_res = 0.05 ## resolution in meters. 0.05 meters per pixel
-    map_size = 16 # 16 x 16 map
-	## this is how you instantiate the interface (Start game)
-    bng_interface = beamng_interface(BeamNG_dir = BeamNG_dir)  
-    ## this loads a specific scenario(map) with a specific vehicle at a specific position and rotation
-    ## start point is numpy array, start_quat is also a numpy array representing the orientation quaternion.
-    bng_interface.load_scenario(scenario_name=map_name, car_make='sunburst', car_model='offroad',
-                                start_pos=start_point, start_rot=start_quat)
+    start_pos = np.array([-86.5, 322.26, 35.5]) ## start pose of the vehicle
+    start_quat = np.array([0, 0, 0, 1])
+```
 
-    ## this sets the BEV map generation attributes. Right now we only have the maps for "small-island"
-    bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/')  ## --> path_to_maps is the directory where you extracted the "map" folder
+The interface spoofs the birds-eye-view elevation map, semantic map, color map, and path map. Currently we only support map-spoofing for the small-island map. The smallgrid map is an empty map, so the elevation map, color map, semantic map and path map are always blank for it. We currently only support the small-island and smallgrid map for BEV access (other maps in progress).
+```python
+    Map_config = dict()
+    Map_config = {
+        "map_name": "small_island",
+        "map_size": 64, ## this is in meters, and corresponds to the body-centric map's size. This is NOT the size of the full map you will be using.
+        "map_res": 0.25, ## this is the resolution of the map in meters/pixel.
+        "map_res_hitl": 0.25, ## used by BeamNG_ros for hitl with ROS
+        "elevation_range": 4.0, ## BEV_heightmap = clamp(raw_heightmap, raw_heightmap_center_z - 4.0, raw_heightmap_center_z - 4.0)
+        "layers": { ## used by BeamNG_ros for hitl with ROS
+            "color": 3,
+            "elevation": 1,
+            "semantics": 3,
+            "costmap": 1
+        },
+        "topic_name": "/grid_map_occlusion_inpainting/all_grid_map" ## used by BeamNG_ROS
+    }
+```
+
+Sensor configuration. Currently, the camera and lidar are only supported on the windows system. We recommend running the simulator on a separate computer (preferably windows) and connecting that to your main system via ethernet. Follow the instructions on this [link](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable) for such a setup. If you run the simulator on the same system as your main code, expect the overall execution to be slow (BeamNG is CPU dependent for all the physics calculations).
+The sensor configurations here are defined as dictionaries, but as you will see in other implementations, we usually load them from a yaml file (recommended)
+```python
+    camera_config = dict()
+    lidar_config = dict()
+    IMU_config = dict()
+    camera_config = {
+        "enable": False, ## do you want the camera or not.
+        "width": 640,
+        "height": 480,
+        "fps": 30,
+        "fov": 87.0,
+        "pos": [0.15, 0.047, 0.02],
+        "dir": [0, -1, 0],
+        "up": [0, 0, 1],
+        "rot": [0, 0, 0, 1],
+        "color_optical_frame": "camera_color_optical_frame",
+        "depth_optical_frame": "camera_depth_optical_frame",
+        "depth_frame": "camera_depth_frame",
+        "camera_color_topic": "/camera/color/image_raw",
+        "camera_depth_topic": "/camera/depth/image_rect_raw",
+        "camera_color_info_topic": "/camera/color/camera_info",
+        "camera_depth_info_topic": "/camera/depth/camera_info",
+        "monitor_topic": "/camera/depth/image_rect_raw",
+        "annotation": False
+    }
+
+    lidar_config = {
+        "enable": False,
+        "rays_per_second_per_scan": 5000,
+        "channels": 3,
+        "fps": 10,
+        "vertical_angle": 26.9,
+        "pos": [0.04, 0, 0.07],
+        "rot": [0, 0, 0, 1],
+        "dir": [0, -1, 0],
+        "up": [0, 0, 1],
+        "frame": "laser_frame",
+        "max_distance": 10.0,
+        "scan_topic": "/scan",
+        "monitor_topic": "/scan",
+        "pc_topic": "converted_pc"
+    }
+
+    IMU_config = {
+        "pos": [0, 0, 0.1], ## IMU position relative to body-center of the vehicle. All other sensors are in reference to the IMU!
+        "fps": 50,
+        "monitor_topic": "/mavros/imu/data_raw",
+        "pose_topic": "/mavros/local_position/pose",
+        "odom_topic": "/mavros/local_position/odom",
+        "state_topic": "/mavros/state",
+        "gps_topic": "/mavros/gpsstatus/gps1/raw",
+        "notification_topic": "/mavros/play_tune",
+        "channel_topic": "mavros/rc/in",
+        "raw_input_topic": '/mavros/manual_control/send',
+        "frame": "base_link",
+        "failure_action": "rosrun mavros mavsys rate --all 50"
+    }
+
+```
+
+Launching the interface
+```python
+    bng_interface = get_beamng_default(
+        car_model="offroad",
+        start_pos=start_pos, ## start position in ENU (east north up). Center of the map is usually 0,0, height is terrain dependent. TODO: use the map model to estimate terrain height.
+        start_quat=start_quat, ## start quaternion -- TODO: there should be a ROS to BeamNG to ROS conversion system for reference frames.
+        car_make="sunburst", ## car make (company/manufacturer)
+        map_config=Map_config, ## Map config; this is "necessary"
+        remote=args.remote, ## are you running the simulator remotely (on a separate computer or on the same computer but outside the docker)? 
+        host_IP=args.host_IP, ## if using a remote connection (usually the case when running sim on a separate computer)
+        camera_config=camera_config, ## currently, camera only works on windows, so you can only use this if you have the sim running remotely or you're using windows as the host
+        lidar_config=lidar_config, ## currently, lidar only works on windows, so you can only use this if the sim is running remotely or you're using a windows host
+        accel_config=IMU_config, ## IMU config. if left blank, a default config is used.
+        burn_time=0.02, ## step or dt time
+        run_lockstep=False ## whether the simulator waits for control input to move forward in time. Set to true to have a gym "step" like functionality
+    )
 ```
 #### Running the simulator with "lock-step" (similar to gym's env.step()):
 ```python
@@ -43,26 +134,7 @@ The interface spoofs the birds-eye-view elevation map, semantic map, color map, 
 
 ```
 
-### Faster setup:
-A lot of the steps for "initialization" are relatively "boiler-plate", and can be done through:
-```python
-from BeamNGRL.BeamNG.beamng_interface import get_beamng_default
-
-bng_interface = get_beamng_default(
-    car_model='offroad',
-    start_pos=start_pos,
-    start_quat=start_quat, 
-    map_name=map_name,
-    car_make='sunburst',
-    map_res=0.25,
-    map_size=64,
-    elevation_range=4.0
-)
-bng_interface.set_lockstep(True)
-bng_interface.burn_time = 0.02
-```
-
-The game will take a while to load for the first time, if prompted by the OS to wait/kill program, chose "wait". This only happens the first time you run the game.
+The simulator will take a while to load for the first time, if prompted by the OS to wait/kill program, chose "wait". This only happens the first time you run the game.
 
 #### Getting the state:
 `state_poll()` causes the interface to poll the pose, twist, accelerations as well as generate the corresponding BEV maps. We don't get camera images or lidar data right now as BeamNG doesn't support it on Ubuntu (yet). We have the code for polling that as well, we're just waiting on BeamNG devs. The state information follows the [ROS REP103 standards](https://www.ros.org/reps/rep-0103.html). Note that twists (linear and angular) are in body frame
@@ -106,9 +178,24 @@ In the following lines, we get the BEV maps, resize and display them. Note that 
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
 ```
-The images are robot-centric, with the X/Y axes aligned with the NE axes of the map (as in, the map does not rotate with the car). To get the body-frame map (as in, the map rotates around the car), you can set the rotation attribute to True:
+The images are robot-centric, with the X/Y axes aligned with the NE axes of the map (as in, the map does not rotate with the car). To get the body-frame map (as in, the map rotates around the car), you can set the map config as:
 ```python
-bng_interface.set_map_attributes(map_size = map_size, resolution=map_res, path_to_maps='/home/stark/', rotate=True) # --> rotate is False by default, set to True to get body-frame rotated map
+    Map_config = dict()
+    Map_config = {
+        "map_name": "small_island",
+        "map_size": 64, ## this is in meters, and corresponds to the body-centric map's size. This is NOT the size of the full map you will be using.
+        "map_res": 0.25, ## this is the resolution of the map in meters/pixel.
+        "map_res_hitl": 0.25, ## used by BeamNG_ros for hitl with ROS
+        "elevation_range": 4.0, ## BEV_heightmap = clamp(raw_heightmap, raw_heightmap_center_z - 4.0, raw_heightmap_center_z - 4.0)
+        "layers": { ## used by BeamNG_ros for hitl with ROS
+            "color": 3,
+            "elevation": 1,
+            "semantics": 3,
+            "costmap": 1
+        },
+        "topic_name": "/grid_map_occlusion_inpainting/all_grid_map", ## used by BeamNG_ROS
+        "rotate": True ## ===============================>>>>>>>>>>>>>>>>> this
+    }
 ```
 
 #### Sending control commands:
@@ -117,6 +204,11 @@ There are two controls: steering(0) and throttle/brake (1). We can modify this i
             action = np.ones(2, dtype=np.float64)  # has to be numpy array. The inputs are always between (-1.0, 1.0) (for both throttle and steering)
             ## steering = action[0], throttle/brake = action[1]. Turning left = positive steering.
             bng_interface.send_ctrl(action) # this sends the commands to the simulator.
+```
+
+To use built-in PID-FF wheelspeed controller use:
+```python
+            bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = max_speed_val, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
 ```
 
 #### Resetting the vehicle:
@@ -135,7 +227,7 @@ Note that we can't change the rotation of the vehicle in this method, only posit
 
 
 
-## Additional information for map generation:
+## Additional information for map generation (WIP!!!! DO NOT USE):
 Collecting map images (requires windows OS). This is currently only configured for the small-island (off-road) map, may be updated in the future to automatically collect images for any map.
 ```bash
 python BEV_map_generator.py

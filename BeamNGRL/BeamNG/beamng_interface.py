@@ -45,7 +45,10 @@ def get_beamng_default(
     if(map_config is None):
         print("please provide a map_config! I can not spawn a car in the ether!")
         exit()
-        
+    map_rotate = False
+    if "rotate" in map_config:
+        map_rotate = map_config["rotate"]
+
     bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP)
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
@@ -53,7 +56,7 @@ def get_beamng_default(
         camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config
     )
     bng.set_map_attributes(
-        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps,
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
@@ -88,14 +91,17 @@ def get_beamng_nobeam(
     if(map_config is None):
         print("please provide a map_config! I can not spawn a car in the ether!")
         exit()
-        
+    map_rotate = False
+    if "rotate" in map_config:
+        map_rotate = map_config["rotate"]
+
     bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.set_map_attributes(
-        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps,
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)

@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from beamng_interface import *
+from BeamNGRL.BeamNG.beamng_interface import *
 import traceback
 import argparse
 

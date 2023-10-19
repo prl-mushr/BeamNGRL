@@ -81,6 +81,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+# use info.json to extract NE SW coordinates (the NE SW for small island are actually 512, 512 and -512,512)
 '''
 ENU
 NE [400,  450   25.7465919 ]
