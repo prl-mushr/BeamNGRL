@@ -16,12 +16,11 @@ class OffroadSmallIsland(gym.Env):
 
         with open(config_path) as f:
             Config = yaml.safe_load(f)
+            self.Config = Config
         with open(hal_config_path) as f:
             hal_Config = yaml.safe_load(f)
 
         vehicle = Config["vehicle"]
-        start_pos = np.array(Config["start_pos"]) ## some default start position which will be overwritten by the scenario file
-        start_quat = np.array(Config["start_quat"])
         Map_config = Config["Map_config"]
         scenario = Config["scenario"] ## TODO: WP_file_offroad does not contain heading data
 
@@ -31,8 +30,11 @@ class OffroadSmallIsland(gym.Env):
         self.speed_kd = Config["speed_kd"]
         self.speed_FF = Config["speed_FF"]
 
+        ## override start pose
         WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
-        self.target_WP = np.load(WP_file)[:100] ## this was up to the first 100 points to prevent trying to perform the full loop.
+        self.target_WP = np.load(WP_file)
+        start_pos = self.target_WP[0,:3]
+        start_quat = self.target_WP[0,3:]
 
         self.map_res = Map_config["map_res"]
         self.map_size = Map_config["map_size"]
@@ -52,12 +54,14 @@ class OffroadSmallIsland(gym.Env):
             'height': spaces.Box(low=-Map_config["elevation_range"], high=Map_config["elevation_range"], shape=(self.map_size_px, self.map_size_px, 1), dtype=np.float32),
             'normal': spaces.Box(low=-1.0, high=1.0, shape=(self.map_size_px, self.map_size_px, 3), dtype=np.float64),
             'color':  spaces.Box(low=0, high=255, shape=(self.map_size_px, self.map_size_px, 3), dtype=np.uint8),
-            'pos': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
-            'rpy': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
-            'lin_vel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
-            'ang_vel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
-            'accel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
-            'last_action': spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float64),
+            'path': spaces.Box(low=0, high=255, shape=(self.map_size_px, self.map_size_px, 3), dtype=np.uint8),
+            # 'pos': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
+            # 'rpy': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
+            # 'lin_vel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
+            # 'ang_vel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
+            # 'accel': spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float64),
+            # 'last_action': spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float64),
+            'state': spaces.Box(low=-1.0, high=1.0, shape=(17,), dtype=np.float64),
         })
         self.bng_interface = get_beamng_default(
             car_model=vehicle["model"],
@@ -91,12 +95,14 @@ class OffroadSmallIsland(gym.Env):
                 'height': self.bng_interface.BEV_heght,
                 'normal': self.bng_interface.BEV_normal,
                 'color':  self.bng_interface.BEV_color,
-                'pos': state[:3],
-                'rpy': state[3:6],
-                'lin_vel': state[6:9],
-                'ang_vel': state[9:12],
-                'accel': state[12:15],
-                'last_action': state[15:17],
+                'path': self.bng_interface.BEV_path,
+                # 'pos': state[:3],
+                # 'rpy': state[3:6],
+                # 'lin_vel': state[6:9],
+                # 'ang_vel': state[9:12],
+                # 'accel': state[12:15],
+                # 'last_action': state[15:17],
+                'state': state
             }
 
             pos = np.copy(state[:2])

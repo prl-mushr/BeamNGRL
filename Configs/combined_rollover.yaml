@@ -39,6 +39,7 @@ flux:
     fps: 50.0
     erpm_gain: 3166
     topic: "sensors/core"
+    steering_degrees: 60
   mavros:
     pos: [0,0,0.1] # default position on the hound
     fps: 50
@@ -91,6 +92,7 @@ rollover_test:
     fps: 50.0
     erpm_gain: 3166
     topic: "sensors/core"
+    steering_degrees: 260
   mavros:
     pos: [0,0,0.8] # default position on the hound
     fps: 50

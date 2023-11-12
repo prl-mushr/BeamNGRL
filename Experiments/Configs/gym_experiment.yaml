@@ -1,6 +1,6 @@
 Map_config:
   map_name: "small_island"
-  map_size: 64
+  map_size: 16
   map_res: 0.25
   map_res_hitl: 0.25
   elevation_range: 4.0
@@ -15,12 +15,12 @@ Map_config:
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 burn_time: 0.02 ## this is the "dt" of the simulation. Increase to 0.1 if using a very large and heavy vehicle.
-scenario: "WP_file_offroad"
+scenario: "race-0"
 run_lockstep: True
 
 vehicle:
-  make: "sunburst"
-  model: "offroad"
+  make: "savage_low_f"
+  model: "flux"
 
 ## use this to tune the low-level wheelspeed control
 speed_max: 20
@@ -28,3 +28,5 @@ speed_kp: 2
 speed_ki: 0.05
 speed_kd: 0
 speed_FF: 0
+
+model: ["ccil", "naive"]

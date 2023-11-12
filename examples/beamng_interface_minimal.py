@@ -22,7 +22,8 @@ def main(args):
             "semantics": 3,
             "costmap": 1
         },
-        "topic_name": "/grid_map_occlusion_inpainting/all_grid_map"
+        "topic_name": "/grid_map_occlusion_inpainting/all_grid_map",
+        "rotate": False
     }
 
     camera_config = dict()

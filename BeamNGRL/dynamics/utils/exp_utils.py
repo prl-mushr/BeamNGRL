@@ -25,7 +25,7 @@ def get_dataloaders(args, config):
         bs=args.batchsize,
         shuffle=args.shuffle,
         dataset_path=dataset_path,
-        map_cfg=data_cfg['map'],
+        map_cfg=data_cfg['Map_config'],
         **spec,
     )
     return train_loader, valid_loader, data_stats, data_cfg

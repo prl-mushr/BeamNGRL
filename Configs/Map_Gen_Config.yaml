@@ -1,0 +1,8 @@
+cam_height: 1000 # initial cam height from which we take the height measurement photo
+step_size: 32 # height above the ground from which we take photo and also how much we move between each photo
+image_size: 1024 ## image size in pixels for the photos taken
+output_dir: "map_data_new" ## directory where all maps will be stored
+fov: 90 ## camera fov. Don't change this lest we run into resolution problems
+map_res: 0.1 ## final map resolution in meters/px
+map_exclude_list: ["showroom_v2", "template", "garage_v2", "autotest", "glow_city", "GridMap"] ## maps not in the list of supported maps
+flat_map: ["smallgrid"] ## maps that are just "flat" and will be generated as a flat map by default

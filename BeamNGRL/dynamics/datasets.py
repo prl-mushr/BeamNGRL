@@ -28,7 +28,7 @@ def get_datasets(
     dataset_stats = np.load(dataset_path / 'input_stats.npy', allow_pickle=True).item()
     dataset_stats_tn = {k: from_np(arr) for k, arr in dataset_stats.items()}
 
-    grid_size = map_cfg['width'] // map_cfg['resolution']
+    grid_size = map_cfg['map_size'] // map_cfg['map_res']
 
     train_ds = DynamicsDataset(
         dataset_path=dataset_path,

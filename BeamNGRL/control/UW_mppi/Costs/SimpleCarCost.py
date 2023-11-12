@@ -26,7 +26,10 @@ class SimpleCarCost(torch.nn.Module):
         self.goal_w = torch.tensor(Cost_config["goal_w"], dtype=self.dtype, device=self.d)
         self.speed_w = torch.tensor(Cost_config["speed_w"], dtype=self.dtype, device=self.d)
         self.roll_w = torch.tensor(Cost_config["roll_w"], dtype=self.dtype, device=self.d)
-
+        if "heading_w" in Cost_config:
+            self.heading_w = torch.tensor(Cost_config["heading_w"], dtype=self.dtype, device=self.d)
+        else:
+            self.heading_w = torch.tensor(0, dtype=self.dtype, device=self.d)
         self.BEVmap_size = torch.tensor(Map_config["map_size"], dtype=self.dtype, device=self.d)
         self.BEVmap_res = torch.tensor(Map_config["map_res"], dtype=self.dtype, device=self.d)
 
@@ -125,10 +128,14 @@ class SimpleCarCost(torch.nn.Module):
 
         roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - self.critical_vert_acc, 0, 10.0) + 5*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
         
-        terminal_cost = torch.linalg.norm(state[:,:,-1,:2] - self.goal_state.unsqueeze(dim=0), dim=-1)
+        wp_vec = self.goal_state.unsqueeze(dim=0) - state[:,:,-1,:2]
+        heading_vec = torch.stack([torch.cos(yaw[..., -1]), torch.sin(yaw[..., -1])], dim=-1)
+        terminal_cost = torch.linalg.norm(wp_vec, dim=-1)
+        wp_vec /= terminal_cost.unsqueeze(-1)
+        heading_cost = 1 / torch.clamp(torch.sum(wp_vec * heading_vec, dim=-1), 0.1, 1)
 
         running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )
-        cost_to_go = self.goal_w * terminal_cost
+        cost_to_go = self.goal_w * terminal_cost + self.heading_w * heading_cost
 
         ## for running cost mean over the 0th dimension (bins), which results in a KxT tensor. Then sum over the 1st dimension (time), which results in a [K] tensor.
         ## for terminal cost, just mean over the 0th dimension (bins), which results in a [K] tensor.

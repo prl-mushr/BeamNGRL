@@ -162,7 +162,7 @@ class beamng_interface():
             else:
                 self.bng = BeamNGpy(host, port, home=BeamNG_path, user=BeamNG_path + '/userfolder')
                 self.bng.open()
-        elif not shell_mode:
+        elif shell_mode:
             self.dyn = dyn
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
@@ -260,17 +260,29 @@ class beamng_interface():
         self.mask        = cv2.circle(mask, self.map_size_px, self.map_size_px[0], 255, thickness=-1)
         self.mask_center = (self.map_size_px[0], self.map_size_px[1])
 
-    def get_map_bf_no_rp(self, map_img):
-        if(len(map_img.shape)==3):
+        self.inpaint_mask = np.zeros_like(self.elevation_map_full, dtype=np.uint8)
+        index = np.where(self.elevation_map_full == 0)
+        self.inpaint_mask[index] = 255
+
+    def get_map_bf_no_rp(self, map_img, gen_mask=False, inpaint_mask = None):
+        ch = len(map_img.shape)
+        if(ch==3):
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max, :]
         else:
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max]
+
+        if inpaint_mask is not None:
+            BEV = cv2.inpaint(BEV, inpaint_mask, ch, cv2.INPAINT_TELEA)
+            
         if(self.rotate):
-            BEV = cv2.bitwise_and(BEV, BEV, mask=self.mask)
             # get rotation matrix using yaw:
-            rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= -self.rpy[2]*57.3, scale=1)
+            rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= self.rpy[2]*57.3, scale=1)
             # rotate the image using cv2.warpAffine
             BEV = cv2.warpAffine(src=BEV, M=rotate_matrix, dsize=self.mask_size)
+            # mask:
+            if not gen_mask:
+                BEV = cv2.bitwise_and(BEV, BEV, mask=self.mask)
+
         return BEV
 
     def transform_world_to_bodyframe(x, y, xw, yw, th):
@@ -301,18 +313,13 @@ class beamng_interface():
         self.X_max = int(self.img_X + self.map_size*self.resolution_inv)
 
         ## inputs:
-        self.BEV_color = self.get_map_bf_no_rp(self.color_map_full)  # crops circle, rotates into body frame
-        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full)
-        self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full)
+        local_inpaint = self.get_map_bf_no_rp(self.inpaint_mask, gen_mask=True)
+        self.BEV_color = self.get_map_bf_no_rp(self.color_map_full, inpaint_mask=local_inpaint)  # crops circle, rotates into body frame
+        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full, inpaint_mask=local_inpaint)
+        self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full, inpaint_mask=local_inpaint)
         self.BEV_path  = self.get_map_bf_no_rp(self.path_map_full)
 
-        mask = np.zeros_like(self.BEV_heght, dtype=np.uint8)
-        index = np.where(self.BEV_heght == 0)
-        mask[index] = 255
 
-        self.BEV_color = cv2.inpaint(self.BEV_color, mask, 3,cv2.INPAINT_TELEA)
-        self.BEV_segmt = cv2.inpaint(self.BEV_segmt, mask, 3,cv2.INPAINT_TELEA)
-        self.BEV_heght = cv2.inpaint(self.BEV_heght, mask, 1,cv2.INPAINT_TELEA)
         self.BEV_center[:2] = self.pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
         self.BEV_heght -= self.BEV_center[2]

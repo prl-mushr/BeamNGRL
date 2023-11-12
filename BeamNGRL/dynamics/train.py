@@ -150,7 +150,7 @@ def train(
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, help='config file for training model')
+    parser.add_argument('--config', type=str, default="Data_Collection_Config", help='config file for training model')
     parser.add_argument('--output', type=str, required=False, help='location to store output - weights, log')
     parser.add_argument('--cpu', type=str, required=False, default=False, help='use cpu for training')
     parser.add_argument('--n_epochs', type=int, required=False, default=100, help='Number of training epochs.')
@@ -175,7 +175,8 @@ if __name__ == "__main__":
         tensor_args = {'device': torch.device('cpu'), 'dtype': torch.float32}
 
     # Load experiment config
-    config = yaml.load(open(DYN_EXP_CONFIG / args.config).read(), Loader=yaml.SafeLoader)
+    config_path = str(ROOT_PATH.parent) + "/Experiments/Configs/" + '{}.yaml'.format(args.config)
+    config = yaml.load(open(config_path).read(), Loader=yaml.SafeLoader)
 
     # Dataloaders
     train_loader, valid_loader, stats, data_cfg = get_dataloaders(args, config)

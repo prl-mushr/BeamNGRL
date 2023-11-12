@@ -1,0 +1,135 @@
+Cost_config:
+  goal_w: 1.0 ## weight on the terminal goal cost
+  speed_w: 1.0 ## weight with which target speed will be tracked
+  roll_w: 10.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+  lethal_w: 10.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+  stop_w: 10000.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
+  heading_w: 1.0
+  speed_target: 6.0 ## target speed in m/s
+  critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
+  critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
+  car_bb_width: 0.3
+  car_bb_length: 0.4
+  critical_vert_acc: 1.5
+  critical_vert_spd: 0.2
+
+Dynamics_config:
+  wheelbase: 0.33
+  throttle_to_wheelspeed: 17.0
+  steering_max: 0.488
+  dt: 0.05
+  D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
+  B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
+  C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
+  lf: 0.15 ## length from car com to front axle
+  lr: 0.15 ## length from car com to rear axle
+  Iz: 0.1 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  LPF_tau: 0.2 ## low pass filter tau for simulating spring damper setup
+  res_coeff: 0.01 ## resistance coefficient (proportional to speed)
+  drag_coeff: 0.005 # drag coefficient (proportional to speed squared)
+  car_length: 0.33 # front to back distance of car
+  car_width: 0.25 # track width of car. Measured as distance between extremes of the wheel (can be slightly off)
+  cg_height: 0.125 ## height of cg, used for calculating load transfer.
+  type: "slip3d" ## this will be overwritten during evaluation
+
+Sampling_config:
+  control_dim: 2
+  noise_0: 1.2
+  noise_1: 0.5
+  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  max_thr: 0.4 ## max throttle as a fraction between -1,1
+  min_thr: 0.0 ## min throttle as a fraction between -1,1
+
+MPPI_config:
+  ROLLOUTS: 1024
+  TIMESTEPS: 20 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
+  BINS: 1
+  u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
+
+Map_config:
+  map_size: 16 # in meters map_size x map_size
+  map_res: 0.25 ## this results in 256 x 256 pixels for the MPPI
+  map_res_hitl: 0.25 ## this is the resolution at which the map is received
+  elevation_range: 4.0
+  map_name: "small_island"
+  layers:
+    color: 3
+    elevation: 1
+    semantics: 3
+    costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
+
+wp_radius: 2.0 ## waypoint radius for terminal condition
+track_width: 1.0
+generate_costmap_from_path: 1
+debug: False
+
+vehicle:
+  make: "savage_low_f"
+  model: "flux"
+  max_speed: 23.0
+  max_steer: 0.488
+
+models: ["slip3d_LPF_drag"]
+scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
+time_limit: [100.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
+lookahead:  [5.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
+
+num_iters: 1
+start_pos: [-67, 336, 34.5]
+start_quat: [0, 0, 0.3826834, 0.9238795]
+start_pose_noise: 1.0
+
+## train/test:
+output_dir: "train"
+
+save_data: False
+run_lockstep: True
+
+perturb_inputs: False
+
+
+## this is where we throw all params relevant to processing the data
+raw_data_dir: 'mppi_data_ros'
+# Total traj len = future + past + 1 (current)
+future_traj_len: 50
+past_traj_len: 50
+skip_frames: 5
+
+split:
+  train:
+    - 'train'
+  valid:
+    - 'valid'
+
+## this is where we throw all params relevant to training
+dataset:
+  name: 'mppi_data_ros'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
+
+network:
+  state_input_feat: ['vx', 'vy', 'vz'] ## not used, should be removed.
+  state_output_feat: ['vx', 'vy', 'vz']
+  control_feat: ['steer', 'throttle']
+  # use_normalizer: True
+  use_normalizer: False ## technically I do normalize the data, just not how Sasha implemented it.
+
+  class: ContextMLP ## name of the network to be used
+  net_kwargs: ## hey would you look at that, building a 2 layer MLP. 
+    hidden_depth: 2
+    hidden_dim: 32
+    batch_norm: True
+
+  opt: Adam
+  opt_kwargs:
+    lr: 1.0e-3
+
+loss: AggregatedMSE_dV
+
+bag_dirs: ["test_dir"]
+base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/mppi_data_ros/train' 
