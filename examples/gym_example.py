@@ -8,6 +8,7 @@ import torch
 import numpy as np
 import cv2
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--hal_config_name", type=str, default="offroad.yaml", help="name of the HAL config file to use")
 parser.add_argument("--config_name", type=str, default="gym_experiment.yaml", help="name of the config used for experiment specifics")
@@ -42,6 +43,7 @@ with torch.no_grad():
             cv2.waitKey(1)
             actions = model.forward(torch.from_numpy(obs['path']).to(device=device, dtype=dtype), torch.from_numpy(obs['state']).to(device=device, dtype=dtype)).cpu().numpy()
             actions = np.array(actions, dtype=np.float64)
+            actions[1] = 0.2
             print(obs['state'][5])
             total_reward += reward
             counter += 1

@@ -3,6 +3,7 @@ Cost_config:
   speed_w: 0.0 ## weight with which target speed will be tracked
   roll_w: 100.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
   lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+  heading_w: 1.0
   stop_w: 0.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
   speed_target: 10.0 ## target speed in m/s
   critical_SA: 1.414 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
@@ -16,7 +17,7 @@ Dynamics_config:
   wheelbase: 2.6
   throttle_to_wheelspeed: 20.0
   steering_max: 0.5
-  dt: 0.04
+  dt: 0.05
   D: 0.8
   B: 6.8
   C: 1.5
@@ -54,7 +55,7 @@ Sampling_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 30
+  TIMESTEPS: 20
   BINS: 1
   u_per_command: 1
 

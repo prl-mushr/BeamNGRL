@@ -76,7 +76,7 @@ scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
 time_limit: [100.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
 lookahead:  [5.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
-num_iters: 20
+num_iters: 2
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
@@ -89,9 +89,9 @@ run_lockstep: True
 
 perturb_inputs: True
 
-manual_input: False
+manual_input: True
 ## this is where we throw all params relevant to processing the data
-raw_data_dir: 'mppi_data'
+raw_data_dir: 'manual_data'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
@@ -105,7 +105,7 @@ split:
 
 ## this is where we throw all params relevant to training
 dataset:
-  name: 'mppi_data'
+  name: 'manual_data'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -132,4 +132,4 @@ loss: AggregatedMSE_dV
 
 bag_dirs: ["test_dir"]
 base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
-ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/mppi_data_ros/train' 
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/manual_data_ros/train' 

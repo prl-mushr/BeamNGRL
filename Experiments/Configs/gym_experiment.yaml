@@ -15,7 +15,6 @@ Map_config:
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 burn_time: 0.02 ## this is the "dt" of the simulation. Increase to 0.1 if using a very large and heavy vehicle.
-scenario: "race-0"
 run_lockstep: True
 
 vehicle:
@@ -29,4 +28,8 @@ speed_ki: 0.05
 speed_kd: 0
 speed_FF: 0
 
-model: ["ccil", "naive"]
+model: ["naive", "naive"]
+scenarios: ['race-0']
+scenario: 'race-0' ## This one is used by gym example.
+time_limit: [20.0]  # (simulated) time limit for each scenario.
+lookahead:  [6.0]  # lookahead on scenario by scenario basis

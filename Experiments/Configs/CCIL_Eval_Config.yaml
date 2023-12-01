@@ -4,7 +4,7 @@ Cost_config:
   roll_w: 10.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
   lethal_w: 10.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
   stop_w: 10000.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
-  heading_w: 2.0
+  heading_w: 1.0
   speed_target: 6.0 ## target speed in m/s
   critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
   critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
@@ -38,7 +38,7 @@ Sampling_config:
   noise_1: 0.5
   scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
-  max_thr: 0.3 ## max throttle as a fraction between -1,1
+  max_thr: 0.4 ## max throttle as a fraction between -1,1
   min_thr: 0.0 ## min throttle as a fraction between -1,1
 
 MPPI_config:
@@ -71,65 +71,18 @@ vehicle:
   max_speed: 23.0
   max_steer: 0.488
 
-models: ["slip3d_LPF_drag"]
+policies: ["mppi", "ccil", "naive"]
 scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
-time_limit: [100.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
+time_limit: [20.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
 lookahead:  [5.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
-num_iters: 20
+num_iters: 5
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
-start_pose_noise: 1.0
-
-## train/test:
-output_dir: "train"
+start_pose_noise: 0.1
 
 save_data: True
 run_lockstep: True
 
-perturb_inputs: True
-
-manual_input: False
 ## this is where we throw all params relevant to processing the data
-raw_data_dir: 'mppi_data'
-# Total traj len = future + past + 1 (current)
-future_traj_len: 50
-past_traj_len: 50
-skip_frames: 5
-
-split:
-  train:
-    - 'train'
-  valid:
-    - 'valid'
-
-## this is where we throw all params relevant to training
-dataset:
-  name: 'mppi_data'
-  augment: False
-  state_input_key: 'future_states'
-  control_input_key: 'future_ctrls'
-  ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
-
-network:
-  state_input_feat: ['vx', 'vy', 'vz'] ## not used, should be removed.
-  state_output_feat: ['vx', 'vy', 'vz']
-  control_feat: ['steer', 'throttle']
-  # use_normalizer: True
-  use_normalizer: False ## technically I do normalize the data, just not how Sasha implemented it.
-
-  class: ContextMLP ## name of the network to be used
-  net_kwargs: ## hey would you look at that, building a 2 layer MLP. 
-    hidden_depth: 2
-    hidden_dim: 32
-    batch_norm: True
-
-  opt: Adam
-  opt_kwargs:
-    lr: 1.0e-3
-
-loss: AggregatedMSE_dV
-
-bag_dirs: ["test_dir"]
-base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
-ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/mppi_data_ros/train' 
+raw_data_dir: 'CCIL_Eval'

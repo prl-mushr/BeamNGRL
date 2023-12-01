@@ -30,10 +30,7 @@ def get_dynamics(model, Config):
     Dynamics_config = Config["Dynamics_config"]
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
-    if model == 'TerrainCNN':
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + Dynamics_config["model_weights"]
-        dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
-    elif model == 'slip3d':
+    if model == 'slip3d':
         Dynamics_config["type"] = "slip3d" ## just making sure 
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
     elif model == 'noslip3d':
@@ -72,6 +69,17 @@ def get_dynamics(model, Config):
         raise ValueError('Unknown model type')
     return dynamics
 
+def run_policy(controller, BEV_heght, BEV_normal, BEV_path, state_to_ctrl, goal, model=None, device=torch.device("cuda"), dtype=torch.float):
+    torch_state = torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)
+    if model == None:
+        controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
+        controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
+        controller.Costs.set_goal(goal)  # you can also do this asynchronously
+        action = np.array(controller.forward(torch_state).cpu().numpy(),dtype=np.float64)[0]
+    else:
+        action =  np.array(model.forward(BEV_path, torch_state).cpu().numpy(), dtype=np.float64)
+    return action
+
 def main(config_path=None, hal_config_path=None, args=None):
     if config_path is None:
         print("no config file provided!")
@@ -90,7 +98,6 @@ def main(config_path=None, hal_config_path=None, args=None):
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     vehicle = Config["vehicle"]
-
     start_pos = np.array(Config["start_pos"]) ## some default start position which will be overwritten by the scenario file
     start_quat = np.array(Config["start_quat"])
     map_res = Map_config["map_res"]
@@ -102,22 +109,18 @@ def main(config_path=None, hal_config_path=None, args=None):
         WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
         if not os.path.isfile(WP_file):
             raise ValueError("Waypoint file for scenario {} does not exist".format(scenario))
-    for models in Config["models"]:
-        if models not in ["TerrainCNN", "slip3d", "noslip3d", 'slip3d_LPF', 'slip3d_150', 'slip3d_LPF_drag']:
-            raise ValueError("Model {} not supported".format(models))
-    if Config["models"].count("TerrainCNN") > 0:
-        if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
-            raise ValueError("Model weights for TerrainCNN do not exist")
 
     if not Config["save_data"]:
         print("WARNING: Data will not be saved!")
     if Config["run_lockstep"]:
         print("Running in lockstep mode")
 
-    output_path = DATA_PATH / Config["raw_data_dir"] / Config["output_dir"]
-    output_path.mkdir(parents=True, exist_ok=True)
+    # Create the directory if it doesn't exist
+    directory =  DATA_PATH / Config["raw_data_dir"]
+    if not os.path.exists(directory):
+        os.makedirs(directory)
     # Save the config used as a YAML file
-    file_name = DATA_PATH / Config["raw_data_dir"] / "Data_Config.yaml"
+    file_name = directory / "Data_Config.yaml"
     with open(file_name, "w") as yaml_file:
         merged_config = Config.copy()
         # Merge the second config into the new dictionary
@@ -135,7 +138,6 @@ def main(config_path=None, hal_config_path=None, args=None):
         camera_config=hal_Config["camera"],
         lidar_config=hal_Config["lidar"],
         accel_config=hal_Config["mavros"],
-        vesc_config=hal_Config["vesc"],
         burn_time=0.02,
         run_lockstep=Config["run_lockstep"],
     )
@@ -152,7 +154,7 @@ def main(config_path=None, hal_config_path=None, args=None):
     normal_data = []
     reset_data = []
 
-    total_experiments = len(Config["models"]) * len(Config["scenarios"]) * Config["num_iters"]
+    total_experiments = len(Config["policies"]) * len(Config["scenarios"]) * Config["num_iters"]
     experiment_count = 0
 
     try:
@@ -161,32 +163,30 @@ def main(config_path=None, hal_config_path=None, args=None):
         temp_temperature = torch.clone(sampling.temperature)
         skips = Dynamics_config["dt"]/bng_interface.burn_time
 
-        for model in Config["models"]:
-            dynamics = get_dynamics(model, Config)
+        dynamics = get_dynamics("slip3d_LPF_drag", Config)
+        controller = MPPI(dynamics, costs, sampling, MPPI_config, device)
+        scenario_count = 0
 
-            controller = MPPI(dynamics, costs, sampling, MPPI_config, device)
-            scenario_count = 0
+        for policy in Config["policies"]:
 
-            if(model == "TerrainCNN"):
-                controller.Sampling.temperature = torch.tensor(0.05, device=device)
+            if policy != "mppi":
+                model_path = "/root/catkin_ws/src/BeamNGRL/data/CCIL/" +  policy + ".pt"
+                model = torch.jit.load(model_path)
+                model.eval()
+                bng_interface.rotate = True
             else:
-                controller.Sampling.temperature = temp_temperature
-
+                model = None
+                bng_interface.rotate = False
+            print("RUNNING ", policy)
+            output_path = DATA_PATH / Config["raw_data_dir"] / policy
+            output_path.mkdir(parents=True, exist_ok=True)
+            scenario_count = 0
             for scenario in Config["scenarios"]:
                 # load the scenario waypoints:
                 WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
                 target_WP = np.load(WP_file)
                 start_pos = target_WP[0,:3]
                 start_quat = target_WP[0,3:]
-
-                temp_lethal_w = torch.clone(controller.Costs.lethal_w)
-                temp_roll_w = torch.clone(controller.Costs.roll_w)
-                temp_scaled_dt = torch.clone(controller.Sampling.scaled_dt)
-
-                if scenario.split('-')[0] == "race":
-                    controller.Costs.lethal_w = torch.tensor(10.0, device=device)
-                    controller.Costs.roll_w = torch.tensor(1.0, device=device) ## reduce weighting on physics costs
-                    controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
 
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
@@ -220,7 +220,7 @@ def main(config_path=None, hal_config_path=None, args=None):
                     normal_data.append(bng_interface.BEV_normal)
 
                     experiment_count += 1
-                    print("Data collection iter: {}/{}".format(experiment_count, total_experiments), end='\r')
+                    print("Data collection iter: {}/{}".format(experiment_count, total_experiments)) #, end='\r')
                     num_perturbs = 0
                     while ts < time_limit:
                         # for _ in range(int(skips)):
@@ -236,52 +236,31 @@ def main(config_path=None, hal_config_path=None, args=None):
                         BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
                         BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
                         BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255
-                        controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
-                        controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
-                        controller.Costs.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype))  # you can also do this asynchronously
-                        
                         state_to_ctrl = np.copy(state)
                         state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
+                        
                         # we use our previous control output as input for next cycle!
-                        if not Config["manual_input"]:
-                            state_to_ctrl[15:17] = action ## adhoc wheelspeed.
-                            action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
-                            action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
-                            costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
-                            state[15:17] = action
-                        print(state[15:17])
+                        state_to_ctrl[15:17] = action ## adhoc wheelspeed.
+                        policy_goal = torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype) 
+                        action = run_policy(controller, BEV_heght, BEV_normal, BEV_path, state_to_ctrl, policy_goal, model=model)
+                        action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
+
+                        costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
+                        state[15:17] = action
                         heading_vec = np.array([np.cos(state[5]), np.sin(state[5])])
                         goal_vec = goal[:2] - pos
                         goal_vec /= np.linalg.norm(goal_vec)
                         goal_dot = np.dot(goal_vec, heading_vec)
-                        if Config["perturb_inputs"] and int(ts)%10==0 and goal_dot > 0.8:
-                            action[0] += np.random.uniform(-0.2, 0.2)
-                            action[1] += np.random.uniform(-0.05, 0.05)
-                            timestamps.append(ts)
-                            state_data.append(state)
-                            reset_data.append(True)
-                            color_data.append(bng_interface.BEV_color)
-                            elev_data.append(bng_interface.BEV_heght)
-                            segmt_data.append(bng_interface.BEV_segmt)
-                            path_data.append(bng_interface.BEV_path)
-                            normal_data.append(bng_interface.BEV_normal)    
-                            bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
-                            for i in range(2):
-                                bng_interface.state_poll()
-                            bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
-                            bng_interface.state_poll()
-                            num_perturbs += 1
-                        else:
-                            timestamps.append(ts)
-                            state_data.append(state)
-                            reset_data.append(False)
-                            color_data.append(bng_interface.BEV_color)
-                            elev_data.append(bng_interface.BEV_heght)
-                            segmt_data.append(bng_interface.BEV_segmt)
-                            path_data.append(bng_interface.BEV_path)
-                            normal_data.append(bng_interface.BEV_normal)
-                            if not Config["manual_input"]:
-                                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+
+                        timestamps.append(ts)
+                        state_data.append(state)
+                        reset_data.append(False)
+                        color_data.append(bng_interface.BEV_color)
+                        elev_data.append(bng_interface.BEV_heght)
+                        segmt_data.append(bng_interface.BEV_segmt)
+                        path_data.append(bng_interface.BEV_path)
+                        normal_data.append(bng_interface.BEV_normal)
+                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
                         damage = False
                         if(type(bng_interface.broken) == dict ):
@@ -291,26 +270,20 @@ def main(config_path=None, hal_config_path=None, args=None):
                                     count += 1
                             damage = count > 1
 
-                        # result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), np.copy(ts), success, damage ) ))
+                        result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), np.copy(ts), success, damage ) ))
                         
                         if success or bng_interface.flipped_over:
                             break ## break the for loop
 
-
                     if(Config["save_data"]):
-                        timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
-                        state_data = update_npy_datafile(state_data, output_path / "state.npy")
-                        reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
-                        path_data = update_npy_datafile(path_data, output_path / "bev_path.npy")
-                        color_data = update_npy_datafile(color_data, output_path / "bev_color.npy")
-                        segmt_data = update_npy_datafile(segmt_data, output_path / "bev_segmt.npy")
-                        elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
-                        normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
-                
-                controller.Costs.lethal_w = temp_lethal_w
-                controller.Costs.roll_w = temp_roll_w
-                controller.Sampling.scaled_dt = temp_scaled_dt
-                ## reset the weights
+                        result_states = np.array(result_states)
+                        dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/CCIL/" + policy
+                        filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
+                        if(not os.path.isdir(dir_name)):
+                            os.makedirs(dir_name)
+                        np.save(filename, result_states)
+            
+            ## reset the weights
     except KeyboardInterrupt:
         pass
     except Exception as e:
@@ -326,7 +299,7 @@ def main(config_path=None, hal_config_path=None, args=None):
 if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="Manual_Data_Collection_Config.yaml", help="name of the config file to use")
+    parser.add_argument("--config_name", type=str, default="CCIL_Eval_Config.yaml", help="name of the config file to use")
     parser.add_argument("--hal_config_name", type=str, default="hound.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")

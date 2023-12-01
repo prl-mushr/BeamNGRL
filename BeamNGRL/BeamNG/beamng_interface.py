@@ -32,6 +32,7 @@ def get_beamng_default(
         camera_config=None,
         lidar_config=None,
         accel_config=None,
+        vesc_config=None,
         burn_time=0.02,
         run_lockstep=False,
 ):
@@ -53,7 +54,7 @@ def get_beamng_default(
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
-        camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config
+        camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config
     )
     bng.set_map_attributes(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
@@ -78,6 +79,7 @@ def get_beamng_nobeam(
         camera_config=None,
         lidar_config=None,
         accel_config=None,
+        vesc_config=None,
         burn_time=0.02,
         run_lockstep=False,
 ):
@@ -150,6 +152,7 @@ class beamng_interface():
         self.camera = False
         self.lidar = False
         self.use_sgmt = False
+        self.steering_max = 260.0
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -169,7 +172,7 @@ class beamng_interface():
 
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='offroad',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
-                      camera_config=None, lidar_config=None, accel_config=None,
+                      camera_config=None, lidar_config=None, accel_config=None, vesc_config=None,
                       time_of_day=1200, hide_hud=False):
         self.start_pos = start_pos
         self.start_quat = start_rot
@@ -208,7 +211,10 @@ class beamng_interface():
 
         self.camera_config = camera_config
         self.lidar_config = lidar_config
-
+        self.vesc_config = vesc_config
+        if self.vesc_config is not None:
+            self.steering_max = self.vesc_config["steering_degrees"]
+            
         if self.camera_config is not None and self.camera_config["enable"]:
             self.camera = True
             self.camera_fps = self.camera_config["fps"]
@@ -524,7 +530,7 @@ class beamng_interface():
                 if sign == 0:
                     sign = 1 ## special case just to make sure we don't consider 0 speed in neutral gear
                 self.avg_wheelspeed = self.vehicle.sensors['electrics']['wheelspeed'] * sign
-                self.steering = float(self.vehicle.sensors['electrics']['steering']) / 260.0
+                self.steering = float(self.vehicle.sensors['electrics']['steering']) / self.steering_max
                 throttle = float(self.vehicle.sensors['electrics']['throttle'])
                 brake = float(self.vehicle.sensors['electrics']['brake'])
                 self.thbr = throttle - brake
