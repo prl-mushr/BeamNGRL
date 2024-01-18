@@ -9,7 +9,7 @@ Cost_config:
   critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
   car_bb_width: 2.0
   car_bb_length: 3.0
-  critical_vert_acc: 3.5
+  critical_vert_acc: 3.0
   critical_vert_spd: 0.15
 Dynamics_config:
   wheelbase: 2.6
@@ -42,11 +42,37 @@ Dynamics_config:
       batch_norm: True
   model_weights: "best_40.pth"
 
+  network_baseline:
+    state_input_feat: ['vx', 'vy', 'vz']
+    state_output_feat: ['vx', 'vy', 'vz']
+    control_feat: ['steer', 'throttle']
+    use_normalizer: False
+
+    class: SequentialContextMLP
+    net_kwargs:
+      hidden_depth: 2
+      hidden_dim: 32
+      batch_norm: True
+  model_weights_baseline: "best_100.pth"
+
+  network_KARMA:
+    state_input_feat: ['vx', 'vy', 'vz']
+    state_output_feat: ['vx', 'vy', 'vz']
+    control_feat: ['steer', 'throttle']
+    use_normalizer: False
+
+    class: ParallelContextMLP
+    net_kwargs:
+      hidden_depth: 2
+      hidden_dim: 32
+      batch_norm: True
+  model_weights_KARMA: "best_40.pth"
+
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
-  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  scaled_dt: 0.2 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: -0.2
@@ -71,15 +97,19 @@ Map_config:
   topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
 
 # models: ['slip3d_150', 'slip3d', 'slip3d_LPF', 'slip3d_LPF_drag', 'TerrainCNN']
-models: ['slip3d_150', 'slip3d_LPF_drag', 'TerrainCNN'] ## TerrainCNN suboptimal, our method, our method without sys-ID.
-scenarios: ['hill-0', 'hill-2' ,'ditch-1', 'race-0', 'race-1']
-time_limit: [20.0,    40.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
-lookahead:  [20.0,    20.0,     20.0,      20.0,     15.0]  # lookahead on scenario by scenario basis
+# models: ['slip3d_150', 'slip3d_LPF_drag', 'TerrainCNN'] ## TerrainCNN suboptimal, our method, our method without sys-ID.
+# scenarios: ['hill-0', 'hill-2' ,'ditch-1', 'race-0', 'race-1']
+# time_limit: [20.0,    40.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
+# lookahead:  [20.0,    20.0,     20.0,      20.0,     15.0]  # lookahead on scenario by scenario basis
+models: ['slip3d', 'KARMA', 'TerrainCNN']
+scenarios: ['hill-2', 'ditch-1', 'race-1']
+time_limit: [20.0,     20.0,      50.0]  # (simulated) time limit for each scenario.
+lookahead:  [20.0,     20.0,      10.0]  # lookahead on scenario by scenario basis
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
 # scenarios: ['race-1']
 # time_limit: [80.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0]  # lookahead on scenario by scenario basis
-num_iters: 10
+num_iters: 5
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0

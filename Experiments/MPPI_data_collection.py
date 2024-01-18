@@ -213,11 +213,11 @@ def main(config_path=None, hal_config_path=None, args=None):
                     state[15:17] = action
                     state_data.append(state)
                     reset_data.append(True)
-                    color_data.append(bng_interface.BEV_color)
-                    elev_data.append(bng_interface.BEV_heght)
-                    segmt_data.append(bng_interface.BEV_segmt)
-                    path_data.append(bng_interface.BEV_path)
-                    normal_data.append(bng_interface.BEV_normal)
+                    # color_data.append(bng_interface.BEV_color)
+                    # elev_data.append(bng_interface.BEV_heght)
+                    # segmt_data.append(bng_interface.BEV_segmt)
+                    # path_data.append(bng_interface.BEV_path)
+                    # normal_data.append(bng_interface.BEV_normal)
 
                     experiment_count += 1
                     print("Data collection iter: {}/{}".format(experiment_count, total_experiments), end='\r')
@@ -233,55 +233,56 @@ def main(config_path=None, hal_config_path=None, args=None):
                         pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                         goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=Config["wp_radius"])
                         ## get robot_centric BEV (not rotated into robot frame)
-                        BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
-                        BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
-                        BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255
-                        controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
-                        controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
-                        controller.Costs.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype))  # you can also do this asynchronously
+                        # BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
+                        # BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
+                        # BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255
+                        # controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
+                        # controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
+                        # controller.Costs.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype))  # you can also do this asynchronously
                         
                         state_to_ctrl = np.copy(state)
                         state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
                         # we use our previous control output as input for next cycle!
+                        state[16] = bng_interface.avg_wheelspeed/Dynamics_config["throttle_to_wheelspeed"]
                         if not Config["manual_input"]:
                             state_to_ctrl[15:17] = action ## adhoc wheelspeed.
                             action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                             action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
                             costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
                             state[15:17] = action
-                        print(state[15:17])
                         heading_vec = np.array([np.cos(state[5]), np.sin(state[5])])
                         goal_vec = goal[:2] - pos
                         goal_vec /= np.linalg.norm(goal_vec)
                         goal_dot = np.dot(goal_vec, heading_vec)
+
                         if Config["perturb_inputs"] and int(ts)%10==0 and goal_dot > 0.8:
                             action[0] += np.random.uniform(-0.2, 0.2)
                             action[1] += np.random.uniform(-0.05, 0.05)
                             timestamps.append(ts)
                             state_data.append(state)
                             reset_data.append(True)
-                            color_data.append(bng_interface.BEV_color)
-                            elev_data.append(bng_interface.BEV_heght)
-                            segmt_data.append(bng_interface.BEV_segmt)
-                            path_data.append(bng_interface.BEV_path)
-                            normal_data.append(bng_interface.BEV_normal)    
-                            bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                            # color_data.append(bng_interface.BEV_color)
+                            # elev_data.append(bng_interface.BEV_heght)
+                            # segmt_data.append(bng_interface.BEV_segmt)
+                            # path_data.append(bng_interface.BEV_path)
+                            # normal_data.append(bng_interface.BEV_normal)    
+                            bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
                             for i in range(2):
                                 bng_interface.state_poll()
-                            bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                            bng_interface.send_ctrl(np.zeros(2), speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
                             bng_interface.state_poll()
                             num_perturbs += 1
                         else:
                             timestamps.append(ts)
                             state_data.append(state)
                             reset_data.append(False)
-                            color_data.append(bng_interface.BEV_color)
-                            elev_data.append(bng_interface.BEV_heght)
-                            segmt_data.append(bng_interface.BEV_segmt)
-                            path_data.append(bng_interface.BEV_path)
-                            normal_data.append(bng_interface.BEV_normal)
+                            # color_data.append(bng_interface.BEV_color)
+                            # elev_data.append(bng_interface.BEV_heght)
+                            # segmt_data.append(bng_interface.BEV_segmt)
+                            # path_data.append(bng_interface.BEV_path)
+                            # normal_data.append(bng_interface.BEV_normal)
                             if not Config["manual_input"]:
-                                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                                bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
 
                         damage = False
                         if(type(bng_interface.broken) == dict ):
@@ -301,11 +302,11 @@ def main(config_path=None, hal_config_path=None, args=None):
                         timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
                         state_data = update_npy_datafile(state_data, output_path / "state.npy")
                         reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
-                        path_data = update_npy_datafile(path_data, output_path / "bev_path.npy")
-                        color_data = update_npy_datafile(color_data, output_path / "bev_color.npy")
-                        segmt_data = update_npy_datafile(segmt_data, output_path / "bev_segmt.npy")
-                        elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
-                        normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
+                        # path_data = update_npy_datafile(path_data, output_path / "bev_path.npy")
+                        # color_data = update_npy_datafile(color_data, output_path / "bev_color.npy")
+                        # segmt_data = update_npy_datafile(segmt_data, output_path / "bev_segmt.npy")
+                        # elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
+                        # normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
                 
                 controller.Costs.lethal_w = temp_lethal_w
                 controller.Costs.roll_w = temp_roll_w
@@ -326,8 +327,8 @@ def main(config_path=None, hal_config_path=None, args=None):
 if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_name", type=str, default="Manual_Data_Collection_Config.yaml", help="name of the config file to use")
-    parser.add_argument("--hal_config_name", type=str, default="hound.yaml", help="name of the config file to use")
+    parser.add_argument("--config_name", type=str, default="Manual_Data_Collection_small.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="offroad.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
     args = parser.parse_args()

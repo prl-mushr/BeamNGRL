@@ -153,6 +153,7 @@ class beamng_interface():
         self.lidar = False
         self.use_sgmt = False
         self.steering_max = 260.0
+        self.wait_for_sim = False ## don't wait for sim to finish simulating step unless using camera/lidar
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -223,6 +224,7 @@ class beamng_interface():
             self.attach_camera(name='camera', pos=cam_pos, update_frequency=self.camera_fps, dir=self.camera_config["dir"], up=self.camera_config["up"], 
                                field_of_view_y=self.camera_config["fov"], resolution=(self.camera_config["width"],self.camera_config["height"]),
                                annotation=self.use_sgmt)
+            self.wait_for_sim = True ## this is important, otherwise camera images may be "blank"
 
         if self.lidar_config is not None and self.lidar_config["enable"]:
             self.lidar = True
@@ -231,6 +233,7 @@ class beamng_interface():
             self.attach_lidar("lidar", pos=lidar_pos, dir=self.lidar_config["dir"], up=self.lidar_config["up"], vertical_resolution=self.lidar_config["channels"],
                              vertical_angle = self.lidar_config["vertical_angle"], rays_per_second_per_scan=self.lidar_config["rays_per_second_per_scan"],
                              update_frequency=self.lidar_fps, max_distance=self.lidar_config["max_distance"])
+            self.wait_for_sim = True
 
         self.state_poll()
         self.flipped_over = False
@@ -489,7 +492,7 @@ class beamng_interface():
             if not self.paused:
                 self.bng.pause()
                 self.paused = True
-            self.bng.step(1)
+            self.bng.step(1, wait=self.wait_for_sim)
         else:
             if self.paused:
                 self.bng.resume()

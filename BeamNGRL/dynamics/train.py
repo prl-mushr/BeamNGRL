@@ -10,7 +10,30 @@ import yaml
 from BeamNGRL import *
 from typing import Dict
 from utils.vis_utils import visualize_rollouts, get_rollouts
+from BeamNGRL.control.UW_mppi.Dynamics.ResidualCarDynamics import ResidualCarDynamics
+import traceback
 
+def get_dynamics(Config):
+    Dynamics_config = Config["Dynamics_config"]
+    MPPI_config = Config["MPPI_config"]
+    Map_config = Config["Map_config"]
+    dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=None)
+    return dynamics
+
+def rotate_traj(states):
+    theta = -states[..., 0, 5]
+    X = states[..., 0]
+    Y = states[..., 1]
+    yaw = states[..., 5]
+    ct = torch.cos(theta)
+    st = torch.sin(theta)
+    x = torch.matmul(ct, X) - torch.matmul(st, Y)
+    y = torch.matmul(st, X) + torch.matmul(ct, Y)
+    yaw += theta.unsqueeze(-1).repeat(1,states.shape[-2])
+    states[..., 0] = x
+    states[..., 1] = y
+    states[..., 5] = yaw
+    return states
 
 def train(
         network,
@@ -19,6 +42,7 @@ def train(
         train_loader,
         valid_loader,
         exp_path,
+        config,
         args,
         tn_args: Dict = None,
 ):
@@ -34,6 +58,12 @@ def train(
         )
     torch.autograd.set_detect_anomaly(True)
     best_loss = np.inf
+
+    skip = 1
+    if config["TRP"]:
+        dynamics = get_dynamics(config)
+    skip = int(config["Dynamics_config"]["dt"]/0.02)
+
     try:
         if args.start_from != -1:
             start = args.start_from
@@ -49,22 +79,46 @@ def train(
                 for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(train_loader)):
 
                     # Set device
-                    states_tn = states_tn.to(**tn_args)
-                    controls_tn = controls_tn.to(**tn_args)
+                    states_tn = states_tn.to(**tn_args)[:,::skip,:]
+                    controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                     ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
                     optimizer.zero_grad()
 
-                    pred = network(
-                        states_tn,
-                        controls_tn,
-                        ctx_tn_dict,
-                    )
+                    if config["TRP"]:
+                        with torch.no_grad():
+                            ## this will only work with batch size of 1 for now.
+                            BEV_heght = ctx_tn_dict["bev_elev"].squeeze(1)
+                            BEV_normal = ctx_tn_dict["bev_normal"].squeeze(1)
 
-                    targets = states_tn
-                    # targets = network.process_targets(states_tn)
+                            states = torch.zeros(1,states_tn.shape[0], states_tn.shape[1], 17).to(**tn_args)
+                            states[0,:,0,:15] = states_tn[:,0,:].clone().detach()
+                            controls = controls_tn.clone().detach().unsqueeze(0)
+                            predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal)
+                            if torch.any(torch.isnan(predict_states)):
+                                predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal, print_something="fixing nans")
+                            states_input = predict_states[...,:15].squeeze(0)
+                            states_input = rotate_traj(states_input)
+                            ctx_data={'rotate_crop': dynamics.bev_input_train}
 
-                    loss = loss_func(pred, targets)
+                        pred = network(
+                            states_input,
+                            controls_tn,
+                            ctx_data,
+                        )
+                        targets = rotate_traj(states_tn)
 
+                    else:
+                        pred = network(
+                            states_tn,
+                            controls_tn,
+                            ctx_tn_dict,
+                        )
+                        targets = states_tn
+
+                    loss = loss_func(pred, targets, conf = config) #, step=skip)
+                    if loss.isnan():
+                        print("naan loss")
+                        continue
                     loss.backward()
                     optimizer.step()
 
@@ -76,7 +130,7 @@ def train(
                     writer.add_scalar('Train/gradient', grad_mag,
                         len(train_loader) * epoch + i)
 
-                    if i % args.log_interval == 0:
+                    if i % args.log_interval == 0 and not config["TRP"]:
                         batch_idx = 0
                         state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
                         visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
@@ -102,25 +156,47 @@ def train(
 
                     with torch.no_grad():
                         # Set device
-                        states_tn = states_tn.to(**tn_args)
-                        controls_tn = controls_tn.to(**tn_args)
+                        states_tn = states_tn.to(**tn_args)[:,::skip,:]
+                        controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                         ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
+                        if config["TRP"]:
+                            with torch.no_grad():
+                                ## this will only work with batch size of 1 for now.
+                                BEV_heght = ctx_tn_dict["bev_elev"].squeeze(1)
+                                BEV_normal = ctx_tn_dict["bev_normal"].squeeze(1)
 
-                        pred = network(
-                            states_tn,
-                            controls_tn,
-                            ctx_tn_dict,
-                        )
+                                states = torch.zeros(1,states_tn.shape[0], states_tn.shape[1], 17).to(**tn_args)
+                                states[0,:,0,:15] = states_tn[:,0,:].clone().detach()
+                                controls = controls_tn.clone().detach().unsqueeze(0)
+                                predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal)
+                                while torch.any(torch.isnan(predict_states)):
+                                    predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal, print_something="fixing nans")
+                                ctx_data={'rotate_crop': dynamics.bev_input_train}
+                                states_input = predict_states[...,:15].squeeze(0)
+                                states_input = rotate_traj(states_input)
+                            pred = network(
+                                states_input,
+                                controls_tn,
+                                ctx_data,
+                            )
+                            targets = rotate_traj(states_tn)
 
-                        targets = states_tn
+
+                        else:
+                            pred = network(
+                                states_tn,
+                                controls_tn,
+                                ctx_tn_dict,
+                            )
+                            targets = states_tn
                         # targets = network.process_targets(states_tn)
-                        test_batch_loss = loss_func(pred, targets)
+                        test_batch_loss = loss_func(pred, targets, conf=config) #, step=skip)
 
                     test_avg_loss.append(test_batch_loss.cpu().numpy())
                     writer.add_scalar('Valid/batchLoss', test_batch_loss,
                         len(valid_loader) * epoch + i)
 
-                    if i % args.log_interval == 0:
+                    if i % args.log_interval == 0 and not config["TRP"]:
                         batch_idx = 0
                         state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
                         visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
@@ -143,6 +219,8 @@ def train(
             if net_sched is not None:
                 net_sched.step()
 
+    except Exception:
+        print(traceback.format_exc())
     finally:
         writer.close()
 
@@ -150,7 +228,7 @@ def train(
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default="Data_Collection_Config", help='config file for training model')
+    parser.add_argument('--config', type=str, default="TRP_Config", help='config file for training model')
     parser.add_argument('--output', type=str, required=False, help='location to store output - weights, log')
     parser.add_argument('--cpu', type=str, required=False, default=False, help='use cpu for training')
     parser.add_argument('--n_epochs', type=int, required=False, default=100, help='Number of training epochs.')
@@ -158,7 +236,7 @@ if __name__ == "__main__":
     parser.add_argument('--log_interval', type=int, required=False, default=10, help='model grad/weights log interval')
     parser.add_argument('--finetune', type=str, required=False, default = None, help='pretrained weights to finetune from')
     parser.add_argument('--shuffle', type=bool, required=False, default=True, help='shuffle data')
-    parser.add_argument('--batchsize', type=int, required=False, default=16, help='training batch size')
+    parser.add_argument('--batchsize', type=int, required=False, default=1, help='training batch size')
     parser.add_argument('--start_from', type=int, required=False, default=-1, help='epoch to start from')
     parser.add_argument('--valid_interval', type=int, required=False, default=1, help='model grad/weights log interval')
     parser.add_argument('--skip_valid_eval', action='store_true', help='skip computation of validation error.')
@@ -199,6 +277,11 @@ if __name__ == "__main__":
         train_loader,
         valid_loader,
         exp_path,
+        config,
         args,
         tensor_args,
     )
+
+# python3 train.py --config TBS_Config --output baseline_test --n_epochs 50 --batchsize=16
+# python3 train.py --config TRP_Config --output residual_test --n_epochs 50 --batchsize=1
+# python3 train.py --config TRP_Config --output residual_test --n_epochs 10 --batchsize=48

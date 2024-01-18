@@ -49,6 +49,8 @@ class SimpleCarDynamics:
         self.lr = np.float32(Dynamics_config["lr"])
         self.Iz = np.float32(Dynamics_config["Iz"])
         self.LPF_tau = np.float32(Dynamics_config["LPF_tau"])
+        self.LPF_st = np.float32(Dynamics_config["LPF_st"])
+        self.LPF_th = np.float32(Dynamics_config["LPF_th"])
         self.res_coeff = np.float32(Dynamics_config["res_coeff"])
         self.drag_coeff = np.float32(Dynamics_config["drag_coeff"])
 
@@ -79,9 +81,19 @@ class SimpleCarDynamics:
         self.BEVmap_height = gpuarray.to_gpu(np.zeros((self.BEVmap_size_px, self.BEVmap_size_px), dtype=dtype) )
         self.BEVmap_normal = gpuarray.to_gpu(np.zeros((self.BEVmap_size_px, self.BEVmap_size_px, 3), dtype=dtype) )
 
+    def tensor_to_gpuarray(self, tensor, dtype):
+        return gpuarray.GPUArray(tensor.shape, dtype, gpudata = tensor.data_ptr())
+
+    def gpuarray_to_tensor(self, gpa, out, dtype, npdtype):
+        ## note: this function assumes you already have the location where you would like to copy the data.
+        gpa_copy = self.tensor_to_gpuarray(out, dtype=npdtype)
+        byte_size = gpa.itemsize * gpa.size
+        cuda.memcpy_dtod(gpa_copy.gpudata, gpa.gpudata, byte_size)
+
     def set_BEV(self, BEVmap_height, BEVmap_normal):
-        self.BEVmap_height = gpuarray.to_gpu(BEVmap_height.cpu().numpy())
-        self.BEVmap_normal = gpuarray.to_gpu(BEVmap_normal.cpu().numpy())
+        self.BEVmap_height = self.tensor_to_gpuarray(BEVmap_height, np.float32)
+        self.BEVmap_normal = self.tensor_to_gpuarray(BEVmap_normal, np.float32)
+        cuda.Context.synchronize()
 
     # faster and more memory efficient approach (Shaves off a whole 2 milliseconds on the jetson (which is 10% of 20 millisecond update cycle!))
     def set_BEV_numpy(self, BEVmap_height, BEVmap_normal):
@@ -92,15 +104,16 @@ class SimpleCarDynamics:
         return self.states
 
     def forward(self, state, controls):
-        controls = gpuarray.to_gpu(controls.squeeze(0).cpu().numpy())
-        state_ = gpuarray.to_gpu(state.squeeze(0).cpu().numpy())
-
+        now = time.time()
+        controls_ = self.tensor_to_gpuarray(controls.squeeze(0), np.float32)
+        state_ = self.tensor_to_gpuarray(state.squeeze(0), np.float32)
+        cuda.Context.synchronize()
         # Launch the CUDA kernel
-        self.rollout(state_, controls, self.BEVmap_height, self.BEVmap_normal, self.dt, self.K, self.T, self.NX, self.NC,
+        self.rollout(state_, controls_, self.BEVmap_height, self.BEVmap_normal, self.dt, self.K, self.T, self.NX, self.NC,
                 self.D, self. B, self.C, self.lf, self.lr, self.Iz, self.throttle_to_wheelspeed, self.steering_max,
-                self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.car_l2, self.car_w2, self.cg_height, self.LPF_tau, self.res_coeff, self.drag_coeff,
+                self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.car_l2, self.car_w2, self.cg_height, self.LPF_tau, self.LPF_st, self.LPF_th, self.res_coeff, self.drag_coeff,
                 block=(self.block_dim, 1, 1), grid=(self.grid_dim, 1))
         cuda.Context.synchronize()
-
-        self.states  = torch.from_numpy(state_.get()).unsqueeze(0).to(torch.device('cuda'))
+        self.gpuarray_to_tensor(state_, self.states, torch.float32, np.float32)
+        dt = time.time() - now
         return self.states

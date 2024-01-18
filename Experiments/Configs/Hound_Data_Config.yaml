@@ -17,7 +17,7 @@ Dynamics_config:
   wheelbase: 0.33
   throttle_to_wheelspeed: 17.0
   steering_max: 0.488
-  dt: 0.05
+  dt: 0.04
   D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
   B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
   C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
@@ -43,13 +43,13 @@ Sampling_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 20 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
+  TIMESTEPS: 32 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
   BINS: 1
   u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
 
 Map_config:
-  map_size: 64 # in meters map_size x map_size
-  map_res: 0.25 ## this results in 256 x 256 pixels for the MPPI
+  map_size: 16 # in meters map_size x map_size
+  map_res: 0.0625 ## this results in 256 x 256 pixels for the MPPI
   map_res_hitl: 0.25 ## this is the resolution at which the map is received
   elevation_range: 4.0
   map_name: "small_island"
@@ -66,36 +66,36 @@ generate_costmap_from_path: 1
 debug: False
 
 vehicle:
-  make: "sunburst"
-  model: "RACER"
+  make: "savage_low_f"
+  model: "flux"
   max_speed: 23.0
   max_steer: 0.488
 
 models: ["slip3d_LPF_drag"]
 scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
-time_limit: [20.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
+time_limit: [100.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
 lookahead:  [5.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
-num_iters: 2
+num_iters: 20
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 
 ## train/test:
-output_dir: "train"
+output_dir: "valid"
 
-save_data: True
+save_data: False
 run_lockstep: True
 
 perturb_inputs: False
 
-manual_input: True
+manual_input: False
 ## this is where we throw all params relevant to processing the data
-raw_data_dir: 'sysID_test_data'
+raw_data_dir: 'hound_ros_data'
 # Total traj len = future + past + 1 (current)
-future_traj_len: 50
-past_traj_len: 50
-skip_frames: 5
+future_traj_len: 64
+past_traj_len: 64
+skip_frames: 4
 
 split:
   train:
@@ -105,7 +105,7 @@ split:
 
 ## this is where we throw all params relevant to training
 dataset:
-  name: 'sysID_test_data'
+  name: 'hound_ros_data'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -128,8 +128,8 @@ network:
   opt_kwargs:
     lr: 1.0e-3
 
-loss: AggregatedMSE_dV
+loss: ResidualMSE_dV
 
-bag_dirs: ["test_dir"]
+bag_dirs: ["new_bags_bmx"]
 base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
-ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/manual_data_ros/train' 
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/hound_ros_data/valid' # change this for rosbag_to_dataset.

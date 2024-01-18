@@ -70,7 +70,7 @@ class MPPI(torch.nn.Module):
         """
         ## sample perturbed actions
         states = _state.view(1, -1).repeat(self.M, self.K, self.T, 1)
-        controls, perturbation_cost = self.Sampling.sample(states, self.U)
+        controls, perturbation_cost = self.Sampling.sample(states, self.U) ## TODO: why is perturbation cost not just a part of the sampling function?
         ## All the states are initialized as copies of the current state
         ## M bins per control traj, K control trajectories, T timesteps, NX states
         ## update all the states using the dynamics function

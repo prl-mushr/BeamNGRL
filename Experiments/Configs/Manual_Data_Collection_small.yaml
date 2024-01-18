@@ -15,7 +15,7 @@ Cost_config:
 
 Dynamics_config:
   wheelbase: 0.33
-  throttle_to_wheelspeed: 17.0
+  throttle_to_wheelspeed: 20.0
   steering_max: 0.488
   dt: 0.05
   D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
@@ -25,6 +25,8 @@ Dynamics_config:
   lr: 0.15 ## length from car com to rear axle
   Iz: 0.1 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
   LPF_tau: 0.2 ## low pass filter tau for simulating spring damper setup
+  LPF_st: 1.0
+  LPF_th: 1.0
   res_coeff: 0.01 ## resistance coefficient (proportional to speed)
   drag_coeff: 0.005 # drag coefficient (proportional to speed squared)
   car_length: 0.33 # front to back distance of car
@@ -48,8 +50,8 @@ MPPI_config:
   u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
 
 Map_config:
-  map_size: 64 # in meters map_size x map_size
-  map_res: 0.25 ## this results in 256 x 256 pixels for the MPPI
+  map_size: 16 # in meters map_size x map_size
+  map_res: 0.0625 ## this results in 256 x 256 pixels for the MPPI
   map_res_hitl: 0.25 ## this is the resolution at which the map is received
   elevation_range: 4.0
   map_name: "small_island"
@@ -66,15 +68,15 @@ generate_costmap_from_path: 1
 debug: False
 
 vehicle:
-  make: "sunburst"
-  model: "RACER"
-  max_speed: 23.0
+  make: "savage_normal"
+  model: "flux"
+  max_speed: 17.0
   max_steer: 0.488
 
 models: ["slip3d_LPF_drag"]
-scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
-time_limit: [20.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
-lookahead:  [5.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
+scenarios: ['race-4'] #, 'race-1'] #, 'WP_file_offroad']
+time_limit: [120.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
+lookahead:  [20.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
 num_iters: 2
 start_pos: [-67, 336, 34.5]
@@ -82,7 +84,7 @@ start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 
 ## train/test:
-output_dir: "train"
+output_dir: "valid"
 
 save_data: True
 run_lockstep: True
@@ -91,7 +93,7 @@ perturb_inputs: False
 
 manual_input: True
 ## this is where we throw all params relevant to processing the data
-raw_data_dir: 'sysID_test_data'
+raw_data_dir: 'manual_small'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
@@ -105,7 +107,7 @@ split:
 
 ## this is where we throw all params relevant to training
 dataset:
-  name: 'sysID_test_data'
+  name: 'manual_small'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

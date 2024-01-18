@@ -62,7 +62,8 @@ __device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, floa
 
 __global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
                         const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
-                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff)
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, 
+                        const float LPF_tau_rpy, const float LPF_tau_st, const float LPF_tau_th, const float res_coeff, const float drag_coeff)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     int state_index = k*timesteps*NX;

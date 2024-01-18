@@ -1,36 +1,68 @@
 Cost_config:
   goal_w: 1.0 ## weight on the terminal goal cost
-  speed_w: 0.0 ## weight with which target speed will be tracked
-  roll_w: 100.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+  speed_w: 1.0 ## weight with which target speed will be tracked
+  roll_w: 10.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
   lethal_w: 0.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
-  heading_w: 1.0
+  heading_w: 0.5
   stop_w: 0.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
-  speed_target: 10.0 ## target speed in m/s
+  speed_target: 10.0 ## speed limit # TODO: change speed_target: to speed_limit:, this is misleading
   critical_SA: 1.414 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
-  critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
+  critical_RI: 1.0 ## limiting ratio of lateral to vertical acceleration
   car_bb_width: 2.0
   car_bb_length: 3.0
-  critical_vert_acc: 3.0
-  critical_vert_spd: 0.15
+  critical_vert_acc: 1.5
+  critical_vert_spd: 0.5
   
+Sampling_config:
+  control_dim: 2
+  noise_0: 1.0
+  noise_1: 1.0
+  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  max_thr: 0.8
+  min_thr: 0.0
+
+MPPI_config:
+  ROLLOUTS: 1024
+  TIMESTEPS: &TIMESTEPS 32
+  BINS: 1
+  u_per_command: 1
+
+Map_config:
+  map_name: "small_island"
+  map_size: &map_size 64
+  map_res: &map_res 0.25
+  map_res_hitl: 0.25
+  elevation_range: 4.0
+  layers:
+    color: 3
+    elevation: 1
+    semantics: 3
+    costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
+
 Dynamics_config:
   wheelbase: 2.6
   throttle_to_wheelspeed: 20.0
-  steering_max: 0.5
-  dt: 0.05
+  steering_max: 0.6
+  dt: &delta_T 0.04
   D: 0.8
   B: 6.8
-  C: 1.5
+  C: 1.75 ## these parameters are multi-modal, so it isn't quite possible to determine them easily with short horizon data, so a PF may be better suited
   lf: 1.3
   lr: 1.3
-  Iz: 1.5
+  Iz: 1.7
   LPF_tau: 1.0
+  LPF_st: 1.0
+  LPF_th: 1.0
   res_coeff: 0.0
   drag_coeff: 0.0
-  car_length: 3.0
+  car_length: 2.6
   car_width: 1.5
   cg_height: 0.5
+  patch_size: &patch_size 3.0
   type: "slip3d" ## this will be overwritten during evaluation
+
   network:
     state_input_feat: ['vx', 'vy', 'vz']
     state_output_feat: ['vx', 'vy', 'vz']
@@ -44,54 +76,102 @@ Dynamics_config:
       batch_norm: True
   model_weights: "best_40.pth"
 
-Sampling_config:
-  control_dim: 2
-  noise_0: 1.0
-  noise_1: 1.0
-  scaled_dt: 0.2 ## this is dt * bandwidth of the physical actuators (in what units?)
-  temperature: 0.1 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
-  max_thr: 0.8
-  min_thr: 0.0
+  network_baseline:
+    state_input_feat: ['vx', 'vy', 'vz']
+    state_output_feat: ['vx', 'vy', 'vz']
+    control_feat: ['steer', 'throttle']
+    use_normalizer: False
 
-MPPI_config:
-  ROLLOUTS: 1024
-  TIMESTEPS: 20
-  BINS: 1
-  u_per_command: 1
+    class: SequentialContextMLP
+    net_kwargs:
+      hidden_depth: 2
+      hidden_dim: 32
+      batch_norm: True
+      dt: *delta_T
+      timesteps: *TIMESTEPS
+      BEVmap_size: *map_size
+      BEVmap_res: *map_res
+      patch_size: *patch_size
+      mean_state: [0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 
+                   7.5, 0.0, 0.0, 
+                   0.0, 0.0, 9.8,
+                   0.0, 0.0, 0.0]
+      std_state: [32.0, 32.0, 4.0,
+                  1.0, 1.0, 3.0, 
+                  8.0, 6.0, 6.0, 
+                  12.5, 12.5, 12.5, 
+                  1.0, 1.0, 1.0]
+      std_state_err: [1.0, 1.0, 0.5, 
+                      0.25, 0.25, 0.25,
+                      4.0, 4.0, 4.0,
+                      12.5, 12.5, 12.5,
+                      1.0, 1.0, 1.0]
+      mean_control: [0.0, 0.5]
+      std_control: [0.5, 0.5]
 
-Map_config:
-  map_name: "small_island"
-  map_size: 64
-  map_res: 0.25
-  map_res_hitl: 0.25
-  elevation_range: 4.0
-  layers:
-    color: 3
-    elevation: 1
-    semantics: 3
-    costmap: 1
-  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
+  model_weights_baseline: "best_100.pth"
 
-models: ["slip3d_LPF_drag"]
-# models: ['noslip3d','slip3d_150', 'slip3d', 'TerrainCNN']
-scenarios: ['hill-0', 'ditch-1', 'race-0', 'race-1']
-time_limit: [20.0,     20.0,      60.0,     50.0]  # (simulated) time limit for each scenario.
-lookahead:  [20.0,     20.0,      20.0,     10.0]  # lookahead on scenario by scenario basis
+  network_KARMA:
+    state_input_feat: ['vx', 'vy', 'vz']
+    state_output_feat: ['vx', 'vy', 'vz']
+    control_feat: ['steer', 'throttle']
+    use_normalizer: False
+
+    class: ParallelContextMLP
+    net_kwargs:
+      hidden_depth: 2
+      hidden_dim: 32
+      batch_norm: True
+      dt: *delta_T
+      timesteps: *TIMESTEPS
+      BEVmap_size: *map_size
+      BEVmap_res: *map_res
+      patch_size: *patch_size
+      mean_state: [0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 
+                   7.5, 0.0, 0.0, 
+                   0.0, 0.0, 9.8,
+                   0.0, 0.0, 0.0]
+      std_state: [32.0, 32.0, 8.0,
+                  1.0, 1.0, 3.0, 
+                  8.0, 6.0, 6.0, 
+                  12.5, 12.5, 12.5, 
+                  1.0, 1.0, 1.0]
+      std_state_err: [1.0, 1.0, 0.5, 
+                      0.25, 0.25, 0.25,
+                      4.0, 4.0, 4.0,
+                      12.5, 12.5, 12.5,
+                      1.0, 1.0, 1.0]
+      mean_control: [0.0, 0.5]
+      std_control: [0.5, 0.5]
+
+  model_weights_KARMA: "best_94.pth"
+
+models: ['slip3d', 'TerrainCNN'] #, 'KARMA']
+scenarios: ['hill-2', 'ditch-1', 'race-1']
+time_limit: [30.0,     30.0,      60.0]  # (simulated) time limit for each scenario.
+lookahead:  [10.0,     10.0,      10.0]  # lookahead on scenario by scenario basis
+wp_radius: [15.0, 10.0, 10.0]
 # time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,       60.0,     50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,       20.0,     10.0]  # lookahead on scenario by scenario basis
-wp_radius: 5.0 ## waypoint radius for terminal condition
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-# scenarios: ['race-0', 'race-1']
-# time_limit: [60.0, 50.0] ## (simulated) time limit for each scenario.
-# lookahead:  [20.0, 15.0]  # lookahead on scenario by scenario basis
-num_iters: 1
+# models: ["TerrainCNN"]
+# scenarios: ['hill-2'] #, 'race-1']
+# time_limit: [20.0] #, 50.0] ## (simulated) time limit for each scenario.
+# lookahead:  [10.0] #, 15.0]  # lookahead on scenario by scenario basis
+# wp_radius: [20.0]
+# scenarios: ['race-4']
+# time_limit: [50.0] ## (simulated) time limit for each scenario.
+# lookahead:  [20.0]  # lookahead on scenario by scenario basis
+num_iters: 10 # 10 x 9 x 30 x 5
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 output_dir: "train"
 map_name: "small_island"
 
-save_data: False
+save_data: True
 run_lockstep: True
 
 vehicle:

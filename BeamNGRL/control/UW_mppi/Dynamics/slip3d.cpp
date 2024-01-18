@@ -69,7 +69,8 @@ __device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, floa
 
 __global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
                         const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
-                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff)
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, 
+                        const float LPF_tau_rpy, const float LPF_tau_st, const float LPF_tau_th, const float res_coeff, const float drag_coeff)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if(k > rollouts)
@@ -81,17 +82,25 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
     int curr, next, ctrl_base;
 
-    float x, y, z=0, roll, pitch, last_roll=0, last_pitch=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
+    float x=0, y=0, z=0, roll=0, pitch=0, last_roll=0, last_pitch=0, last_roll_rate=0, last_pitch_rate = 0, yaw=0, vx=0, vy=0, vz=0, ax=0, ay=0, az=0, wx=0, wy=0, wz=0;
     float st, w;
 
-    float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
-    float roll_rate, pitch_rate, yaw_rate;
+    float vf, vfy, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
+    float roll_rate=0, pitch_rate=0, yaw_rate=0;
     float cp, sp, cr, sr, cy, sy, ct;
     float fl[3], fr[3], bl[3], br[3];
     float res_inv = 1.0f/BEVmap_res;
     float Nf, Nr;
 
     __syncthreads();
+    // 0th control is copied as is
+    st = controls[st_index] * steering_max;
+    w = controls[th_index] * throttle_to_wheelspeed;
+
+
+    last_roll_rate = state[state_index + wx_index];
+    last_pitch_rate = state[state_index + wy_index];
+
     for(int t = 0; t < timesteps-1; t++)
     {
         curr = t*NX + state_index;
@@ -99,8 +108,8 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         ctrl_base = t*NC + control_index;
         
-        st = controls[ctrl_base + st_index] * steering_max;
-        w = controls[ctrl_base + th_index] * throttle_to_wheelspeed;
+        st = LPF_tau_st*controls[ctrl_base + st_index] * steering_max + (1 - LPF_tau_st) * st;
+        w = LPF_tau_th*controls[ctrl_base + th_index] * throttle_to_wheelspeed + (1 - LPF_tau_th) * w;
 
         x = state[curr + x_index];
         y = state[curr + y_index];
@@ -123,11 +132,14 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         get_footprint_z(fl, fr, bl, br, z, x, y, cy, sy, BEVmap_height, BEVmap_size_px, res_inv, car_l2, car_w2);
 
-        roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*LPF_tau + last_roll*(1 - LPF_tau);
-        pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*LPF_tau + last_pitch*(1 - LPF_tau);
+        roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*LPF_tau_rpy + last_roll*(1 - LPF_tau_rpy);
+        pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*LPF_tau_rpy + last_pitch*(1 - LPF_tau_rpy);
 
-        roll_rate = (roll - last_roll)/dt;
-        pitch_rate = (pitch - last_pitch)/dt;
+        roll_rate = (LPF_tau_rpy*(roll - last_roll)/dt) + (1 - LPF_tau_rpy)*last_roll_rate;
+        pitch_rate = (LPF_tau_rpy*(pitch - last_pitch)/dt) + (1 - LPF_tau_rpy)*last_pitch_rate;
+
+        last_roll_rate = roll_rate;
+        last_pitch_rate = pitch_rate;
 
         cp = cosf(pitch);
         sp = sinf(pitch);
@@ -139,6 +151,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         wy = cp*sr*yaw_rate + cr*pitch_rate;
 
         vf = (vx * cosf(st) + vy * sinf(st));
+        vfy = (vy * cosf(st) - vx * sinf(st));
         vr = vx;
 
         Kr = (w - vr) / vr;
@@ -162,9 +175,9 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         Ff = Nf * D * sinf(C * atanf(B * sigmaf));
 
         Frx = (Fr * sigmar_x / sigmar) - res_coeff*vr - drag_coeff*vr*fabsf(vr);
-        Fry = Fr * sigmar_y / sigmar;
+        Fry = (Fr * sigmar_y / sigmar) - drag_coeff*vy*fabsf(vy);
         Ffx = (Ff * sigmaf_x / sigmaf) - res_coeff*vf - drag_coeff*vf*fabsf(vf) ;
-        Ffy = Ff * sigmaf_y / sigmaf;
+        Ffy = (Ff * sigmaf_y / sigmaf) - drag_coeff*vfy*fabsf(vfy);
 
         ax = Frx + Ffx * cosf(st) - Ffy * sinf(st) + sp*GRAVITY;
         // ax = clamp(ax, -max_acc, max_acc);

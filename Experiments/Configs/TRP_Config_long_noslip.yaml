@@ -1,0 +1,126 @@
+Cost_config:
+  goal_w: 1.0 ## weight on the terminal goal cost
+  speed_w: 1.0 ## weight with which target speed will be tracked
+  roll_w: 10.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
+  lethal_w: 10.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+  stop_w: 10000.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
+  heading_w: 2.0
+  speed_target: 6.0 ## target speed in m/s
+  critical_SA: 1.15 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
+  critical_RI: 0.8 ## limiting ratio of lateral to vertical acceleration
+  car_bb_width: 0.3
+  car_bb_length: 0.4
+  critical_vert_acc: 1.5
+  critical_vert_spd: 0.2
+
+Dynamics_config:
+  wheelbase: 2.6
+  throttle_to_wheelspeed: 20.0
+  steering_max: 0.6
+  dt: &delta_T 0.1
+  D: 0.8
+  B: 6.8
+  C: 1.75 ## these parameters are multi-modal, so it isn't quite possible to determine them easily with short horizon data, so a PF may be better suited
+  lf: 1.3
+  lr: 1.3
+  Iz: 1.7
+  LPF_tau: 1.0
+  LPF_st: 1.0
+  LPF_th: 1.0
+  res_coeff: 0.00
+  drag_coeff: 0.00
+  car_length: 3.0
+  car_width: 1.5
+  cg_height: 0.5
+  patch_size: &patch_size 3.0
+  type: "noslip3d" ## use no-slip model
+
+Sampling_config:
+  control_dim: 2
+  noise_0: 1.2
+  noise_1: 0.5
+  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  max_thr: 0.3 ## max throttle as a fraction between -1,1
+  min_thr: 0.0 ## min throttle as a fraction between -1,1
+
+MPPI_config:
+  ROLLOUTS: 1024
+  TIMESTEPS: &TIMESTEPS 40 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
+  BINS: 1
+  u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
+
+Map_config:
+  map_name: "small_island" ## confirm if this is the map we use?
+  map_size: &map_size 128
+  map_res: &map_res 0.25
+  map_res_hitl: 0.25
+  elevation_range: 32.0
+  layers:
+    color: 3
+    elevation: 1
+    semantics: 3
+    costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
+
+## this is where we throw all params relevant to training
+dataset:
+  name: 'small_island_manual_200'
+  # name: 'small_island_hard_64'
+  # name: 'experiment_data_64'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['bev_elev'] #['bev_elev', 'bev_normal']
+
+network:
+  state_input_feat: ['vx', 'vy', 'vz'] ## not used, should be removed.
+  state_output_feat: ['vx', 'vy', 'vz'] ## not used, should be removed.
+  control_feat: ['steer', 'throttle'] ## not used, should be removed.
+  use_normalizer: False ## technically I do normalize the data, just not how Sasha implemented it.
+
+  class: ParallelContextMLP ## name of the network to be used
+  net_kwargs:
+    hidden_depth: 2
+    hidden_dim: 32
+    batch_norm: True
+    dt: *delta_T
+    timesteps: *TIMESTEPS
+    BEVmap_size: *map_size
+    BEVmap_res: *map_res
+    patch_size: *patch_size
+    mean_state: [0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 
+                 7.5, 0.0, 0.0, 
+                 0.0, 0.0, 9.8,
+                 0.0, 0.0, 0.0]
+    std_state: [64.0, 64.0, 32.0,
+                1.0, 1.0, 3.0, 
+                16.0, 6.0, 6.0, 
+                12.5, 12.5, 12.5, 
+                1.0, 1.0, 1.0]
+    std_state_err: [4.0, 4.0, 0.5, 
+                    0.25, 0.25, 0.25,
+                    4.0, 4.0, 4.0,
+                    12.5, 12.5, 12.5,
+                    1.0, 1.0, 1.0]
+    mean_control: [0.0, 0.5]
+    std_control: [0.5, 0.5]
+
+  opt: Adam
+  opt_kwargs:
+    lr: 5.0e-5
+
+loss: ResidualMSE_dV
+loss_std: [1.0,  1.0, 0.5, 
+          0.05,0.05, 0.05, 
+          0.5,  0.2, 0.2, 
+          1.0,  1.0, 1.0,
+          1.0,  1.0, 0.1]
+loss_dt: *delta_T
+
+bag_dirs: ["IL_bags_2/bags"]
+base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/IL_2_data/train'
+
+TRP: true

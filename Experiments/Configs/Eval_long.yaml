@@ -1,15 +1,15 @@
 MPPI_config:
   ROLLOUTS: 128
-  TIMESTEPS: &TIMESTEPS 32
+  TIMESTEPS: &TIMESTEPS 40
   BINS: 1
   u_per_command: 1
 
 Map_config:
   map_name: "small_island" ## confirm if this is the map we use?
-  map_size: &map_size 64
+  map_size: &map_size 128
   map_res: &map_res 0.25
   map_res_hitl: 0.25
-  elevation_range: 4.0
+  elevation_range: 32.0
   layers:
     color: 3
     elevation: 1
@@ -21,14 +21,14 @@ Dynamics_config:
   wheelbase: 2.6
   throttle_to_wheelspeed: 20.0
   steering_max: 0.6
-  dt: &delta_T 0.04
+  dt: &delta_T 0.1
   D: 0.8
   B: 6.8
   C: 1.75 ## these parameters are multi-modal, so it isn't quite possible to determine them easily with short horizon data, so a PF may be better suited
   lf: 1.3
   lr: 1.3
   Iz: 1.7
-  LPF_tau: 1.0
+  LPF_tau: 0.7
   LPF_st: 1.0
   LPF_th: 1.0
   res_coeff: 0.0
@@ -70,15 +70,15 @@ Dynamics_config:
       patch_size: *patch_size
       mean_state: [0.0, 0.0, 0.0,
                    0.0, 0.0, 0.0, 
-                   7.5, 0.0, 0.0, 
+                   7.5, 0.0, 0.0,
                    0.0, 0.0, 9.8,
                    0.0, 0.0, 0.0]
-      std_state: [32.0, 32.0, 4.0,
+      std_state: [64.0, 64.0, 32.0,
                   1.0, 1.0, 3.0, 
-                  8.0, 6.0, 6.0, 
+                  16.0, 6.0, 6.0, 
                   12.5, 12.5, 12.5, 
                   1.0, 1.0, 1.0]
-      std_state_err: [2.0, 2.0, 0.5, 
+      std_state_err: [4.0, 4.0, 0.5, 
                       0.25, 0.25, 0.25,
                       4.0, 4.0, 4.0,
                       12.5, 12.5, 12.5,
@@ -86,7 +86,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_baseline: "best_100.pth"
+  model_weights_baseline: "best_99.pth"
 
   network_KARMA:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -109,12 +109,12 @@ Dynamics_config:
                    7.5, 0.0, 0.0, 
                    0.0, 0.0, 9.8,
                    0.0, 0.0, 0.0]
-      std_state: [32.0, 32.0, 8.0,
+      std_state: [64.0, 64.0, 32.0,
                   1.0, 1.0, 3.0, 
-                  8.0, 6.0, 6.0, 
+                  16.0, 6.0, 6.0, 
                   12.5, 12.5, 12.5, 
                   1.0, 1.0, 1.0]
-      std_state_err: [1.0, 1.0, 0.5, 
+      std_state_err: [4.0, 4.0, 0.5, 
                       0.25, 0.25, 0.25,
                       4.0, 4.0, 4.0,
                       12.5, 12.5, 12.5,
@@ -122,19 +122,22 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_29.pth"
+  model_weights_KARMA: "best_56.pth"
+  model_weights_KARMA_bad_sys: "best_41.pth"
+  model_weights_KARMA_noslip: "best_50.pth"
+  model_weights_KARMA_no_change: "best_28.pth"
 
 
-models: ["no_change","noslip3d", 'slip3d', 'TerrainCNN', 'KARMA']
+models: ["noslip3d", 'slip3d', 'TerrainCNN', 'KARMA']
 # models: ["no_change", "noslip3d", "slip3d_bad_sys", "slip3d", "TerrainCNN", 'KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change', 'KARMA']
 # models: ['zero_change','slip3d_mu_half', 'slip3d', 'slip3d_LPF_drag', 'TerrainCNN' ,'KARMA'] #, 'slip3d_LPF_drag_residual']
 # models: ['slip3d', "slip3d_LPF_drag"] #_LPF_drag_residual']
 # models: ['KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change']
-# models: ['KARMA'] #, 'TerrainCNN'] #, 'KARMA_no_change']
+# models: ['KARMA']
 # models: ['noslip3d','KARMA_noslip']
 # models: ['noslip3d', 'slip3d_150', 'slip3d', 'TerrainCNN']
 # models: ["slip3d_bad_sys"]
-# models: ['no_change']
+# models: ['zeros']
 vehicle:
   make: "sunburst"
   model: "offroad"
@@ -142,13 +145,13 @@ vehicle:
 dataset:
   # name: 'experiment_data_64'
   # name: 'small_island_manual_64'
-  name: 'small_island_hard_64'
+  name: 'small_island_hard_200'
   # name: 'sysID_test_data'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
   ctx_input_keys: ['bev_elev', 'bev_normal']
 
-filter: False
+filter: True
 # [ 0.2750,  0.3891, -0.2063,  0.3170,  0.2500,  0.7699]]
 # [ 0.2115,  0.3609, -0.2632,  0.3397,  0.1692,  0.8586]]

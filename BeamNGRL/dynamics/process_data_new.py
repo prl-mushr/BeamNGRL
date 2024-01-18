@@ -282,10 +282,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--cfg', type=str, default='Data_Collection_Config', help='config file for dataset')
+    parser.add_argument('--cfg', type=str, default='Hound_Data_Config', help='config file for dataset')
     parser.add_argument('--workers', type=int, default=8, help='num_workers')
     parser.add_argument('--job_chunk_size', type=int, default=100)
-    parser.add_argument('--save_vis', type=bool, default=True)
+    parser.add_argument('--save_vis', type=bool, default=False)
 
     args = parser.parse_args()
 

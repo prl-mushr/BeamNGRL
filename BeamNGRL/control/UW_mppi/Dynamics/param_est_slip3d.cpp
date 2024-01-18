@@ -21,6 +21,14 @@
 #define max_vel 40.0f
 #define max_acc 50.0f
 
+#define D_ind 0
+#define res_coeff_ind 1
+#define drag_coeff_ind 2
+#define LPF_tau_ind 3
+#define LPF_tau_st_ind 4
+#define LPF_tau_th_ind 5
+#define Iz_ind 6
+
 __device__ float nan_to_num(float x, float replace)
 {
     if (std::isnan(x) or std::isinf(x)) 
@@ -67,68 +75,83 @@ __device__ void get_footprint_z(float* fl, float* fr, float* bl, float* br, floa
     br[2] = map_to_elev(br[0], br[1], elev, map_size_px, res_inv);
 }
 
-__global__ void rollout(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
+__global__ void param_cost(float* state, const float* controls, const float* BEVmap_height, const float* BEVmap_normal, const float dt, const int rollouts, const int timesteps, const int NX, const int NC,
                         const float D, const float B, const float C, const float lf, const float lr, const float Iz, const float throttle_to_wheelspeed, const float steering_max,
-                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff
-                        float* friction_samples, float* LPF_tau_samples)
+                        const int BEVmap_size_px, const float BEVmap_res, const float BEVmap_size, float car_l2, const float car_w2, const float cg_height, const float LPF_tau, const float res_coeff, const float drag_coeff,
+                        const float* perturbed_params, float* cost_total, const int NPM)
 {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if(k > rollouts)
     {
         return;
     }
-    int state_index = k*timesteps*NX;
-    int control_index = k*timesteps*NC;
 
-    int curr, next, ctrl_base;
+    int ctrl_base, state_base;
 
-    float x, y, z=0, roll, pitch, last_roll=0, last_pitch=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
+    float x, y, z=0, roll, pitch, last_roll=0, last_pitch=0, last_pitch_rate=0, last_roll_rate=0, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz;
     float st, w;
 
-    float vf, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
+    float vf, vfy, vr, Kr, Kf, alphaf, alphar, alpha_z, sigmaf, sigmar, sigmaf_x, sigmaf_y, sigmar_x, sigmar_y, Fr, Ff, Frx, Fry, Ffx, Ffy;
     float roll_rate, pitch_rate, yaw_rate;
     float cp, sp, cr, sr, cy, sy, ct;
     float fl[3], fr[3], bl[3], br[3];
     float res_inv = 1.0f/BEVmap_res;
     float Nf, Nr;
 
-    __syncthreads();
+    float param_D, param_LPF_tau, param_LPF_tau_st, param_LPF_tau_th, param_res_coeff, param_drag_coeff, param_Iz;
+    int base_ind = k*NPM;
+    param_D = perturbed_params[base_ind + D_ind];
+    param_LPF_tau = perturbed_params[base_ind + LPF_tau_ind];
+    param_LPF_tau_st =  perturbed_params[base_ind + LPF_tau_st_ind];
+    param_LPF_tau_th = perturbed_params[base_ind + LPF_tau_th_ind];
+    param_res_coeff = perturbed_params[base_ind + res_coeff_ind];
+    param_drag_coeff = perturbed_params[base_ind + drag_coeff_ind];
+    param_Iz = perturbed_params[base_ind + Iz_ind];
+
+    // initialize state variables from ground truth
+    x = state[x_index];
+    y = state[y_index];
+    z = state[z_index];
+    vx = state[vx_index];
+    vy = state[vy_index];
+    vz = 0;
+    wx = state[wx_index];
+    wy = state[wy_index];
+    wz = state[wz_index];
+    last_roll = state[roll_index];
+    last_pitch = state[pitch_index];
+    last_roll_rate = state[wx_index];
+    last_pitch_rate = state[wy_index];
+    yaw = state[yaw_index];
+
+    float pos_std = 3.0, vel_std = 1.2, wxy_std = 0.1, wz_std = 0.1, rp_std = 0.1, yaw_std=0.1, acc_std = 2.0;
+
+    st = controls[st_index] * steering_max;
+    w = controls[th_index] * throttle_to_wheelspeed;
     for(int t = 0; t < timesteps-1; t++)
     {
-        curr = t*NX + state_index;
-        next = (t + 1)*NX + state_index;
+        ctrl_base = t*NC;
+        state_base = (t+1)*NX;
 
-        ctrl_base = t*NC + control_index;
-        
-        st = controls[ctrl_base + st_index] * steering_max;
-        w = controls[ctrl_base + th_index] * throttle_to_wheelspeed;
-
-        x = state[curr + x_index];
-        y = state[curr + y_index];
-
-        vx = state[curr + vx_index];
-        vy = state[curr + vy_index];
-        vz = 0;
-
-        wx = state[curr + wx_index];
-        wy = state[curr + wy_index];
-        wz = state[curr + wz_index];
-
-        last_roll = state[curr + roll_index];
-        last_pitch = state[curr + pitch_index];
-
-        yaw = state[curr + yaw_index];
+        st = param_LPF_tau_st*controls[ctrl_base + st_index] * steering_max + (1 - param_LPF_tau_st) * st;
+        w = param_LPF_tau_th*controls[ctrl_base + th_index] * throttle_to_wheelspeed + (1 - param_LPF_tau_th) * w;
         
         cy = cosf(yaw);
         sy = sinf(yaw);
 
         get_footprint_z(fl, fr, bl, br, z, x, y, cy, sy, BEVmap_height, BEVmap_size_px, res_inv, car_l2, car_w2);
 
-        roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*LPF_tau + last_roll*(1 - LPF_tau);
-        pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*LPF_tau + last_pitch*(1 - LPF_tau);
+        roll = (atan2f( (fl[2] + bl[2]) - (fr[2] + br[2]),  4*car_w2))*param_LPF_tau + last_roll*(1 - LPF_tau);
+        pitch = (atan2f( (bl[2] + br[2]) - (fl[2] + fr[2]), 4*car_l2))*param_LPF_tau + last_pitch*(1 - LPF_tau);
 
-        roll_rate = (roll - last_roll)/dt;
-        pitch_rate = (pitch - last_pitch)/dt;
+        last_pitch = pitch;
+        last_roll = roll;
+
+        roll_rate = (param_LPF_tau*(roll - last_roll)/dt) + (1 - param_LPF_tau)*last_roll_rate;
+        pitch_rate = (param_LPF_tau*(pitch - last_pitch)/dt) + (1 - param_LPF_tau)*last_pitch_rate;
+
+        last_roll_rate = roll_rate;
+        last_pitch_rate = pitch_rate;
 
         cp = cosf(pitch);
         sp = sinf(pitch);
@@ -140,6 +163,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         wy = cp*sr*yaw_rate + cr*pitch_rate;
 
         vf = (vx * cosf(st) + vy * sinf(st));
+        vfy = (vy * cosf(st) - vx * sinf(st));
         vr = vx;
 
         Kr = (w - vr) / vr;
@@ -159,13 +183,13 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         Nf = (az*lf - ax*cg_height)/(lf + lr);
         Nr = (az*lr + ax*cg_height)/(lf + lr);
 
-        Fr = Nr * D * sinf(C * atanf(B * sigmar));
-        Ff = Nf * D * sinf(C * atanf(B * sigmaf));
+        Fr = Nr * param_D * sinf(C * atanf(B * sigmar));
+        Ff = Nf * param_D * sinf(C * atanf(B * sigmaf));
 
-        Frx = (Fr * sigmar_x / sigmar) - res_coeff*vr - drag_coeff*vr*fabsf(vr);
-        Fry = Fr * sigmar_y / sigmar;
-        Ffx = (Ff * sigmaf_x / sigmaf) - res_coeff*vf - drag_coeff*vf*fabsf(vf) ;
-        Ffy = Ff * sigmaf_y / sigmaf;
+        Frx = (Fr * sigmar_x / sigmar) - param_res_coeff*vr - param_drag_coeff*vr*fabsf(vr);
+        Fry = (Fr * sigmar_y / sigmar) - param_drag_coeff*vy*fabsf(vy);
+        Ffx = (Ff * sigmaf_x / sigmaf) - param_res_coeff*vf - param_drag_coeff*vf*fabsf(vf) ;
+        Ffy = (Ff * sigmaf_y / sigmaf) - param_drag_coeff*vfy*fabsf(vfy);
 
         ax = Frx + Ffx * cosf(st) - Ffy * sinf(st) + sp*GRAVITY;
         // ax = clamp(ax, -max_acc, max_acc);
@@ -173,7 +197,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         // ay = clamp(ay, -max_acc, max_acc);
         az = GRAVITY*ct - vx*wy + vy*wx; // don't integrate this acceleration
         // az = clamp(az, -max_acc, max_acc);
-        alpha_z = (Ffx * sinf(st) * lf + Ffy * lf * cosf(st) - Fry * lr) / Iz;
+        alpha_z = (Ffx * sinf(st) * lf + Ffy * lf * cosf(st) - Fry * lr) / param_Iz;
 
         vx += (ax + vy*wz) * dt;
         // vx = clamp(vx, -max_vel, max_vel);
@@ -191,21 +215,21 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         x += dt * ( vx * (cp * cy) + vy * (sr * sp * cy - cr * sy) + vz * (cr * sp * cy + sr * sy) );
         y += dt * ( vx * (cp * sy) + vy * (sr * sp * sy + cr * cy) + vz * (cr * sp * sy - sr * cy) );
 
-        state[next + x_index] = x;
-        state[next + y_index] = y;
-        state[next + z_index] = z; // not really updated
-        state[next + roll_index] = roll;
-        state[next + pitch_index] = pitch;
-        state[next + yaw_index] = yaw;
-        state[next + vx_index] = vx;
-        state[next + vy_index] = vy;
-        state[next + vz_index] = vz;
-        state[next + ax_index] = ax;
-        state[next + ay_index] = ay;
-        state[next + az_index] = az;
-        state[next + wx_index] = wx;
-        state[next + wy_index] = wy;
-        state[next + wz_index] = wz;
+        cost_total[k] += dt*abs(state[state_base + x_index] - x)/pos_std;
+        cost_total[k] += dt*abs(state[state_base + y_index] - y)/pos_std;
+        // cost_total[k] += dt*abs(state[state_base + z_index] - z)/pos_std; // not really updated
+        cost_total[k] += dt*abs(state[state_base + roll_index] - roll)/rp_std;
+        cost_total[k] += dt*abs(state[state_base + pitch_index] - pitch)/rp_std;
+        cost_total[k] += dt*abs(state[state_base + yaw_index] - yaw)/yaw_std;
+        cost_total[k] += dt*abs(state[state_base + vx_index] - vx)/vel_std;
+        cost_total[k] += dt*abs(state[state_base + vy_index] - vy)/vel_std;
+        cost_total[k] += dt*abs(state[state_base + vz_index] - vz)/vel_std;
+        cost_total[k] += dt*abs(state[state_base + ax_index] - ax)/acc_std;
+        cost_total[k] += dt*abs(state[state_base + ay_index] - ay)/acc_std;
+        cost_total[k] += dt*abs(state[state_base + az_index] - az)/acc_std;
+        cost_total[k] += dt*abs(state[state_base + wx_index] - wx)/wxy_std;
+        cost_total[k] += dt*abs(state[state_base + wy_index] - wy)/wxy_std;
+        cost_total[k] += dt*abs(state[state_base + wz_index] - wz)/wz_std;
 
     }
 }

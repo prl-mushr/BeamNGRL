@@ -4,10 +4,6 @@ from BeamNGRL.dynamics.utils.network_utils import load_model
 from typing import Dict
 import time
 
-def load_dyn_model(config, weights_path, tn_args: Dict = None):
-    net, _ = build_nets(config, tn_args, model_weight_file=weights_path)
-    net.eval()
-    return net
 
 
 class SimpleCarNetworkDyn(torch.nn.Module):
@@ -28,7 +24,7 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         self.dtype = dtype
         self.d = device
         self.tn_args = {'device': device, 'dtype': dtype}
-        self.dyn_model = load_dyn_model(Dynamics_config, model_weights_path, self.tn_args)
+        self.dyn_model = self.load_dyn_model(Dynamics_config, model_weights_path, self.tn_args)
 
         self.wheelbase = torch.tensor(Dynamics_config["wheelbase"], device=self.d, dtype=self.dtype)
         self.throttle_to_wheelspeed = torch.tensor(Dynamics_config["throttle_to_wheelspeed"], device=self.d, dtype=self.dtype)
@@ -40,8 +36,6 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         self.BEVmap_size = torch.tensor(Map_config["map_size"], dtype=self.dtype, device=self.d)
         self.BEVmap_res = torch.tensor(Map_config["map_res"], dtype=self.dtype, device=self.d)
 
-        self.curvature_max = torch.tensor(self.steering_max / self.wheelbase, device=self.d, dtype=self.dtype)
-
         self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
         self.BEVmap = torch.zeros((self.BEVmap_size_px.item(), self.BEVmap_size_px.item() )).to(self.d)
         self.BEVmap_height = torch.zeros_like(self.BEVmap)
@@ -52,6 +46,11 @@ class SimpleCarNetworkDyn(torch.nn.Module):
         self.NX = 17
         
         self.states = torch.zeros((self.M, self.K, self.T, self.NX), dtype=self.dtype).to(self.d)
+
+    def load_dyn_model(self, config, weights_path, tn_args: Dict = None):
+        net, _ = build_nets(config, tn_args, model_weight_file=weights_path)
+        net.eval()
+        return net
 
     @torch.jit.export
     def set_BEV(self, BEVmap_height, BEVmap_normal):

@@ -43,13 +43,13 @@ Sampling_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: 20 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
+  TIMESTEPS: 25 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
   BINS: 1
   u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
 
 Map_config:
   map_size: 16 # in meters map_size x map_size
-  map_res: 0.25 ## this results in 256 x 256 pixels for the MPPI
+  map_res: 0.0625 ## this results in 256 x 256 pixels for the MPPI
   map_res_hitl: 0.25 ## this is the resolution at which the map is received
   elevation_range: 4.0
   map_name: "small_island"
@@ -84,10 +84,10 @@ start_pose_noise: 1.0
 ## train/test:
 output_dir: "train"
 
-save_data: True
+save_data: False
 run_lockstep: True
 
-perturb_inputs: True
+perturb_inputs: False
 
 manual_input: False
 ## this is where we throw all params relevant to processing the data
@@ -130,6 +130,6 @@ network:
 
 loss: AggregatedMSE_dV
 
-bag_dirs: ["test_dir"]
+bag_dirs: ["IL_bags_2/bags"]
 base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
-ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/mppi_data_ros/train' 
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/IL_2_data/train' 

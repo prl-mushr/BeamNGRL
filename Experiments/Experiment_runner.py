@@ -2,6 +2,7 @@ from BeamNGRL.BeamNG.beamng_interface import *
 from BeamNGRL.control.UW_mppi.MPPI import MPPI
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarNetworkDyn import SimpleCarNetworkDyn
 from BeamNGRL.control.UW_mppi.Dynamics.SimpleCarDynamicsCUDA import SimpleCarDynamics
+from BeamNGRL.control.UW_mppi.Dynamics.ResidualCarDynamics import ResidualCarDynamics
 from BeamNGRL.control.UW_mppi.Costs.SimpleCarCost import SimpleCarCost
 from BeamNGRL.control.UW_mppi.Sampling.Delta_Sampling import Delta_Sampling
 from BeamNGRL.utils.visualisation import costmap_vis
@@ -31,9 +32,19 @@ def get_dynamics(model, Config):
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
     if model == 'TerrainCNN':
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/small_island/" + Dynamics_config["model_weights"]
+        print("loading TerrainCNN")
+        Dynamics_config["network"] = Dynamics_config["network_baseline"]
+        Dynamics_config["model_weights"] = Dynamics_config["model_weights_baseline"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/baseline_offroad/" + Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
+    elif model == "KARMA":
+        print("loading KARMA")
+        Dynamics_config["network"] = Dynamics_config["network_KARMA"]
+        Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_offroad/" + Dynamics_config["model_weights"]
+        dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == 'slip3d':
+        print("loading slip3d")
         Dynamics_config["type"] = "slip3d" ## just making sure 
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
     elif model == 'noslip3d':
@@ -103,7 +114,7 @@ def main(config_path=None, hal_config_path=None, args=None):
         if not os.path.isfile(WP_file):
             raise ValueError("Waypoint file for scenario {} does not exist".format(scenario))
     for models in Config["models"]:
-        if models not in ["TerrainCNN", "slip3d", "noslip3d", 'slip3d_LPF', 'slip3d_150', 'slip3d_LPF_drag']:
+        if models not in ["TerrainCNN", "slip3d", "noslip3d", 'slip3d_LPF', 'slip3d_150', 'slip3d_LPF_drag', 'KARMA']:
             raise ValueError("Model {} not supported".format(models))
     if Config["models"].count("TerrainCNN") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
@@ -146,7 +157,7 @@ def main(config_path=None, hal_config_path=None, args=None):
         costs = SimpleCarCost(Cost_config, Map_config, device=device)
         sampling = Delta_Sampling(Sampling_config, MPPI_config, device=device)
         temp_temperature = torch.clone(sampling.temperature)
-        skips = Dynamics_config["dt"]/bng_interface.burn_time
+        skips = max(Dynamics_config["dt"]/bng_interface.burn_time,1)
 
         for model in Config["models"]:
             dynamics = get_dynamics(model, Config)
@@ -154,10 +165,10 @@ def main(config_path=None, hal_config_path=None, args=None):
             controller = MPPI(dynamics, costs, sampling, MPPI_config, device)
             scenario_count = 0
 
-            if(model == "TerrainCNN"):
-                controller.Sampling.temperature = torch.tensor(0.05, device=device)
-            else:
-                controller.Sampling.temperature = temp_temperature
+            # if(model == "TerrainCNN"):
+            #     controller.Sampling.temperature = torch.tensor(0.05, device=device)
+            # else:
+            #     controller.Sampling.temperature = temp_temperature
 
             for scenario in Config["scenarios"]:
                 # load the scenario waypoints:
@@ -172,11 +183,12 @@ def main(config_path=None, hal_config_path=None, args=None):
 
                 if scenario.split('-')[0] == "race":
                     controller.Costs.lethal_w = torch.tensor(10.0, device=device)
-                    controller.Costs.roll_w = torch.tensor(1.0, device=device) ## reduce weighting on physics costs
-                    controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
+                    controller.Costs.roll_w = torch.tensor(0.1, device=device) ## reduce weighting on physics costs
+                    # controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
 
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
+                wp_radius = Config["wp_radius"][scenario_count]
                 scenario_count += 1
 
                 for trial in range(Config["num_iters"]):
@@ -194,7 +206,9 @@ def main(config_path=None, hal_config_path=None, args=None):
                     ts = bng_interface.timestamp - last_reset_time
                     
                     experiment_count += 1
-                    print("Experiment: {}/{}".format(experiment_count, total_experiments), end='\r')
+                    print("Experiment: {}/{}".format(experiment_count, total_experiments)) #, end='\r')
+                    skip_save = False
+                    bng_interface.state_poll()
 
                     while ts < time_limit:
                         for _ in range(int(skips)):
@@ -205,8 +219,9 @@ def main(config_path=None, hal_config_path=None, args=None):
                             state_data.append(state)
                             reset_data.append(False)
                             ## append extra data to these lists
+                        now = time.time()
                         pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
-                        goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=Config["wp_radius"])
+                        goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=wp_radius)
                         ## get robot_centric BEV (not rotated into robot frame)
                         BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
                         BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
@@ -222,8 +237,9 @@ def main(config_path=None, hal_config_path=None, args=None):
                         action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
-                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = 20, Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
-
+                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                        step_cost = controller.Costs.step_cost.cpu().numpy()
+                        
                         damage = False
                         if(type(bng_interface.broken) == dict ):
                             count = 0
@@ -232,11 +248,18 @@ def main(config_path=None, hal_config_path=None, args=None):
                                     count += 1
                             damage = count > 1
 
-                        result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), np.copy(ts), success, damage ) ))
+                        result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), step_cost, np.copy(ts), success, damage) ))
                         
                         if success or bng_interface.flipped_over:
                             break ## break the for loop
-
+                        if torch.any(torch.isnan(controller.Dynamics.states)):
+                            print("naans on the run!")
+                            trial -= 1
+                            experiment_count -= 1
+                            skip_save = True
+                            break
+                    if skip_save:
+                        continue
 
                     result_states = np.array(result_states)
                     dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + model
@@ -275,7 +298,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Test_Config.yaml", help="name of the config file to use")
     parser.add_argument("--hal_config_name", type=str, default="offroad.yaml", help="name of the config file to use")
-    parser.add_argument("--remote", type=bool, default=False, help="whether to connect to a remote beamng server")
+    parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
 
     args = parser.parse_args()

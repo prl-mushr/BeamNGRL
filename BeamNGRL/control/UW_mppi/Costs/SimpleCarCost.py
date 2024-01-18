@@ -126,7 +126,7 @@ class SimpleCarCost(torch.nn.Module):
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )
 
-        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY) - self.critical_vert_acc, 0, 10.0) + 5*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
+        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY*ct) - self.critical_vert_acc, 0, 10.0) + 5*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
         
         wp_vec = self.goal_state.unsqueeze(dim=0) - state[:,:,-1,:2]
         heading_vec = torch.stack([torch.cos(yaw[..., -1]), torch.sin(yaw[..., -1])], dim=-1)
@@ -136,6 +136,14 @@ class SimpleCarCost(torch.nn.Module):
 
         running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )
         cost_to_go = self.goal_w * terminal_cost + self.heading_w * heading_cost
+
+        # this is for debugging/experimental purposes only, not needed in practice.
+        wp_vec = self.goal_state - state[0, 0, 0,:2]
+        heading_vec = torch.stack([torch.cos(yaw[0, 0, 0]), torch.sin(yaw[0, 0, 0])], dim=-1)
+        terminal_cost = torch.linalg.norm(wp_vec)
+        wp_vec /= terminal_cost
+        heading_cost = 1 / torch.clamp(torch.sum(wp_vec * heading_vec, dim=-1), 0.1, 1)
+        self.step_cost = running_cost[0,0,0] + self.goal_w * terminal_cost + self.heading_w * heading_cost
 
         ## for running cost mean over the 0th dimension (bins), which results in a KxT tensor. Then sum over the 1st dimension (time), which results in a [K] tensor.
         ## for terminal cost, just mean over the 0th dimension (bins), which results in a [K] tensor.
