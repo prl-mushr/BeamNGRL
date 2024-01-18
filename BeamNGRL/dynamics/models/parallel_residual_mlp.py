@@ -78,14 +78,19 @@ class ParallelContextMLP(DynamicsBase):
 
         self.main = nn.Sequential(*fc_layers)
 
-        self.kernel_size = 4
+        self.kernel_size = 3
         self.stride = 1
-        output_size = int((int((int((self.crop_size-self.kernel_size)/self.stride)+1)/2)-self.kernel_size)/self.stride+1)
-        conv1 = nn.Conv2d(1, 4, kernel_size=self.kernel_size, stride=self.stride)
-        maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
-        conv2 = nn.Conv2d(4, 4, kernel_size=self.kernel_size, stride=self.stride)
+        self.channels = 2
+        K_pool = 3
+        S_pool = 2
+        L1 = int((self.crop_size-self.kernel_size)/self.stride) + 1
+        L2 = int( (L1 - K_pool)/S_pool) + 1
+        output_size = int( (L2 - self.kernel_size)/self.stride) + 1
+        conv1 = nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride)
+        maxpool = nn.MaxPool2d(kernel_size=K_pool, stride=S_pool)
+        conv2 = nn.Conv2d(self.channels, self.channels, kernel_size=self.kernel_size, stride=self.stride)
         # use the image size, and formulas for CNN output size to compute the input size for the first FC layer
-        fc1 = nn.Linear(output_size*output_size*4, 16)
+        fc1 = nn.Linear(output_size*output_size*self.channels, 16)
         fc2 = nn.Linear(16, self.context_dim)
 
         cnn_layers = [ conv1, nn.Tanh() ]
@@ -124,9 +129,10 @@ class ParallelContextMLP(DynamicsBase):
         bev_center = bev_input.clone()
         bev_center[...,:,:] = bev_input[...,self.bev_cent,self.bev_cent].unsqueeze(-1).unsqueeze(-1)
         bev_input = (bev_input - bev_center)/self.std_bev
-
+        now = time.time()
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
         vUc = torch.cat((vU, context), dim=-1).reshape(k, t * self.normalized_input_dim)
+        self.execution_dt = time.time() - now
         dV = self.main(vUc).reshape(k, t, self.output_dim//t)
 
         gain =  torch.sigmoid(dV[..., self.state_dim:])

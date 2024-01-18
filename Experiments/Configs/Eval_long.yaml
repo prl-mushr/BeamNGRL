@@ -86,7 +86,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_baseline: "best_99.pth"
+  model_weights_baseline: "best_50.pth"
 
   network_KARMA:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -122,7 +122,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_56.pth"
+  model_weights_KARMA: "best_45.pth"
   model_weights_KARMA_bad_sys: "best_41.pth"
   model_weights_KARMA_noslip: "best_50.pth"
   model_weights_KARMA_no_change: "best_28.pth"

@@ -108,7 +108,7 @@ network:
 
   opt: Adam
   opt_kwargs:
-    lr: 5.0e-5
+    lr: 1.0e-4
 
 loss: BaselineAggregatedMSE_dV
 loss_std: [1.0,  1.0, 0.5, 

@@ -110,7 +110,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_baseline: "best_100.pth"
+  model_weights_baseline: "best_49.pth"
 
   network_KARMA:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -133,12 +133,12 @@ Dynamics_config:
                    7.5, 0.0, 0.0, 
                    0.0, 0.0, 9.8,
                    0.0, 0.0, 0.0]
-      std_state: [32.0, 32.0, 8.0,
+      std_state: [32.0, 32.0, 4.0,
                   1.0, 1.0, 3.0, 
-                  8.0, 6.0, 6.0, 
+                  16.0, 6.0, 6.0, 
                   12.5, 12.5, 12.5, 
                   1.0, 1.0, 1.0]
-      std_state_err: [1.0, 1.0, 0.5, 
+      std_state_err: [4.0, 4.0, 0.5, 
                       0.25, 0.25, 0.25,
                       4.0, 4.0, 4.0,
                       12.5, 12.5, 12.5,
@@ -146,7 +146,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_94.pth"
+  model_weights_KARMA: "best_43.pth"
 
 models: ['slip3d', 'TerrainCNN'] #, 'KARMA']
 scenarios: ['hill-2', 'ditch-1', 'race-1']
@@ -156,15 +156,15 @@ wp_radius: [15.0, 10.0, 10.0]
 # time_limit: [30.0,    30.0,     30.0,     30.0,      30.0,       60.0,     50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0,    20.0,     20.0,     20.0,      20.0,       20.0,     10.0]  # lookahead on scenario by scenario basis
 ## I Keep the following for tuning using a single case and making sure my baselines are good:
-# models: ["TerrainCNN"]
-# scenarios: ['hill-2'] #, 'race-1']
-# time_limit: [20.0] #, 50.0] ## (simulated) time limit for each scenario.
-# lookahead:  [10.0] #, 15.0]  # lookahead on scenario by scenario basis
-# wp_radius: [20.0]
+models: ["slip3d", "TerrainCNN"]
+scenarios: ['race-1'] #, 'race-1']
+time_limit: [50.0] #, 50.0] ## (simulated) time limit for each scenario.
+lookahead:  [10.0] #, 15.0]  # lookahead on scenario by scenario basis
+wp_radius: [10.0]
 # scenarios: ['race-4']
 # time_limit: [50.0] ## (simulated) time limit for each scenario.
 # lookahead:  [20.0]  # lookahead on scenario by scenario basis
-num_iters: 10 # 10 x 9 x 30 x 5
+num_iters: 1 # 10 x 9 x 30 x 5
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0

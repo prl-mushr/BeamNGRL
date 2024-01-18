@@ -182,8 +182,8 @@ def main(config_path=None, hal_config_path=None, args=None):
                 temp_scaled_dt = torch.clone(controller.Sampling.scaled_dt)
 
                 if scenario.split('-')[0] == "race":
-                    controller.Costs.lethal_w = torch.tensor(10.0, device=device)
-                    controller.Costs.roll_w = torch.tensor(0.1, device=device) ## reduce weighting on physics costs
+                    controller.Costs.lethal_w = torch.tensor(40.0, device=device)
+                    # controller.Costs.roll_w = torch.tensor(5.0, device=device) ## reduce weighting on physics costs
                     # controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
 
                 time_limit = Config["time_limit"][scenario_count]
@@ -239,7 +239,7 @@ def main(config_path=None, hal_config_path=None, args=None):
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
                         bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
                         step_cost = controller.Costs.step_cost.cpu().numpy()
-                        
+
                         damage = False
                         if(type(bng_interface.broken) == dict ):
                             count = 0

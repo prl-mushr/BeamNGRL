@@ -58,4 +58,4 @@ class ResidualMSE_dV(Loss):
         # compare the predicted positions and the positions you would have gotten if you had integrated your velocities and orientations -- this is a "physics inspired loss"
         pos_consistency = F.mse_loss(pos_pred[...,1:,:]/std[:3], next_state_preds[..., 1:, :3]/std[:3])
 
-        return state_loss + c_yaw_loss + s_yaw_loss + dyn_loss# + 0.1*dt*dt*pos_consistency
+        return state_loss + c_yaw_loss + s_yaw_loss + dyn_loss + dt*dt*pos_consistency
