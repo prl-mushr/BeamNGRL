@@ -89,7 +89,7 @@ class ResidualCarDynamics:
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
         x = self.device.L2_CACHE_SIZE/(self.crop_size*self.crop_size*4) # 4 corresponds to 4 bytes in float32
-        self.max_threads = 4096 # int(pow(2, np.ceil(np.log(x)/np.log(2)))) ## round up to nearest power of 2. 10000 --> 16384, 3000 --> 4096. Exceeding the cache limit by a small margin seems to be "fine"
+        self.max_threads = 4096 #int(pow(2, np.floor(np.log(x)/np.log(2)))) ## round up to nearest power of 2. 10000 --> 16384, 3000 --> 4096. Exceeding the cache limit by a small margin seems to be "fine"
         self.crop_block_size = (self.crop_size, self.crop_size, 1)
         self.output_images = gpuarray.zeros((self.crop_size, self.crop_size, self.K*self.T), dtype=np.float32)
         self.crop_grid_size = (int((self.output_images.shape[0] + self.crop_block_size[0] - 1) // self.crop_block_size[0]), 
@@ -158,7 +158,6 @@ class ResidualCarDynamics:
 
     def forward(self, state, controls): #, BEVmap_height, BEVmap_normal, gt_states=None, gt_controls=None):
         now = time.time()
-
         # begin pycuda context:
         self.pycuda_ctx.push()
         cuda.Context.synchronize()
@@ -175,12 +174,12 @@ class ResidualCarDynamics:
         cuda.Context.synchronize()
         self.gpuarray_to_tensor(state_, self.states, torch.float32, np.float32)
         cuda.Context.synchronize()
-        self.pycuda_ctx.pop()
+        # self.pycuda_ctx.pop()
         center = torch.clamp( ((self.states[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.int32, device=torch.device("cuda")), self.bev_input.shape[2], self.BEVmap_size_px - 1 - self.bev_input.shape[1]).squeeze(0)
         center = center.reshape((self.K*self.T, 2))
         angle_torch = self.states[..., 5].reshape((self.K * self.T))
-        
-        self.pycuda_ctx.push()
+
+        # self.pycuda_ctx.push()
         
         center = self.tensor_to_gpuarray(center, np.int32)
         angle  = self.tensor_to_gpuarray(angle_torch,np.float32)
@@ -193,8 +192,7 @@ class ResidualCarDynamics:
                              angle[self.max_threads*i: self.max_threads*(i+1)], center[self.max_threads*i: self.max_threads*(i+1),...], 
                              np.int32(self.BEVmap_height.shape[1]), np.int32(self.BEVmap_height.shape[1]), np.int32(self.bev_input.shape[1]),
                              np.int32(self.bev_input.shape[2]), np.int32(self.max_threads), block=(self.crop_size,self.crop_size,1), grid=(1,1,self.max_threads))
-            cuda.Context.synchronize()
-
+        cuda.Context.synchronize()
         # self.rotate_crop(self.BEVmap_height, self.output_images, angle, center, 
         #                  np.int32(self.BEVmap_height.shape[1]), np.int32(self.BEVmap_height.shape[1]), np.int32(self.bev_input.shape[1]),
         #                  np.int32(self.bev_input.shape[2]), np.int32(self.K*self.T), block=(self.crop_size,self.crop_size,1), grid=(1,1,int(self.K*self.T)))

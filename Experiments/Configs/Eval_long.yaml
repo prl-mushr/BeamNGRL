@@ -122,18 +122,20 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_45.pth"
-  model_weights_KARMA_bad_sys: "best_41.pth"
-  model_weights_KARMA_noslip: "best_50.pth"
+  model_weights_KARMA: "best_25.pth"
+  model_weights_KARMA_bad_sys: "best_38.pth"
+  model_weights_KARMA_noslip: "best_45.pth"
   model_weights_KARMA_no_change: "best_28.pth"
 
 
-models: ["noslip3d", 'slip3d', 'TerrainCNN', 'KARMA']
+models: ['noslip3d', 'slip3d_bad_sys', 'slip3d', 'KARMA_noslip','KARMA_bad_sys', 'KARMA', 'TerrainCNN']
+# models: ['KARMA','KARMA_bad_sys', 'KARMA_noslip']
 # models: ["no_change", "noslip3d", "slip3d_bad_sys", "slip3d", "TerrainCNN", 'KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change', 'KARMA']
 # models: ['zero_change','slip3d_mu_half', 'slip3d', 'slip3d_LPF_drag', 'TerrainCNN' ,'KARMA'] #, 'slip3d_LPF_drag_residual']
 # models: ['slip3d', "slip3d_LPF_drag"] #_LPF_drag_residual']
 # models: ['KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change']
-# models: ['KARMA']
+# models: ['TerrainCNN']
+# models: ['slip3d_bad_sys'] #, 'slip3d', 'noslip3d', 'no_change']
 # models: ['noslip3d','KARMA_noslip']
 # models: ['noslip3d', 'slip3d_150', 'slip3d', 'TerrainCNN']
 # models: ["slip3d_bad_sys"]
@@ -143,15 +145,12 @@ vehicle:
   model: "offroad"
 
 dataset:
-  # name: 'experiment_data_64'
-  # name: 'small_island_manual_64'
   name: 'small_island_hard_200'
-  # name: 'sysID_test_data'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
   ctx_input_keys: ['bev_elev', 'bev_normal']
 
-filter: True
+filter: False
 # [ 0.2750,  0.3891, -0.2063,  0.3170,  0.2500,  0.7699]]
 # [ 0.2115,  0.3609, -0.2632,  0.3397,  0.1692,  0.8586]]

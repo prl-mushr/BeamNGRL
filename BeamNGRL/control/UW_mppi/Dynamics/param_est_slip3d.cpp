@@ -124,7 +124,7 @@ __global__ void param_cost(float* state, const float* controls, const float* BEV
     last_pitch_rate = state[wy_index];
     yaw = state[yaw_index];
 
-    float pos_std = 3.0, vel_std = 1.2, wxy_std = 0.1, wz_std = 0.1, rp_std = 0.1, yaw_std=0.1, acc_std = 2.0;
+    float pos_std = 3.0, vel_std = 1.2, wxy_std = 0.1, wz_std = 0.1, rp_std = 0.1, yaw_std=0.1, acc_std = 1.0;
 
     st = controls[st_index] * steering_max;
     w = controls[th_index] * throttle_to_wheelspeed;

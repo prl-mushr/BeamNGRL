@@ -1,15 +1,24 @@
+Sampling_config:
+  control_dim: 2
+  noise_0: 1.2
+  noise_1: 0.5
+  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  temperature: 0.05 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
+  max_thr: 0.3 ## max throttle as a fraction between -1,1
+  min_thr: 0.0 ## min throttle as a fraction between -1,1
+
 MPPI_config:
-  ROLLOUTS: 2
-  TIMESTEPS: &TIMESTEPS 32
+  ROLLOUTS: 1024
+  TIMESTEPS: &TIMESTEPS 32 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
   BINS: 1
-  u_per_command: 1
+  u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
 
 Map_config:
-  map_name: "small_island" ## confirm if this is the map we use?
-  map_size: &map_size 64
-  map_res: &map_res 0.25
-  map_res_hitl: 0.25
+  map_size: &map_size 16 # in meters map_size x map_size
+  map_res: &map_res 0.0625 ## this results in 256 x 256 pixels for the MPPI
+  map_res_hitl: 0.25 ## this is the resolution at which the map is received
   elevation_range: 4.0
+  map_name: "small_island"
   layers:
     color: 3
     elevation: 1
@@ -18,27 +27,26 @@ Map_config:
   topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
 
 Dynamics_config:
-  wheelbase: 2.6
-  throttle_to_wheelspeed: 20.0
-  steering_max: 0.6
+  wheelbase: 0.33
+  throttle_to_wheelspeed: 17.0
+  steering_max: 0.4
   dt: &delta_T 0.04
-  D: 0.8
-  B: 6.8
-  C: 1.75 ## these parameters are multi-modal, so it isn't quite possible to determine them easily with short horizon data, so a PF may be better suited
-  lf: 1.3
-  lr: 1.3
-  Iz: 1.7
-  LPF_tau: 1.0
-  LPF_st: 1.0
-  LPF_th: 1.0
-  res_coeff: 0.0
-  drag_coeff: 0.0
-  car_length: 2.6
-  car_width: 1.5
-  cg_height: 0.5
-  patch_size: &patch_size 3.0
+  D: 0.8 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
+  B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
+  C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
+  lf: 0.15 ## length from car com to front axle
+  lr: 0.15 ## length from car com to rear axle
+  Iz: 1.2 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  LPF_tau: 0.5
+  LPF_st: 0.5
+  LPF_th: 0.5
+  res_coeff: 0.05 ## resistance coefficient (proportional to speed)
+  drag_coeff: 0.05 # drag coefficient (proportional to speed squared)
+  car_length: 0.33 # front to back distance of car
+  car_width: 0.25 # track width of car. Measured as distance between extremes of the wheel (can be slightly off)
+  cg_height: 0.125 ## height of cg, used for calculating load transfer.
+  patch_size: &patch_size 0.75
   type: "slip3d" ## this will be overwritten during evaluation
-
   network:
     state_input_feat: ['vx', 'vy', 'vz']
     state_output_feat: ['vx', 'vy', 'vz']
@@ -86,7 +94,7 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_baseline: "best_49.pth"
+  model_weights_baseline: "best_30.pth"
 
   network_KARMA:
     state_input_feat: ['vx', 'vy', 'vz']
@@ -106,51 +114,36 @@ Dynamics_config:
       patch_size: *patch_size
       mean_state: [0.0, 0.0, 0.0,
                    0.0, 0.0, 0.0, 
-                   7.5, 0.0, 0.0, 
+                   4.0, 0.0, 0.0, 
                    0.0, 0.0, 9.8,
                    0.0, 0.0, 0.0]
-      std_state: [32.0, 32.0, 4.0,
+      std_state: [8.0, 8.0, 4.0,
                   1.0, 1.0, 3.0, 
-                  8.0, 6.0, 6.0, 
+                  6.0, 3.0, 3.0, 
                   12.5, 12.5, 12.5, 
                   1.0, 1.0, 1.0]
-      std_state_err: [4.0, 4.0, 0.5,
+      std_state_err: [2.0, 2.0, 0.5, 
                       0.25, 0.25, 0.25,
-                      4.0, 4.0, 4.0,
+                      6.0, 3.0, 3.0,
                       12.5, 12.5, 12.5,
                       1.0, 1.0, 1.0]
-      mean_control: [0.0, 0.5]
+      mean_control: [0.0, 0.2]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_46.pth"
-  model_weights_KARMA_bad_sys: "best_43.pth"
+  model_weights_KARMA_hound: "best_49.pth"
 
 
-models: ['slip3d', 'TerrainCNN', 'KARMA', 'KARMA_bad_sys', 'slip3d_bad_sys']
-# models: ['KARMA']
-# models: ["no_change", "noslip3d", "slip3d_bad_sys", "slip3d", "TerrainCNN", 'KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change', 'KARMA']
-# models: ['zero_change','slip3d_mu_half', 'slip3d', 'slip3d_LPF_drag', 'TerrainCNN' ,'KARMA'] #, 'slip3d_LPF_drag_residual']
-# models: ['slip3d', "slip3d_LPF_drag"] #_LPF_drag_residual']
-# models: ['KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change']
-# models: ['KARMA'] #, 'TerrainCNN'] #, 'TerrainCNN'] #, 'KARMA_no_change']
-# models: ['noslip3d','KARMA_noslip']
-# models: ['noslip3d', 'slip3d_150', 'slip3d', 'TerrainCNN']
-# models: ["slip3d", 'TerrainCNN']
-# models: ['no_change']
+models: ['slip3d', 'KARMA_hound']
 vehicle:
   make: "sunburst"
   model: "offroad"
 
 dataset:
-  # name: 'experiment_data_64'
-  # name: 'small_island_manual_64'
-  name: 'small_island_hard_64'
-  # name: 'sysID_test_data'
+  name: 'small_island_small_64'
+  # name: "hound_ros_data"
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
   ctx_input_keys: ['bev_elev', 'bev_normal']
 
 filter: False
-# [ 0.2750,  0.3891, -0.2063,  0.3170,  0.2500,  0.7699]]
-# [ 0.2115,  0.3609, -0.2632,  0.3397,  0.1692,  0.8586]]

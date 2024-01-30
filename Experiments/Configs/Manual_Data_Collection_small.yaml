@@ -17,7 +17,7 @@ Dynamics_config:
   wheelbase: 0.33
   throttle_to_wheelspeed: 20.0
   steering_max: 0.488
-  dt: 0.05
+  dt: 0.04
   D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
   B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
   C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5

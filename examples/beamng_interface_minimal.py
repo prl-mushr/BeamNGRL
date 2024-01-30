@@ -96,7 +96,7 @@ def main(args):
         burn_time=0.02, ## step or dt time
         run_lockstep=False ## whether the simulator waits for control input to move forward in time. Set to true to have a gym "step" like functionality
     )
-
+    bng_interface.smooth_map = True
     # bng_interface.set_lockstep(True) ## this is how you can change lockstepping modes during execution
     ## WARNING: when using lockstep = true, you will NOT be able to control the vehicle using the arrow keys (effectively, the simulator will only execute the commands being sent to it)
     while True:
@@ -132,7 +132,7 @@ def main(args):
             cv2.imshow('color', BEV)
             BEV = cv2.resize(BEV_heght, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('height', BEV)
-            BEV = cv2.resize(BEV_normal[:,:,1], (500,500), interpolation= cv2.INTER_AREA)
+            BEV = cv2.resize(BEV_segmt, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
             ## you can now "encapsulate the BEV and state into whatever form of "observation" you want.

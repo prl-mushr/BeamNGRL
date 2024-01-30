@@ -50,6 +50,7 @@ class MPPI(torch.nn.Module):
         """
         Clear controller state after finishing a trial
         """
+        self.Sampling.reset()
         self.U = torch.zeros((self.T, self.Sampling.nu), dtype=self.dtype).to(self.d)
 
     def forward(self, state):

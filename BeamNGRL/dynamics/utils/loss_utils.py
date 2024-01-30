@@ -34,12 +34,14 @@ class ResidualMSE_dV(Loss):
             print("config not provided")
             exit()
         std = torch.Tensor(conf["loss_std"]).to("cuda")
-        state_loss = F.mse_loss(next_state_preds[..., 1:, :5]/std[:5], next_state_targets[..., 1:, :5]/std[:5])
-        c_yaw_loss = F.mse_loss(torch.cos(next_state_preds[..., 1:, 5])/torch.cos(std[5]), torch.cos(next_state_targets[..., 1:, 5])/torch.cos(std[5]))
-        s_yaw_loss = F.mse_loss(torch.sin(next_state_preds[..., 1:, 5])/torch.sin(std[5]), torch.sin(next_state_targets[..., 1:, 5])/torch.sin(std[5]))
-        dyn_loss = F.mse_loss(next_state_preds[..., 1:, 6:15]/std[6:15], next_state_targets[..., 1:, 6:15]/std[6:15])
+        state_loss = F.mse_loss(next_state_preds[..., :5]/std[:5], next_state_targets[..., :5]/std[:5])
+        c_yaw_loss = F.mse_loss(torch.cos(next_state_preds[..., 5])/torch.cos(std[5]), torch.cos(next_state_targets[..., 5])/torch.cos(std[5]))
+        s_yaw_loss = F.mse_loss(torch.sin(next_state_preds[..., 5])/torch.sin(std[5]), torch.sin(next_state_targets[..., 5])/torch.sin(std[5]))
+        dyn_loss = F.mse_loss(next_state_preds[..., 6:15]/std[6:15], next_state_targets[..., 6:15]/std[6:15])
 
         dt = conf["loss_dt"]
+        timesteps = next_state_preds.shape[-2]
+        horizon = dt*timesteps
         pos_diff = torch.zeros_like(next_state_preds[...,  :3])
         pos_diff_min = torch.zeros_like(next_state_targets[..., :3])
 
@@ -56,6 +58,6 @@ class ResidualMSE_dV(Loss):
 
         pos_pred = torch.cumsum(pos_diff, dim=-2)
         # compare the predicted positions and the positions you would have gotten if you had integrated your velocities and orientations -- this is a "physics inspired loss"
-        pos_consistency = F.mse_loss(pos_pred[...,1:,:]/std[:3], next_state_preds[..., 1:, :3]/std[:3])
+        pos_consistency = F.mse_loss(pos_pred/std[:3], next_state_preds[..., :3]/std[:3])
 
-        return state_loss + c_yaw_loss + s_yaw_loss + dyn_loss + dt*dt*pos_consistency
+        return state_loss + c_yaw_loss + s_yaw_loss + dyn_loss + dt*dt*pos_consistency #/horizon

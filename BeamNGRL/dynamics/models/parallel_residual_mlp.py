@@ -138,7 +138,9 @@ class ParallelContextMLP(DynamicsBase):
         gain =  torch.sigmoid(dV[..., self.state_dim:])
         network_output = dV[..., :self.state_dim] * self.std_state_err * self.timesteps * self.dt
         network_output[..., :2] *= self.time_scaling
+        network_output += self.mean_state
         out = states_next[..., :self.state_dim]*(1-gain) + gain*network_output
+
         return out
 
     def _rollout(

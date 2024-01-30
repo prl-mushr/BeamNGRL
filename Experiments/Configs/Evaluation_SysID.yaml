@@ -1,5 +1,5 @@
 MPPI_config:
-  ROLLOUTS: 2
+  ROLLOUTS: 1024
   TIMESTEPS: &TIMESTEPS 32
   BINS: 1
   u_per_command: 1
@@ -111,10 +111,10 @@ Dynamics_config:
                    0.0, 0.0, 0.0]
       std_state: [32.0, 32.0, 4.0,
                   1.0, 1.0, 3.0, 
-                  8.0, 6.0, 6.0, 
+                  16.0, 6.0, 6.0, 
                   12.5, 12.5, 12.5, 
                   1.0, 1.0, 1.0]
-      std_state_err: [4.0, 4.0, 0.5,
+      std_state_err: [4.0, 4.0, 0.5, 
                       0.25, 0.25, 0.25,
                       4.0, 4.0, 4.0,
                       12.5, 12.5, 12.5,
@@ -122,12 +122,10 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_46.pth"
-  model_weights_KARMA_bad_sys: "best_43.pth"
+  model_weights_KARMA: "best_43.pth"
 
 
-models: ['slip3d', 'TerrainCNN', 'KARMA', 'KARMA_bad_sys', 'slip3d_bad_sys']
-# models: ['KARMA']
+models: ['slip3d', 'SysID']
 # models: ["no_change", "noslip3d", "slip3d_bad_sys", "slip3d", "TerrainCNN", 'KARMA_bad_sys', 'KARMA_noslip', 'KARMA_no_change', 'KARMA']
 # models: ['zero_change','slip3d_mu_half', 'slip3d', 'slip3d_LPF_drag', 'TerrainCNN' ,'KARMA'] #, 'slip3d_LPF_drag_residual']
 # models: ['slip3d', "slip3d_LPF_drag"] #_LPF_drag_residual']
@@ -135,7 +133,7 @@ models: ['slip3d', 'TerrainCNN', 'KARMA', 'KARMA_bad_sys', 'slip3d_bad_sys']
 # models: ['KARMA'] #, 'TerrainCNN'] #, 'TerrainCNN'] #, 'KARMA_no_change']
 # models: ['noslip3d','KARMA_noslip']
 # models: ['noslip3d', 'slip3d_150', 'slip3d', 'TerrainCNN']
-# models: ["slip3d", 'TerrainCNN']
+# models: ["slip3d_bad_sys"]
 # models: ['no_change']
 vehicle:
   make: "sunburst"

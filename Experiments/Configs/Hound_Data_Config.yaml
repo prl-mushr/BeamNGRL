@@ -82,7 +82,7 @@ start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 
 ## train/test:
-output_dir: "valid"
+output_dir: "train"
 
 save_data: False
 run_lockstep: True
@@ -132,4 +132,4 @@ loss: ResidualMSE_dV
 
 bag_dirs: ["new_bags_bmx"]
 base_dir: "/root/catkin_ws/src/" ## usually ~/catkin_ws/src
-ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/hound_ros_data/valid' # change this for rosbag_to_dataset.
+ros_data_dir: '/root/catkin_ws/src/BeamNGRL/data/hound_ros_data/train' # change this for rosbag_to_dataset.

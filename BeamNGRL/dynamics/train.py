@@ -85,7 +85,7 @@ def train(
                     optimizer.zero_grad()
 
                     if config["TRP"]:
-                        with torch.no_grad():
+                        with torch.no_grad(): # the network is outside of this block.
                             ## this will only work with batch size of 1 for now.
                             BEV_heght = ctx_tn_dict["bev_elev"].squeeze(1)
                             BEV_normal = ctx_tn_dict["bev_normal"].squeeze(1)
@@ -99,6 +99,9 @@ def train(
                             states_input = predict_states[...,:15].squeeze(0)
                             states_input = rotate_traj(states_input)
                             ctx_data={'rotate_crop': dynamics.bev_input_train}
+                        if torch.any(torch.isnan(predict_states)):
+                            # print("can't fix nan")
+                            continue
 
                         pred = network(
                             states_input,
@@ -117,7 +120,7 @@ def train(
 
                     loss = loss_func(pred, targets, conf = config) #, step=skip)
                     if loss.isnan():
-                        print("naan loss")
+                        # print("naan loss")
                         continue
                     loss.backward()
                     optimizer.step()
@@ -169,11 +172,15 @@ def train(
                                 states[0,:,0,:15] = states_tn[:,0,:].clone().detach()
                                 controls = controls_tn.clone().detach().unsqueeze(0)
                                 predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal)
-                                while torch.any(torch.isnan(predict_states)):
+                                if torch.any(torch.isnan(predict_states)):
                                     predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal, print_something="fixing nans")
                                 ctx_data={'rotate_crop': dynamics.bev_input_train}
                                 states_input = predict_states[...,:15].squeeze(0)
                                 states_input = rotate_traj(states_input)
+
+                            if torch.any(torch.isnan(predict_states)):
+                                # print("can't fix nan")
+                                continue
                             pred = network(
                                 states_input,
                                 controls_tn,

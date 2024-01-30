@@ -1,0 +1,56 @@
+MPPI_config:
+  ROLLOUTS: 256
+  TIMESTEPS: &TIMESTEPS 32
+  BINS: 1
+  u_per_command: 1
+
+Map_config:
+  map_size: &map_size 16 # in meters map_size x map_size
+  map_res: &map_res 0.0625 ## this results in 256 x 256 pixels for the MPPI
+  map_res_hitl: 0.25 ## this is the resolution at which the map is received
+  elevation_range: 4.0
+  map_name: "small_island"
+  layers:
+    color: 3
+    elevation: 1
+    semantics: 3
+    costmap: 1
+  topic_name: "/grid_map_occlusion_inpainting/all_grid_map"
+
+Dynamics_config:
+  wheelbase: 0.33
+  throttle_to_wheelspeed: 17.0
+  steering_max: 0.488
+  dt: &delta_T 0.04
+  D: 0.8 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
+  B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
+  C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
+  lf: 0.15 ## length from car com to front axle
+  lr: 0.15 ## length from car com to rear axle
+  Iz: 0.1 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  LPF_tau: 0.5
+  LPF_st: 0.5
+  LPF_th: 0.5
+  res_coeff: 0.03 ## resistance coefficient (proportional to speed)
+  drag_coeff: 0.03 # drag coefficient (proportional to speed squared)
+  car_length: 0.33 # front to back distance of car
+  car_width: 0.25 # track width of car. Measured as distance between extremes of the wheel (can be slightly off)
+  cg_height: 0.125 ## height of cg, used for calculating load transfer.
+  patch_size: &patch_size 0.75
+  type: "slip3d" ## this will be overwritten during evaluation
+
+
+models: ['slip3d', 'SysID']
+
+vehicle:
+  make: "sunburst"
+  model: "offroad"
+
+dataset:
+  name: 'hound_ros_data'
+  augment: False
+  state_input_key: 'future_states'
+  control_input_key: 'future_ctrls'
+  ctx_input_keys: ['bev_elev', 'bev_normal']
+
+filter: False

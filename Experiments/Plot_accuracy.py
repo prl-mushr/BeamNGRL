@@ -68,10 +68,10 @@ def create_error_plot(errors, timesteps, model, ax, plot="conf", max_err = None)
 
 
 def plot_accuracy(config):
-    pos = slice(0, 3)
+    pos = slice(0, 2)
     rpy = slice(3, 6)
     yaw = slice(5, 6)
-    vel = slice(6, 9)
+    vel = slice(6, 8)
     drpy = slice(12, 15)
     dyaw = slice(14, 15)
     acc = slice(9, 12)
@@ -100,19 +100,6 @@ def plot_accuracy(config):
     ax5 = fig.add_subplot(2, 3, 5)
     ax5.set_title("Acceleration (x,y,z)")
     ax5.xaxis.set_label_text("Timesteps")
-
-    # ax7 = fig.add_subplot(2, 5, 7)
-    # ax7.set_title("accel X-Y")
-    # ax7.xaxis.set_label_text("Timesteps")
-    # ax8 = fig.add_subplot(2, 5, 8)
-    # ax8.set_title("accel Y")
-    # ax8.xaxis.set_label_text("Timesteps")
-    # ax9 = fig.add_subplot(2, 5, 9)
-    # ax9.set_title("accel Z")
-    # ax9.xaxis.set_label_text("Timesteps")
-    # ax10 = fig.add_subplot(2, 5, 10)
-    # ax10.set_title("vel Z")
-    # ax10.xaxis.set_label_text("Timesteps")
     timesteps = config["MPPI_config"]["TIMESTEPS"]
 
 
@@ -149,229 +136,63 @@ def plot_accuracy(config):
         create_error_plot(errors[:, :timesteps, rpy],  timesteps, model, ax2, plot="conf") #, max_err = max_error[..., rpy])
         create_error_plot(errors[:, :timesteps, drpy], timesteps, model, ax4, plot="conf") #, max_err =  max_error[..., drpy])
         create_error_plot(errors[:, :timesteps, acc], timesteps, model, ax5, plot="conf") #, max_err =  max_error[..., acc])
-        # create_error_plot(errors[:, :timesteps, dyaw], timesteps, model, ax6, plot="conf")
-        # create_error_plot(errors[:, :timesteps, 9:12], timesteps, model, ax7, plot="conf")
-        # create_error_plot(errors[:, :timesteps, [10]], timesteps, model, ax8, plot="conf")
-        # create_error_plot(errors[:, :timesteps, [11]], timesteps, model, ax9, plot="conf")
-        # create_error_plot(errors[:, :timesteps, [8]], timesteps, model, ax10, plot="conf")
 
-
-    # pos_error_list = np.array(pos_error_list)
-    # p1 = pos_error_list[0]
-    # p2 = pos_error_list[1]
-    # statistic, p_value = mannwhitneyu(p1[:,0:2], p1[:,0:2])
-    # print("p value: ", p_value)
-    # ax1.plot(np.arange(timesteps), 1.5*np.ones(timesteps), label="crop size", linestyle="--")
-    # ax1.plot(np.ones(timesteps)*22, 0.1*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax2.plot(np.ones(timesteps)*22, 0.003*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax3.plot(np.ones(timesteps)*22, 0.05*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax4.plot(np.ones(timesteps)*22, 0.01*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax5.plot(np.ones(timesteps)*22, 0.01*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax6.plot(np.ones(timesteps)*22, 0.01*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax7.plot(np.ones(timesteps)*22, 0.1*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax8.plot(np.ones(timesteps)*22, 0.1*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax9.plot(np.ones(timesteps)*22, 0.1*np.arange(timesteps), label="crossover", linestyle="--")
-    # ax10.plot(np.ones(timesteps)*22, 0.01*np.arange(timesteps), label="crossover", linestyle="--")
 
     ax1.legend()
     ax2.legend()
     ax3.legend()
     ax4.legend()
     ax5.legend()
-    # ax6.legend()
-    # ax7.legend()
-    # ax8.legend()
-    # ax9.legend()
-    # ax10.legend()
     plt.show()
     ## save the figure in the results/accuracy folder:
     fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + config["dataset"]["name"] + "_" + str(config["MPPI_config"]["TIMESTEPS"]) + ".png")
-
-    # for model in config["models"]:
-    #     data = (
-    #         str(Path(os.getcwd()).parent.absolute())
-    #         + "/Experiments/Results/Accuracy/"
-    #         + model
-    #     )
-    #     try:
-    #         params = np.load(data + "/{}_param.npy".format(config["dataset"]["name"]))
-    #     except:
-    #         continue
-    #     # params are of shape (iterations, num_params)
-    #     # use shape to the number of params, then programmatically create subplots
-    #     fig = plt.figure()
-    #     fig.suptitle(
-    #         "estimated parameter value over iterations (each iteration is {} seconds long)".format(
-    #             config["Dynamics_config"]["dt"] * config["MPPI_config"]["TIMESTEPS"]
-    #         )
-    #     )
-    #     ax = []
-    #     friction = 0.85
-    #     param_list = ["friction", "resistance coeff", "drag coeff", "roll-pitch low-pass coeff", "steering low-pass coeff", "throttle low-pass coeff", "normalized yaw MoI"]
-    #     for i in range(params.shape[1]):
-    #         ax.append(fig.add_subplot(2, 5, i + 1))
-    #         ax[i].set_title("Param {}".format(param_list[i]))
-    #         ax[i].xaxis.set_label_text("Iterations")
-    #         ax[i].plot(np.arange(0, params.shape[0]), params[:, i], label="estimate")
-    #         if i == 0:
-    #             ax[i].plot(np.arange(0, params.shape[0]), np.ones(params.shape[0])*friction, label="GT")
-    #         ax[i].legend()
-    #     plt.show()
-
-    # fig = plt.figure()
-    # fig.suptitle("estimated parameter value over iterations (each iteration is {} seconds long)".format(config["dataset"]["dt"]*config["MPPI_config"]["TIMESTEPS"]))
-    # param_data = np.load
-    # ax1 = fig.add_subplot(2,5,1)
-    # ax1.set_title("Friction")
-    # ax1.xaxis.set_label_text("Timesteps")
-    # ax2 = fig.add_subplot(2,5,2)
-    # ax2.set_title("Roll-Pitch")
-    # ax2.xaxis.set_label_text("Timesteps")
-    # ax3 = fig.add_subplot(2,5,3)
-    # ax3.set_title("Velocity")
-    # ax3.xaxis.set_label_text("Timesteps")
-    # ax4 = fig.add_subplot(2,5,4)
-    # ax4.set_title("Roll-Pitch rate")
-    # ax4.xaxis.set_label_text("Timesteps")
-    # ax5 = fig.add_subplot(2,5,5)
-    # ax5.set_title("Yaw")
-    # ax5.xaxis.set_label_text("Timesteps")
-    # ax6 = fig.add_subplot(2,5,6)
-    # ax6.set_title("Yaw rate")
-    # ax6.xaxis.set_label_text("Timesteps")
-
-    # fig = plt.figure()
-    # fig.suptitle("Error vs Timestep on {} dataset with dt {} seconds".format(config["dataset"]["name"], config["Dynamics_config"]["dt"]))
-    # # create 4 subplots for each of the error types
-    # ax1 = fig.add_subplot(2,5,1)
-    # ax1.set_title("Position")
-    # ax1.xaxis.set_label_text("Timesteps")
-    # ax2 = fig.add_subplot(2,5,2)
-    # ax2.set_title("Roll-Pitch")
-    # ax2.xaxis.set_label_text("Timesteps")
-    # ax3 = fig.add_subplot(2,5,3)
-    # ax3.set_title("Velocity")
-    # ax3.xaxis.set_label_text("Timesteps")
-    # ax4 = fig.add_subplot(2,5,4)
-    # ax4.set_title("Roll-Pitch rate")
-    # ax4.xaxis.set_label_text("Timesteps")
-    # ax5 = fig.add_subplot(2,5,5)
-    # ax5.set_title("Yaw")
-    # ax5.xaxis.set_label_text("Timesteps")
-    # ax6 = fig.add_subplot(2,5,6)
-    # ax6.set_title("Yaw rate")
-    # ax6.xaxis.set_label_text("Timesteps")
-
-    # ax7 = fig.add_subplot(2,5,7)
-    # ax7.set_title("accel X")
-    # ax7.xaxis.set_label_text("Timesteps")
-    # ax8 = fig.add_subplot(2,5,8)
-    # ax8.set_title("accel Y")
-    # ax8.xaxis.set_label_text("Timesteps")
-    # ax9 = fig.add_subplot(2,5,9)
-    # ax9.set_title("accel Z")
-    # ax9.xaxis.set_label_text("Timesteps")
-    # for model in config["models"]:
-    #     data = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + model
-    #     errors = np.load(data + "/{}.npy".format(config["dataset"]["name"]))
-    #     create_error_plot(errors[:,:,pos], timesteps, model, ax1, plot='std')
-    #     create_error_plot(errors[:,:,rp], timesteps, model, ax2, plot='std')
-    #     create_error_plot(errors[:,:,vel], timesteps, model, ax3, plot='std')
-    #     create_error_plot(errors[:,:,drp], timesteps, model, ax4, plot='std')
-    #     ## need to warp the yaw errors between -pi and pi. yaw error is on position 5
-    #     errors[:,:,yaw] = np.arctan2(np.sin(errors[:,:,yaw]), np.cos(errors[:,:,yaw]))
-    #     create_error_plot(errors[:,:,yaw], timesteps, model, ax5, plot='std')
-    #     create_error_plot(errors[:,:,dyaw], timesteps, model, ax6, plot='std')
-    #     create_error_plot(errors[:,:,[9]], timesteps, model, ax7, plot='std')
-    #     create_error_plot(errors[:,:,[10]], timesteps, model, ax8, plot='std')
-    #     create_error_plot(errors[:,:,[11]], timesteps, model, ax9, plot='std')
-
-    # ax1.legend()
-    # ax2.legend()
-    # ax3.legend()
-    # ax4.legend()
-    # ax5.legend()
-    # ax6.legend()
-    # ax7.legend()
-    # ax8.legend()
-    # ax9.legend()
-
-    # plt.show()
-
-def plot_accuracy_new(config):
-    pos = slice(0, 3)
-    rp = slice(3, 5)
-    yaw = slice(5, 6)
-    vel = slice(6, 8)
-    drp = slice(12, 14)
-    dyaw = slice(14, 15)
-    dvel = slice(9, 12)
-
-    skip = int(config["Dynamics_config"]["dt"]/0.02)
-
-    fig = plt.figure()
-    fig.suptitle(
-        "Error vs Timestep on {} dataset with dt {} seconds".format(
-            config["dataset"]["name"], config["Dynamics_config"]["dt"]
-        )
-    )
-    # create 4 subplots for each of the error types
-    ax1 = fig.add_subplot(1, 5, 1)
-    ax1.set_title("Position")
-    ax1.xaxis.set_label_text("Timesteps")
-    ax2 = fig.add_subplot(1, 5, 2)
-    ax2.set_title("Velocity")
-    ax2.xaxis.set_label_text("Timesteps")
-    ax3 = fig.add_subplot(1, 5, 3)
-    ax3.set_title("Roll-Pitch ")
-    ax3.xaxis.set_label_text("Timesteps")
-    ax4 = fig.add_subplot(1, 5, 4)
-    ax4.set_title("Yaw")
-    ax4.xaxis.set_label_text("Timesteps")
-    ax5 = fig.add_subplot(1, 5, 5)
-    ax5.set_title("accelerations m/s/s")
-    ax5.xaxis.set_label_text("Timesteps")
-    timesteps = config["MPPI_config"]["TIMESTEPS"]
 
     data = (
         str(Path(os.getcwd()).parent.absolute())
-        + "/Experiments/Results/Accuracy/slip3d"
+        + "/Experiments/Results/Accuracy/SysID"
     )
-
-    errors = np.load(data + "/{}.npy".format(config["dataset"]["name"]))
-    mean = np.mean(np.abs(errors), axis=0)
-    normalization = 1 #np.max(mean, axis=0)
-    print(normalization)
-
-    for model in config["models"]:
-        data = (
+    if os.path.isfile(data + "/{}_param.npy".format(config["dataset"]["name"])):
+        params = np.load(data + "/{}_param.npy".format(config["dataset"]["name"]))
+        steps = len(params)
+        axes = []
+        fig2 = plt.figure()
+        ax = fig2.add_subplot(2, 4, 1)
+        ax.set_title("D")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 2)
+        ax.set_title("res_coeff")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 3)
+        ax.set_title("drag_coeff")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 4)
+        ax.set_title("LPF_tau")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 5)
+        ax.set_title("LPF_st")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 6)
+        ax.set_title("LPF_th")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        ax = fig2.add_subplot(2, 4, 7)
+        ax.set_title("Iz")
+        ax.xaxis.set_label_text("Timesteps")
+        axes.append(ax)
+        for i in range(7):
+            axes[i].plot(np.arange(steps), params[:, i])
+        plt.show()
+        fig2.savefig(
             str(Path(os.getcwd()).parent.absolute())
             + "/Experiments/Results/Accuracy/"
-            + model
+            + config["dataset"]["name"]
+            + "_params.png"
         )
-        errors = np.load(data + "/{}.npy".format(config["dataset"]["name"]))/normalization
-        if errors.shape[1] > config["MPPI_config"]["TIMESTEPS"]:
-            errors = errors[:,::skip,:]
-        create_error_plot(errors[:, :, pos], timesteps, model, ax1, plot="conf")
-        create_error_plot(errors[:, :, vel], timesteps, model, ax2, plot="conf")
-        create_error_plot(errors[:, :, rp], timesteps, model, ax3, plot="conf")
-        ## need to warp the yaw errors between -pi and pi. yaw error is on position 5
-        errors[:, :, yaw] = np.arctan2(
-            np.sin(errors[:, :, yaw]), np.cos(errors[:, :, yaw])
-        )
-        create_error_plot(errors[:, :, yaw], timesteps,  model, ax4, plot="conf")
-        create_error_plot(errors[:, :, dvel], timesteps, model, ax5, plot="conf")
-
-
-    ax1.legend()
-    ax2.legend()
-    ax3.legend()
-    ax4.legend()
-    ax5.legend()
-
-    plt.show()
-    ## save the figure in the results/accuracy folder:
-    fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + config["dataset"]["name"] + "_" + str(config["MPPI_config"]["TIMESTEPS"]) + ".png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

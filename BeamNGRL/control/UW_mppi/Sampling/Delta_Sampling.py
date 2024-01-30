@@ -33,7 +33,7 @@ class Delta_Sampling(torch.nn.Module):
         self.CTRL_NOISE_MU = torch.zeros(self.nu, dtype=self.dtype, device=self.d)
 
         ## for torchscript we have to initialize these things to same shape and size as what we'll use later
-        torch.manual_seed(0)
+        self.reset()
         self.noise = (
             torch.matmul(
                 torch.randn((self.K, self.T, self.nu), device=self.d, dtype=self.dtype),
@@ -45,6 +45,9 @@ class Delta_Sampling(torch.nn.Module):
         self.max_thr = torch.tensor(sampling_config["max_thr"], dtype=self.dtype, device = self.d)
         self.min_thr = torch.tensor(sampling_config["min_thr"], dtype=self.dtype, device = self.d)
         self.cost_total = 0
+
+    def reset(self):
+        torch.manual_seed(0)
 
     def sample(self, state, U):
         '''

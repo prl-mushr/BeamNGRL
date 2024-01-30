@@ -126,8 +126,11 @@ class SimpleCarCost(torch.nn.Module):
 
         ct = torch.sqrt(1 - (torch.square(torch.sin(roll)) + torch.square(torch.sin(pitch))) )
 
-        roll_cost = torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY*ct) - self.critical_vert_acc, 0, 10.0) + 5*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
-        
+        roll_cost = (torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY*ct) - self.critical_vert_acc, 0, 100.0)
+                    + 5*torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
+                    + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.atan(vy/vx) - 0.1*self.critical_RI, 0, 10)
+                    )
+
         wp_vec = self.goal_state.unsqueeze(dim=0) - state[:,:,-1,:2]
         heading_vec = torch.stack([torch.cos(yaw[..., -1]), torch.sin(yaw[..., -1])], dim=-1)
         terminal_cost = torch.linalg.norm(wp_vec, dim=-1)
@@ -143,7 +146,7 @@ class SimpleCarCost(torch.nn.Module):
         terminal_cost = torch.linalg.norm(wp_vec)
         wp_vec /= terminal_cost
         heading_cost = 1 / torch.clamp(torch.sum(wp_vec * heading_vec, dim=-1), 0.1, 1)
-        self.step_cost = running_cost[0,0,0] + self.goal_w * terminal_cost + self.heading_w * heading_cost
+        self.step_cost = running_cost[0,0,0]
 
         ## for running cost mean over the 0th dimension (bins), which results in a KxT tensor. Then sum over the 1st dimension (time), which results in a [K] tensor.
         ## for terminal cost, just mean over the 0th dimension (bins), which results in a [K] tensor.

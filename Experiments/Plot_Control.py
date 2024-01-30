@@ -5,10 +5,11 @@ from pathlib import Path
 import os
 import argparse
 from scipy.stats import mannwhitneyu, t as student_t
+from scipy.stats import norm
 
 def conf(data):
     # Sample size
-    n = len(data)
+    n = len(data)*10
     s = np.std(data, ddof=1)  # Use ddof=1 to get the sample standard deviation
     # Confidence level
     C = 0.95  # 95%
@@ -26,19 +27,38 @@ def conf(data):
     # Confidence interval
     return t_star * s / np.sqrt(n)
 
+def binomial_proportion_ci(success_arr, confidence_level=0.95):
+    successes = len(np.where(success_arr)[0])
+    total_trials = len(success_arr)
+    # Calculate the binomial proportion
+    p_hat = successes / total_trials
+
+    # Calculate the standard error
+    standard_error = np.sqrt(p_hat * (1 - p_hat) / total_trials)
+
+    # Calculate the Z-score for the confidence level
+    z_score = norm.ppf(1 - (1 - confidence_level) / 2)
+
+    # Calculate the margin of error
+    margin_of_error = z_score * standard_error
+
+    # Calculate the confidence interval
+
+    return margin_of_error
+
 def Plot_metircs(Config):
     # create a new graph for each scenario:
     time_limit = Config["time_limit"]
     scenario_count = 0
 
     for scenario in Config["scenarios"]:
-        fig, axs = plt.subplots(1,4)
-        fig.set_size_inches(25.5, 5.5)
+        fig, axs = plt.subplots(1,2)
+        fig.set_size_inches(15, 5.5)
         fig.suptitle(scenario)
         axs[0].set_title("Success Rate")
-        axs[1].set_title("Damage Rate")
-        axs[2].set_title("Time Taken")
-        axs[3].set_title("Cost accrued normalized by maximum time allotted")
+        # axs[1].set_title("Damage Rate")
+        axs[1].set_title("Time Taken")
+        # axs[3].set_title("Cost accrued normalized by maximum time allotted")
 
         scenario_time_limit = time_limit[scenario_count]
         scenario_count += 1
@@ -68,7 +88,7 @@ def Plot_metircs(Config):
                     time_taken.append(data[:, -3].max().mean()/scenario_time_limit)
                     damage_rate.append(data[:, -1].max().mean())
                 step_cost = data[:, -4]
-                cost_per_unit_time.append(step_cost.sum())
+                cost_per_unit_time.append(np.sum(step_cost, where=~np.isnan(step_cost)))
             ## take mean and std for all:
             success_rate = np.array(success_rate)
             indices = np.where(success_rate == 1)
@@ -83,13 +103,14 @@ def Plot_metircs(Config):
             time_taken_std = conf(time_taken)
             cost_per_unit_time_mean = np.array(cost_per_unit_time).mean()
             cost_per_unit_time_std = conf(np.array(cost_per_unit_time))
+            success_confidence = binomial_proportion_ci(success_rate)
             ## now plot the data:
             ## success and damage don't need standard deviation:
-            axs[0].bar(model, success_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10) 
-            axs[1].bar(model, damage_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10) 
+            axs[0].bar(model, success_rate_mean, yerr=success_confidence, align='center', alpha=0.5, ecolor='black', capsize=10) 
+            # axs[1].bar(model, damage_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10) 
             ## other metrics need standard deviation:
-            axs[2].bar(model, time_taken_mean, yerr=time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
-            axs[3].bar(model, cost_per_unit_time_mean, yerr=cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
+            axs[1].bar(model, time_taken_mean, yerr=time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
+            # axs[3].bar(model, cost_per_unit_time_mean, yerr=cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
 
         fig.legend()
 

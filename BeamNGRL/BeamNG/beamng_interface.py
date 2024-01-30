@@ -60,6 +60,7 @@ def get_beamng_default(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
+    bng.state_init = False
     bng.set_lockstep(run_lockstep)
     return bng
 
@@ -106,6 +107,7 @@ def get_beamng_nobeam(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
+    bng.state_init = False
     bng.set_lockstep(run_lockstep)
     return bng
 
@@ -154,6 +156,7 @@ class beamng_interface():
         self.use_sgmt = False
         self.steering_max = 260.0
         self.wait_for_sim = False ## don't wait for sim to finish simulating step unless using camera/lidar
+        self.smooth_map = False
 
         self.use_beamng = use_beamng
         if self.use_beamng:
@@ -273,7 +276,7 @@ class beamng_interface():
         index = np.where(self.elevation_map_full == 0)
         self.inpaint_mask[index] = 255
 
-    def get_map_bf_no_rp(self, map_img, gen_mask=False, inpaint_mask = None):
+    def get_map_bf_no_rp(self, map_img, gen_mask=False, inpaint_mask = None, smooth_map = False, k_size=3):
         ch = len(map_img.shape)
         if(ch==3):
             BEV = map_img[self.Y_min:self.Y_max, self.X_min:self.X_max, :]
@@ -282,7 +285,8 @@ class beamng_interface():
 
         if inpaint_mask is not None:
             BEV = cv2.inpaint(BEV, inpaint_mask, ch, cv2.INPAINT_TELEA)
-            
+        if smooth_map:
+            BEV = cv2.medianBlur(BEV, k_size)
         if(self.rotate):
             # get rotation matrix using yaw:
             rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= self.rpy[2]*57.3, scale=1)
@@ -324,10 +328,11 @@ class beamng_interface():
         ## inputs:
         local_inpaint = self.get_map_bf_no_rp(self.inpaint_mask, gen_mask=True)
         self.BEV_color = self.get_map_bf_no_rp(self.color_map_full, inpaint_mask=local_inpaint)  # crops circle, rotates into body frame
-        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full, inpaint_mask=local_inpaint)
-        self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full, inpaint_mask=local_inpaint)
-        self.BEV_path  = self.get_map_bf_no_rp(self.path_map_full)
-
+        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full, inpaint_mask=local_inpaint, smooth_map=self.smooth_map) # smoothen the map
+        self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full, inpaint_mask=local_inpaint, smooth_map=self.smooth_map)
+        self.BEV_path  = self.get_map_bf_no_rp(self.path_map_full, smooth_map=self.smooth_map)
+        self.BEV_lethal = np.zeros_like(self.BEV_path).astype(np.float32)
+        self.BEV_lethal[:,:,:] = (self.BEV_segmt[:, :, [1]] < 240).astype(np.float32)
 
         self.BEV_center[:2] = self.pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
@@ -340,8 +345,9 @@ class beamng_interface():
     def compute_surface_normals(self):
         # Compute the gradient of the elevation map using the Sobel operator
         BEV_normal = np.copy(self.BEV_heght)
-        BEV_normal = cv2.resize(BEV_normal, (int(self.map_size_px[0]*4), int(self.map_size_px[0]*4)), cv2.INTER_AREA)
-        BEV_normal = cv2.GaussianBlur(BEV_normal, (3,3), 0)
+        if not self.smooth_map:
+            BEV_normal = cv2.resize(BEV_normal, (int(self.map_size_px[0]*4), int(self.map_size_px[0]*4)), cv2.INTER_AREA)
+            BEV_normal = cv2.GaussianBlur(BEV_normal, (3,3), 0)
         normal_x = -cv2.Sobel(BEV_normal, cv2.CV_64F, 1, 0, ksize=3)
         normal_y = -cv2.Sobel(BEV_normal, cv2.CV_64F, 0, 1, ksize=3)
         # Compute the normal vector as the cross product of the x and y gradients
@@ -350,7 +356,8 @@ class beamng_interface():
         # Normalize the normal vectors
         norms = np.linalg.norm(normals, axis=-1, keepdims=True)
         normals = normals / norms
-        normals = cv2.resize(normals, (int(self.map_size_px[0]*2), int(self.map_size_px[0]*2)), cv2.INTER_AREA)
+        if not self.smooth_map:
+            normals = cv2.resize(normals, (int(self.map_size_px[0]*2), int(self.map_size_px[0]*2)), cv2.INTER_AREA)
         return normals
 
     def rpy_from_quat(self, quat):
@@ -506,12 +513,12 @@ class beamng_interface():
                 self.handle_timing()
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                self.handle_timing()
                 self.state_init = True
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
                 self.timestamp = self.vehicle.sensors['timer']['time']
                 print("beautiful day, __init__?") ## being cheeky are we?
             else:
-                self.handle_timing()
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
@@ -552,6 +559,9 @@ class beamng_interface():
                         self.last_lidar_time = self.timestamp
                         self.lidar_pts -= self.pos
                         self.lidar_pts = np.matmul(self.lidar_pts, self.Tnb.T)
+
+                self.handle_timing()
+
         except Exception:
             print(traceback.format_exc())
 

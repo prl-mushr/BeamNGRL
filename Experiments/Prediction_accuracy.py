@@ -30,12 +30,18 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "slip3d"
         Dynamics_config["network"] = Dynamics_config["network_KARMA"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA"]## you modified this last night. Results of previous experiments indicate improvement, not so much
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_long/" + Dynamics_config["model_weights"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_offroad/" + Dynamics_config["model_weights"]
+        dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
+    elif model == "KARMA_hound":
+        Dynamics_config["type"] = "slip3d"
+        Dynamics_config["network"] = Dynamics_config["network_KARMA"]
+        Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA_hound"]## you modified this last night. Results of previous experiments indicate improvement, not so much
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_hound/" + Dynamics_config["model_weights"]
         dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == "KARMA_bad_sys":
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 0.4 ## 50 % of the original D
+        Dynamics_config["D"] = 0.6 ## 50 % of the original D
         Dynamics_config["network"] = Dynamics_config["network_KARMA"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA_bad_sys"]## you modified this last night. Results of previous experiments indicate improvement, not so much
         model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_long_bad_sys/" + Dynamics_config["model_weights"]
@@ -67,7 +73,7 @@ def get_dynamics(model, Config):
         # temporarily change the dynamics type to noslip3d
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 0.4 ## 50 % of the original D
+        Dynamics_config["D"] = 0.6 ## 50 % of the original D
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["D"] = temp_D ## change it back
     elif model == 'slip3d_LPF':
@@ -111,7 +117,8 @@ def evaluator(
         for model in config['models']:
             count = 0
             dynamics = get_dynamics(model, config)
-            errors = np.zeros((len(data_loader), TIMESTEPS, 15))
+            # errors = np.zeros((len(data_loader), TIMESTEPS, 15))
+            errors = []
             for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(data_loader)):
 
                 states_tn = states_tn.to(**tn_args)[:,::skip,:]
@@ -145,8 +152,6 @@ def evaluator(
 
                 pred_states = predict_states[0,0,:,:15].cpu().numpy()
 
-                errors[i,:,:] = (pred_states - gt_states)
-
                 if(np.any(np.isnan(pred_states))):
                     print("NaN error")
                     for time_step in range(TIMESTEPS):
@@ -163,9 +168,12 @@ def evaluator(
                         print(f"Velocity: {velocity}")
                         print(f"Acceleration: {acceleration}")
                         print(f"Gyro: {gyro}")
-                    exit()
+                else:
+                    errors.append((pred_states - gt_states).squeeze(0))
+
 
             print(count)
+            errors = np.array(errors)
             dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + model
             if(not os.path.isdir(dir_name)):
                 os.makedirs(dir_name)
