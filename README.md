@@ -10,6 +10,8 @@
 ```bash
 cd path/to/python_installation/
 git clone https://github.com/sidtalia/BeamNGRL.git
+cd BeamNGRL/
+pip install -r requirements.txt
 ```
 
 4) Put the map_data folder in a directory called "BeamNGRL/data" (you would have to make this directory for now).
@@ -63,7 +65,7 @@ export PYTHONPATH="${PYTHONPATH}:/absolute/path/to/BeamNGRL"
 ```
 On Windows, you may need to add the above paths to your "PATH" variable.
 
-## Connecting your Windows and Ubuntu machine via an ethernet cable ([source](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable)):
+### Connecting your Windows and Ubuntu machine via an ethernet cable ([source](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable)):
 1) On the Windows computer: check the current IP by running ipconfig in a terminal/commandline and note the the current IP(s) to compare later
 2) On both computers: attach the full-duplex ethernet cable to both machines
 3) On the Windows machine: run ipconfig again in the terminal/commandline and compare with previously obtained IPs. It may resemble: 169.254.216.9
