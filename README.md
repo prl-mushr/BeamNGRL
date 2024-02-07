@@ -1,10 +1,56 @@
 # BeamNGRL
 
+# Getting BeamNG:
+1) Apply for a BeamNG academic license [here](https://register.beamng.tech/) (use your institute email ID. They usually respond quickly)
+2) Download version BeamNG.tech version 0.26 (for now we only support 0.26, will support newer versions soon) and follow their instructions on adding the key/licenses
+
 ## Installation:
-1) Download the map folder, and the content folder from [here](https://drive.google.com/drive/folders/1sZ8aDUqtnTomdXn6bxoryJ8X4yT7RS06). Extract the 'BeamNG' outside the BeamNGRL folder(usually `/home/username/` directory, for instance. Put the map_data folder in a directory called "BeamNGRL/data" (you would have to make this directory for now).
+1) Download the [map folder,](https://drive.google.com/drive/folders/1T4XLVU1tnPTZpCAUkvObrbnER6I_AnQW?usp=drive_link) and the [content folder](https://drive.google.com/drive/folders/1qTb1biMKTuAfmcfRviB0IcYbDuUO4Nqt?usp=sharing).
+2) If you are following the HOUND installation instructions, the install scripts will automatically pull this repository for you. You will however still need to pull this repository on your windows system.
+```bash
+cd path/to/python_installation/
+git clone https://github.com/sidtalia/BeamNGRL.git
+```
+
+4) Put the map_data folder in a directory called "BeamNGRL/data" (you would have to make this directory for now).
 ```bash
 cd ~/BeamNGRL
 mkdir data
+```
+The file structure should look something like:
+```bash
+BeamNGRL
+├── data
+    ├── map_data
+        ├── elevation_map.npy
+        ├── paths.png
+        ├── color_map.png
+        └── segmt_map.png
+```
+3) The content folder contains 3 folders: levels, vehicles, and a userfolder. The levels and vehicles folder contain "new" levels and vehicles. The userfolder contains a "mods" folder and a "vehicles" folder that contain modified versions of existing vehicles offered by the simulator. Place the zip files inside the levels and vehicles folder in the main (content) folder inside, you guessed it, the "content" folder in BeamNG.
+```bash
+BeamNG
+├── content
+    ├── vehicles
+    |   ├── car1.zip
+    |   ├── ....
+    |   ├── savage_low_f.zip ---> place the folders in here.
+    |   ├── savage_normal.zip
+    |   └── savage.zip
+    └── levels
+        ├── small_island.zip
+        ├── ....
+        └── custom_level.zip ---> place custom levels here
+```
+Similarly, put the contents of the userfolder into the "userfolder" inside BeamNG. Note that the "userfolder" will not exist until the first time you boot the simulator, so this step requires you to boot the simulator first.
+```bash
+BeamNG
+├── userfolder
+    ├── 0.26
+    |   ├── mods
+    |   ├── vehicles --> place the mods and vehicles folders here
+    |   ├── ...
+    └──  research_helper.txt
 ```
 
 Put the content/vehicles/ files in the BeamNG/BeamNG/content/vehicles/ folder. Do the same for "levels" if that folder isn't empty on the google drive.
@@ -15,14 +61,45 @@ put this in your bash:
 export BNG_HOME=/absolute/path/to/BeamNG/BeamNG/
 export PYTHONPATH="${PYTHONPATH}:/absolute/path/to/BeamNGRL"
 ```
+On Windows, you may need to add the above paths to your "PATH" variable.
+
+## Connecting your Windows and Ubuntu machine via an ethernet cable ([source](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable)):
+1) On the Windows computer: check the current IP by running ipconfig in a terminal/commandline and note the the current IP(s) to compare later
+2) On both computers: attach the full-duplex ethernet cable to both machines
+3) On the Windows machine: run ipconfig again in the terminal/commandline and compare with previously obtained IPs. It may resemble: 169.254.216.9
+4) On the Ubuntu machine: Go to Settings > Network > Edit Connections > select the wired type > create a new wired connection > name it. Copy the following  settings:
+```
+Method: Manual.
+address: 169.254.216.11 (change the last two digits to make sure you don't have the same IP address as the windows machine)
+netmask: 255.255.0.0
+gateway: leave this blank
+```
+Save the settings.
+
+5) Check if the connection works: From the ubuntu computer:
+```bash
+ping <IP_ADDRESS_OF_WINDOWS_MACHINE>
+```
+You should observe a ping of less than or equal to 1 millisecond (or in that ballpark).
 
 ## Running minimal interface example:
 
-### Executing minimal example
+### Executing minimal example:
+Confirm that the Windows and Ubuntu machine can ping each other. 
+
+On the Windows machine:
+```bash
+cd path/to/BeamNGRL/examples/
+python boot_beamng.py
+```
+This should start the simulator (you can potentially also just use this to play around in the simulator and explore it)
+
+On the Ubuntu machine:
 ```bash
 cd ~/BeamNGRL/examples
 python3 beamng_interface_minimal.py
 ```
+
 ### Minimal example explained
 You need to provide a start pos/quat for the vehicle. This would require knowing the exact height where the car needs to be placed. If you place the car at the wrong "height" it will either drop from the sky or drop below the map. This is something I'm working on fixing, such that in the future the correct Z height is extracted from the BEV map itself.
 ```python
@@ -49,7 +126,7 @@ The interface spoofs the birds-eye-view elevation map, semantic map, color map, 
     }
 ```
 
-Sensor configuration. Currently, the camera and lidar are only supported on the windows system. We recommend running the simulator on a separate computer (preferably windows) and connecting that to your main system via ethernet. Follow the instructions on this [link](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable) for such a setup. If you run the simulator on the same system as your main code, expect the overall execution to be slow (BeamNG is CPU dependent for all the physics calculations).
+Sensor configuration. Currently, the camera and lidar are only supported on the windows system. If you run the simulator on the same system as your main code, expect the overall execution to be slow (BeamNG is CPU dependent for all the physics calculations).
 The sensor configurations here are defined as dictionaries, but as you will see in other implementations, we usually load them from a yaml file (recommended)
 ```python
     camera_config = dict()
