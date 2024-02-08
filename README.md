@@ -1,6 +1,6 @@
 # BeamNGRL
 
-# Getting BeamNG:
+## Getting BeamNG:
 1) Apply for a BeamNG academic license [here](https://register.beamng.tech/) (use your institute email ID. They usually respond quickly)
 2) Download version BeamNG.tech version 0.26 (for now we only support 0.26, will support newer versions soon) and follow their instructions on adding the key/licenses
 
