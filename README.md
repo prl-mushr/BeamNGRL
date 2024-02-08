@@ -9,7 +9,7 @@
 2) If you are following the HOUND installation instructions, the install scripts will automatically pull this repository for you. You will however still need to pull this repository on your windows system.
 ```bash
 cd path/to/python_installation/
-git clone https://github.com/sidtalia/BeamNGRL.git
+git clone https://github.com/prl-mushr/BeamNGRL.git
 cd BeamNGRL/
 pip install -r requirements.txt
 ```
