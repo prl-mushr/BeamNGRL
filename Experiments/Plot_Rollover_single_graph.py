@@ -5,11 +5,14 @@ from pathlib import Path
 import os
 import argparse
 import seaborn as sns
+
 # Set Seaborn color palette to "colorblind"
 sns.set_palette("colorblind")
 from scipy.stats import mannwhitneyu, t as student_t
 from matplotlib import rc
-rc('font', family='Times New Roman', size=16)
+
+rc("font", family="Times New Roman", size=16)
+
 
 def conf(data):
     # return np.fabs(np.percentile(data,97.5) - np.percentile(data,2.5))/2.0
@@ -32,9 +35,12 @@ def conf(data):
     # Confidence interval
     return t_star * s / np.sqrt(n)
 
+
 def Plot_metrics(Config, Config_crash):
     plt.figure().set_size_inches(6, 4)
-    plt.subplots_adjust(left=0.12, right=0.99, top=0.94, bottom=0.08)  # Adjust the values as needed
+    plt.subplots_adjust(
+        left=0.12, right=0.99, top=0.94, bottom=0.08
+    )  # Adjust the values as needed
     RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
     combinations = []
@@ -61,7 +67,7 @@ def Plot_metrics(Config, Config_crash):
         if RP == "Full RPS":
             rollover_prevention = 1
         scenario_count = 0
-        total_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
+        total_scenarios = len(Config["scenarios"]) * len(Config["vehicle_list"])
         X = np.arange(total_scenarios)
         mean_bar = []
         std_bar = []
@@ -70,20 +76,26 @@ def Plot_metrics(Config, Config_crash):
                 average_lat_ratio = []
                 rollover = []
                 min_az = []
-                track_width = Config["vehicles"][vehicle_name]["track_width"]/2
+                track_width = Config["vehicles"][vehicle_name]["track_width"] / 2
                 for trial in range(Config["num_iters"]):
-                    dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/{}/".format(str(rollover_prevention))
-                    filename = dir_name + "/{}-{}-{}.npy".format(scenario, vehicle_name, str(trial))
+                    dir_name = str(
+                        Path(os.getcwd()).parent.absolute()
+                    ) + "/Experiments/Results/Rollover/{}/".format(
+                        str(rollover_prevention)
+                    )
+                    filename = dir_name + "/{}-{}-{}.npy".format(
+                        scenario, vehicle_name, str(trial)
+                    )
                     ## data has structure: state(17) flipped_over(1) rollover_prevention(1) intervention(1) Rollover_detected(1) delta_steering(1) turn_time(1) rotate_speed(1) ts(1) ))
                     data = np.load(filename)
-                    turn_index = np.where(data[:,-1] >= data[-1, 22])[0]
+                    turn_index = np.where(data[:, -1] >= data[-1, 22])[0]
                     ay = data[turn_index, 10]
                     az = data[turn_index, 11]
                     roll = data[turn_index, 3]
                     index = np.where(np.abs(roll) < 1.5)[0]
-                    ay = ay[index] + track_width*data[index, 12]**2
+                    ay = ay[index] + track_width * data[index, 12] ** 2
                     az = az[index]
-                    average_lat_ratio.append(np.mean(np.abs(ay))/np.mean(np.abs(az)) )
+                    average_lat_ratio.append(np.mean(np.abs(ay)) / np.mean(np.abs(az)))
                     min_az.append(np.min(np.abs(az)))
                     rollover.append(data[-1, 17])
                 mean_LTR = np.mean(np.array(average_lat_ratio))
@@ -93,27 +105,42 @@ def Plot_metrics(Config, Config_crash):
                 mean_bar.append(mean_LTR)
                 std_bar.append(std_LTR)
                 lat_acc_list.append(np.array(average_lat_ratio))
-        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, yerr=std_bar, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=RP)
+        plt.bar(
+            X + bar_width * (len(RPS) - rps_count - 2),
+            mean_bar,
+            yerr=std_bar,
+            width=bar_width,
+            alpha=1.0,
+            ecolor="black",
+            capsize=10,
+            label=RP,
+        )
         print(RP, mean_bar)
-        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.grid(True, linestyle="--", alpha=0.7)
         rps_count += 1
     plt.xticks(X, combinations)
     plt.ylabel("Ratio of peak lateral to vertical acceleration")
     legend_position = (0.5, 0.77)  # Specify the position as (x, y)
     plt.legend(loc=legend_position)
     # plt.title("Ratio of Lateral Acceleration to Vertical Acceleration on different surfaces in different vehicles")
-    plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_isolated.png")
+    plt.savefig(
+        str(Path(os.getcwd()).parent.absolute())
+        + "/Experiments/Results/Rollover/rollover_isolated.png"
+    )
     # plt.show()
     plt.close()
 
-    num_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
+    num_scenarios = len(Config["scenarios"]) * len(Config["vehicle_list"])
     for i in range(num_scenarios):
-        statistic, p_value = mannwhitneyu(lat_acc_list[i+num_scenarios], lat_acc_list[i+2*num_scenarios])
+        statistic, p_value = mannwhitneyu(
+            lat_acc_list[i + num_scenarios], lat_acc_list[i + 2 * num_scenarios]
+        )
         print("p value: ", p_value)
-    
 
     plt.figure().set_size_inches(6, 4)
-    plt.subplots_adjust(left=0.12, right=0.99, top=0.96, bottom=0.08)  # Adjust the values as needed
+    plt.subplots_adjust(
+        left=0.12, right=0.99, top=0.96, bottom=0.08
+    )  # Adjust the values as needed
 
     RPS = ["Static limiter", "No prevention", "Full RPS"]
     bar_width = 0.2
@@ -138,7 +165,7 @@ def Plot_metrics(Config, Config_crash):
         if RP == "Full RPS":
             rollover_prevention = 1
         scenario_count = 0
-        total_scenarios = len(Config["scenarios"])*len(Config["vehicle_list"])
+        total_scenarios = len(Config["scenarios"]) * len(Config["vehicle_list"])
         X = np.arange(total_scenarios)
         mean_bar = []
         std_bar = []
@@ -147,24 +174,41 @@ def Plot_metrics(Config, Config_crash):
                 average_lat_ratio = []
                 rollover = []
                 min_az = []
-                track_width = Config["vehicles"][vehicle_name]["track_width"]/2
+                track_width = Config["vehicles"][vehicle_name]["track_width"] / 2
                 for trial in range(Config["num_iters"]):
-                    dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/{}/".format(str(rollover_prevention))
-                    filename = dir_name + "/{}-{}-{}.npy".format(scenario, vehicle_name, str(trial))
+                    dir_name = str(
+                        Path(os.getcwd()).parent.absolute()
+                    ) + "/Experiments/Results/Rollover/{}/".format(
+                        str(rollover_prevention)
+                    )
+                    filename = dir_name + "/{}-{}-{}.npy".format(
+                        scenario, vehicle_name, str(trial)
+                    )
                     ## data has structure: state(17) flipped_over(1) rollover_prevention(1) intervention(1) Rollover_detected(1) delta_steering(1) turn_time(1) rotate_speed(1) ts(1) ))
                     data = np.load(filename)
                     rollover.append(data[-1, 17])
                 rollover_rate = np.mean(np.array(rollover))
                 mean_bar.append(rollover_rate)
-        plt.bar(X + bar_width*(len(RPS) - rps_count - 2), mean_bar, width=bar_width, alpha=1.0, ecolor='black', capsize=10, label=RP)
-        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.bar(
+            X + bar_width * (len(RPS) - rps_count - 2),
+            mean_bar,
+            width=bar_width,
+            alpha=1.0,
+            ecolor="black",
+            capsize=10,
+            label=RP,
+        )
+        plt.grid(True, linestyle="--", alpha=0.7)
         rps_count += 1
     plt.xticks(X, combinations)
     plt.ylabel("Rollover Rate")
     legend_position = (0.5, 0.77)  # Specify the position as (x, y)
     plt.legend(loc=legend_position)
     # plt.title("Ratio of Lateral Acceleration to Vertical Acceleration on different surfaces in different vehicles")
-    plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_rate_isolated.png")
+    plt.savefig(
+        str(Path(os.getcwd()).parent.absolute())
+        + "/Experiments/Results/Rollover/rollover_rate_isolated.png"
+    )
     # plt.show()
     plt.close()
 
@@ -187,22 +231,28 @@ def Plot_metrics(Config, Config_crash):
                 if RP == "static+dynamic":
                     rollover_prevention = 1
                 for trial in range(Config["num_iters"]):
-                    dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/{}/".format(str(rollover_prevention))
-                    filename = dir_name + "/{}-{}-{}.npy".format(scenario, vehicle_name, str(trial))
+                    dir_name = str(
+                        Path(os.getcwd()).parent.absolute()
+                    ) + "/Experiments/Results/Rollover/{}/".format(
+                        str(rollover_prevention)
+                    )
+                    filename = dir_name + "/{}-{}-{}.npy".format(
+                        scenario, vehicle_name, str(trial)
+                    )
                     ## data has structure: state(17) flipped_over(1) rollover_prevention(1) intervention(1) Rollover_detected(1) delta_steering(1) turn_time(1) rotate_speed(1) ts(1) ))
                     data = np.load(filename)
-                    turn_index = np.where(data[:,-1] >= data[-1, 22])[0]
-                    az = data[:turn_index.min(), 11]
-                    if(scenario == "small_island" and vn == "small car"):
+                    turn_index = np.where(data[:, -1] >= data[-1, 22])[0]
+                    az = data[: turn_index.min(), 11]
+                    if scenario == "small_island" and vn == "small car":
                         Off_small.append(np.min(np.abs(az)))
-                    elif(scenario == "small_island" and vn == "big car"):
+                    elif scenario == "small_island" and vn == "big car":
                         Off_big.append(np.min(np.abs(az)))
-                    elif(scenario == "smallgrid" and vn == "small car"):
+                    elif scenario == "smallgrid" and vn == "small car":
                         Flat_small.append(np.min(np.abs(az)))
                     else:
                         Flat_big.append(np.min(np.abs(az)))
 
-    rc('font', family='Times New Roman', size=18)
+    rc("font", family="Times New Roman", size=18)
 
     Off_small = np.array(Off_small)
     Off_big = np.array(Off_big)
@@ -210,29 +260,78 @@ def Plot_metrics(Config, Config_crash):
     Flat_big = np.array(Flat_big)
 
     plt.figure().set_size_inches(2.5, 5)
-    plt.subplots_adjust(left=0.2, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
+    plt.subplots_adjust(
+        left=0.2, right=0.99, top=0.9, bottom=0.1
+    )  # Adjust the values as needed
     plt.ylabel("Min vertical acceleration in m/s/s")
     legend_dict = {}
     offroad = "Off-road"
     flat = "Flat"
-    legend_dict[offroad] = plt.bar(0 + bar_width*0, Off_small.mean(), yerr=conf(Off_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Off-road", color='#0072b2')
-    legend_dict[flat] = plt.bar(0 + bar_width*1, Flat_small.mean(), yerr=conf(Flat_small), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
-    legend_dict[offroad] = plt.bar(1 + bar_width*0, Off_big.mean(), yerr=conf(Off_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Off-road", color='#0072b2')
-    legend_dict[flat] = plt.bar(1 + bar_width*1, Flat_big.mean(), yerr=conf(Flat_big), width=bar_width, alpha=1.0, ecolor='black', capsize=10, label="Flat", color='#009e73')
-    plt.grid(True, linestyle='--', alpha=0.7)
+    legend_dict[offroad] = plt.bar(
+        0 + bar_width * 0,
+        Off_small.mean(),
+        yerr=conf(Off_small),
+        width=bar_width,
+        alpha=1.0,
+        ecolor="black",
+        capsize=10,
+        label="Off-road",
+        color="#0072b2",
+    )
+    legend_dict[flat] = plt.bar(
+        0 + bar_width * 1,
+        Flat_small.mean(),
+        yerr=conf(Flat_small),
+        width=bar_width,
+        alpha=1.0,
+        ecolor="black",
+        capsize=10,
+        label="Flat",
+        color="#009e73",
+    )
+    legend_dict[offroad] = plt.bar(
+        1 + bar_width * 0,
+        Off_big.mean(),
+        yerr=conf(Off_big),
+        width=bar_width,
+        alpha=1.0,
+        ecolor="black",
+        capsize=10,
+        label="Off-road",
+        color="#0072b2",
+    )
+    legend_dict[flat] = plt.bar(
+        1 + bar_width * 1,
+        Flat_big.mean(),
+        yerr=conf(Flat_big),
+        width=bar_width,
+        alpha=1.0,
+        ecolor="black",
+        capsize=10,
+        label="Flat",
+        color="#009e73",
+    )
+    plt.grid(True, linestyle="--", alpha=0.7)
     plt.xticks([0, 1], ["Small", "Big"])
-    unique_labels, unique_handles = zip(*[(label, handle) for label, handle in legend_dict.items()])
+    unique_labels, unique_handles = zip(
+        *[(label, handle) for label, handle in legend_dict.items()]
+    )
     legend_position = (0.1, 0.5)  # Specify the position as (x, y)
     plt.legend(unique_handles, unique_labels, loc=legend_position)
-    plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_vert_acc.png")
+    plt.savefig(
+        str(Path(os.getcwd()).parent.absolute())
+        + "/Experiments/Results/Rollover/rollover_vert_acc.png"
+    )
     # plt.show()
     plt.close()
 
-    rc('font', family='Times New Roman', size=14)
+    rc("font", family="Times New Roman", size=14)
     sns.set_palette("colorblind")
-    fig, ax1 = plt.subplots(1,1)
+    fig, ax1 = plt.subplots(1, 1)
     fig.set_size_inches(3, 4)
-    plt.subplots_adjust(left=0.2, right=1.0, top=0.87, bottom=0.13)  # Adjust the values as needed
+    plt.subplots_adjust(
+        left=0.2, right=1.0, top=0.87, bottom=0.13
+    )  # Adjust the values as needed
 
     ax2 = ax1.twiny()
     ax1.set_ylabel("Rollover Rate")
@@ -263,25 +362,48 @@ def Plot_metrics(Config, Config_crash):
                 for trial in range(Config_crash["num_iters"]):
                     rollover = []
                     for attempts in range(Config_crash["speed_iters"]):
-                        dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/speed_crash_{}/".format(str(rollover_prevention))
-                        filename = dir_name + "/{}-{}-{}-{}.npy".format(scenario, vehicle_name, str(trial), str(attempts))
+                        dir_name = str(
+                            Path(os.getcwd()).parent.absolute()
+                        ) + "/Experiments/Results/Rollover/speed_crash_{}/".format(
+                            str(rollover_prevention)
+                        )
+                        filename = dir_name + "/{}-{}-{}-{}.npy".format(
+                            scenario, vehicle_name, str(trial), str(attempts)
+                        )
                         ## data has structure: state(17) flipped_over(1) rollover_prevention(1) intervention(1) Rollover_detected(1) delta_steering(1) turn_time(1) rotate_speed(1) ts(1) ))
                         data = np.load(filename)
                         rollover.append(data[-1, 17])
-                        speed = data[-1,-2] # - Config_crash["vehicles"][vehicle_name]["rotate_speed"])/Config_crash["vehicles"][vehicle_name]["rollover_speed_max"]
+                        speed = data[
+                            -1, -2
+                        ]  # - Config_crash["vehicles"][vehicle_name]["rotate_speed"])/Config_crash["vehicles"][vehicle_name]["rollover_speed_max"]
                     rollover_rate.append(np.mean(np.array(rollover)))
                     rotate_speed.append(speed)
             # rotate_speed = np.arange(Config_crash["speed_iters"])/Config_crash["speed_iters"]
-            color = plt.cm.tab10(color_count)  # Choose the same color from the 'tab10' colormap
+            color = plt.cm.tab10(
+                color_count
+            )  # Choose the same color from the 'tab10' colormap
             color_count += 1
             if vn == "small car":
-                line, = ax1.plot(rotate_speed, rollover_rate, label="{}-{}".format(scn, vn), color=color)
+                (line,) = ax1.plot(
+                    rotate_speed,
+                    rollover_rate,
+                    label="{}-{}".format(scn, vn),
+                    color=color,
+                )
             else:
-                line, = ax2.plot(rotate_speed, rollover_rate, label="{}-{}".format(scn, vn), color=color)
+                (line,) = ax2.plot(
+                    rotate_speed,
+                    rollover_rate,
+                    label="{}-{}".format(scn, vn),
+                    color=color,
+                )
             line_list.append(line)
     labels = [line.get_label() for line in line_list]
-    ax1.legend(line_list, labels, loc='upper left')
-    plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/rollover_speed_crash.png")
+    ax1.legend(line_list, labels, loc="upper left")
+    plt.savefig(
+        str(Path(os.getcwd()).parent.absolute())
+        + "/Experiments/Results/Rollover/rollover_speed_crash.png"
+    )
     # plt.show()
     plt.close()
 
@@ -289,17 +411,35 @@ def Plot_metrics(Config, Config_crash):
 if __name__ == "__main__":
     ## add a parser:
     parser = argparse.ArgumentParser(description="Plot the accuracy of the models")
-    parser.add_argument("--config_name", "-c", default="Rollover_Config.yaml", type=str, help="Path to the config file. Keep the same as the one used for evaluation")
-    parser.add_argument("--config_crash_name", "-cc", default="Rollover_speed_crash_Config.yaml", type=str, help="Path to the config file. Keep the same as the one used for evaluation")
+    parser.add_argument(
+        "--config_name",
+        "-c",
+        default="Rollover_Config.yaml",
+        type=str,
+        help="Path to the config file. Keep the same as the one used for evaluation",
+    )
+    parser.add_argument(
+        "--config_crash_name",
+        "-cc",
+        default="Rollover_speed_crash_Config.yaml",
+        type=str,
+        help="Path to the config file. Keep the same as the one used for evaluation",
+    )
 
     args = parser.parse_args()
     config_name = args.config_name
-    config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
-    with open(config_path, "r") as f: 
+    config_path = (
+        str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
+    )
+    with open(config_path, "r") as f:
         Config = yaml.safe_load(f)
     config_crash_name = args.config_crash_name
-    config_crash_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_crash_name
-    with open(config_crash_path, "r") as f: 
+    config_crash_path = (
+        str(Path(os.getcwd()).parent.absolute())
+        + "/Experiments/Configs/"
+        + config_crash_name
+    )
+    with open(config_crash_path, "r") as f:
         Config_crash = yaml.safe_load(f)
     ## call the plotting function, we'll extract data in there.
     Plot_metrics(Config, Config_crash)

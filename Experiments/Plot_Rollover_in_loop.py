@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import argparse
 
+
 def Plot_metircs(Config):
     # create a new graph for each scenario:
 
@@ -12,7 +13,7 @@ def Plot_metircs(Config):
     scenario_count = 0
 
     for scenario in Config["scenarios"]:
-        fig, axs = plt.subplots(1,2)
+        fig, axs = plt.subplots(1, 2)
         fig.set_size_inches(25.5, 5.5)
         fig.suptitle(scenario)
         axs[0].set_title("Success Rate")
@@ -26,18 +27,22 @@ def Plot_metircs(Config):
             time_taken = []
 
             for trial in range(Config["num_iters"]):
-                dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/" + model
+                dir_name = (
+                    str(Path(os.getcwd()).parent.absolute())
+                    + "/Experiments/Results/Rollover/"
+                    + model
+                )
                 filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
                 ## data has structure: state(17), goal(2), timestamp(1), success(1), damage(1)
                 data = np.load(filename)
                 ## extract the success and damage:
                 success_rate.append(data[:, -2].max().mean())
-                time_taken.append((data[-1, -3] - data[0,-3])/scenario_time_limit)
+                time_taken.append((data[-1, -3] - data[0, -3]) / scenario_time_limit)
 
                 ay = data[:, 10]
                 az = data[:, 11]
-                az_denom = np.clip(np.fabs(az),1,25)
-                lat_ratio = np.fabs(ay/az)
+                az_denom = np.clip(np.fabs(az), 1, 25)
+                lat_ratio = np.fabs(ay / az)
 
             ## take mean and std for all:
             success_rate = np.array(success_rate)
@@ -45,20 +50,42 @@ def Plot_metircs(Config):
 
             success_rate_mean = success_rate.mean()
             time_taken_mean = time_taken.mean()
-            time_taken_std = abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken,97.5))/2
+            time_taken_std = (
+                abs(np.percentile(time_taken, 2.5) - np.percentile(time_taken, 97.5))
+                / 2
+            )
 
             ## now plot the data:
             ## success and damage don't need standard deviation:
-            axs[0].bar(model, success_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10) 
-            axs[1].bar(model, time_taken_mean, yerr=time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
+            axs[0].bar(
+                model,
+                success_rate_mean,
+                align="center",
+                alpha=0.5,
+                ecolor="black",
+                capsize=10,
+            )
+            axs[1].bar(
+                model,
+                time_taken_mean,
+                yerr=time_taken_std,
+                align="center",
+                alpha=0.5,
+                ecolor="black",
+                capsize=10,
+            )
 
         fig.legend()
 
-        fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/" + scenario + ".png")
+        fig.savefig(
+            str(Path(os.getcwd()).parent.absolute())
+            + "/Experiments/Results/Rollover/"
+            + scenario
+            + ".png"
+        )
         ## close the figure:
         # plt.show()
         plt.close(fig)
-
 
     # # plot the average cost per unit time and success rate for all scenarios for each model:
     # fig, axs = plt.subplots(1,3)
@@ -67,7 +94,7 @@ def Plot_metircs(Config):
     # axs[0].set_title("Success Rate")
     # axs[1].set_title("Cost accrued normalized by maximum time allotted")
     # axs[2].set_title("time taken")
-    
+
     # for model in Config["models"]:
     #     avg_success_rate = []
     #     avg_cost_per_unit_time = []
@@ -123,19 +150,27 @@ def Plot_metircs(Config):
     #     axs[1].bar(model, avg_cost_per_unit_time_mean, yerr=avg_cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
     #     axs[2].bar(model, avg_time_taken_mean, yerr=avg_time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
 
-
     # fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Rollover/" + "avg_success_rate_cost_per_unit_time.png")
     # plt.close(fig)
+
 
 if __name__ == "__main__":
     ## add a parser:
     parser = argparse.ArgumentParser(description="Plot the accuracy of the models")
-    parser.add_argument("--config_name", "-c", default="Rollover_loop_config.yaml", type=str, help="Path to the config file. Keep the same as the one used for evaluation")
+    parser.add_argument(
+        "--config_name",
+        "-c",
+        default="Rollover_loop_config.yaml",
+        type=str,
+        help="Path to the config file. Keep the same as the one used for evaluation",
+    )
 
     args = parser.parse_args()
     config_name = args.config_name
-    config_path = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
-    with open(config_path, "r") as f: 
+    config_path = (
+        str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Configs/" + config_name
+    )
+    with open(config_path, "r") as f:
         Config = yaml.safe_load(f)
     ## call the plotting function, we'll extract data in there.
     Plot_metircs(Config)
