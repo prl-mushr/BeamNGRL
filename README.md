@@ -4,6 +4,9 @@
 1) Apply for a BeamNG academic license [here](https://register.beamng.tech/) (use your institute email ID. They usually respond quickly)
 2) Download version BeamNG.tech version 0.26 (for now we only support 0.26, will support newer versions soon) and follow their instructions on adding the key/licenses
 
+## Note:
+Right now we only support the small_island map. We will soon add support for all maps available in BeamNG (its a WIP). 
+
 ## Installation:
 1) Download the [map folder,](https://drive.google.com/drive/folders/1T4XLVU1tnPTZpCAUkvObrbnER6I_AnQW?usp=drive_link) and the [content folder](https://drive.google.com/drive/folders/1qTb1biMKTuAfmcfRviB0IcYbDuUO4Nqt?usp=sharing).
 2) If you are following the HOUND installation instructions, the install scripts will automatically pull this repository for you. You will however still need to pull this repository on your windows system.
