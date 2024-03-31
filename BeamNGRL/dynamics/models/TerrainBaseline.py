@@ -214,9 +214,9 @@ class SequentialContextMLP(DynamicsBase):
 
         with torch.no_grad():
             # this is just to remove non inertial forces (so that we get what the IMU would tell us)
-            states_next[..., 9]  = dV[..., 0]*self.std_state[9]  - states_next[..., 7]*states_next[..., 14]
-            states_next[..., 10] = dV[..., 1]*self.std_state[10] + states_next[..., 6]*states_next[..., 14]
-            states_next[..., 11] = dV[..., 2]*self.std_state[11] + self.GRAVITY*ct
+            states_next[..., 9]  = dV[..., 0]*self.std_state[9]  - (states_next[..., 7]*states_next[..., 14] - states_next[..., 8]*states_next[..., 13] + sp*self.GRAVITY)
+            states_next[..., 10] = dV[..., 1]*self.std_state[10] - (-states_next[..., 6]*states_next[..., 14] + states_next[..., 8]*states_next[..., 12] - sr*cp*self.GRAVITY)
+            states_next[..., 11] = dV[..., 2]*self.std_state[11] - (states_next[..., 6]*states_next[..., 13] - states_next[..., 7]*states_next[..., 12] - cp*cr*self.GRAVITY)
 
             states_next[..., 3] = roll
             states_next[..., 4] = pitch

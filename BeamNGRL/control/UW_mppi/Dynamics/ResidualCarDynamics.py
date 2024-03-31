@@ -110,6 +110,12 @@ class ResidualCarDynamics:
         module = SourceModule(cuda_code)
         self.rotate_crop = module.get_function("rotate_crop")
 
+        file_path = '{}/control/UW_mppi/Dynamics/{}.cpp'.format(folder_path, 'forward_rollout')
+        with open(file_path, 'r') as file:
+            cuda_code = file.read()
+        module = SourceModule(cuda_code)
+        self.forward_rollout = module.get_function("forward_rollout")
+
         self.BEVmap_height = gpuarray.to_gpu(np.zeros((self.BEVmap_size_px, self.BEVmap_size_px), dtype=dtype) )
         self.BEVmap_normal = gpuarray.to_gpu(np.zeros((self.BEVmap_size_px, self.BEVmap_size_px, 3), dtype=dtype) )
 
@@ -178,8 +184,6 @@ class ResidualCarDynamics:
         center = torch.clamp( ((self.states[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.int32, device=torch.device("cuda")), self.bev_input.shape[2], self.BEVmap_size_px - 1 - self.bev_input.shape[1]).squeeze(0)
         center = center.reshape((self.K*self.T, 2))
         angle_torch = self.states[..., 5].reshape((self.K * self.T))
-
-        # self.pycuda_ctx.push()
         
         center = self.tensor_to_gpuarray(center, np.int32)
         angle  = self.tensor_to_gpuarray(angle_torch,np.float32)
@@ -193,10 +197,6 @@ class ResidualCarDynamics:
                              np.int32(self.BEVmap_height.shape[1]), np.int32(self.BEVmap_height.shape[1]), np.int32(self.bev_input.shape[1]),
                              np.int32(self.bev_input.shape[2]), np.int32(self.max_threads), block=(self.crop_size,self.crop_size,1), grid=(1,1,self.max_threads))
         cuda.Context.synchronize()
-        # self.rotate_crop(self.BEVmap_height, self.output_images, angle, center, 
-        #                  np.int32(self.BEVmap_height.shape[1]), np.int32(self.BEVmap_height.shape[1]), np.int32(self.bev_input.shape[1]),
-        #                  np.int32(self.bev_input.shape[2]), np.int32(self.K*self.T), block=(self.crop_size,self.crop_size,1), grid=(1,1,int(self.K*self.T)))
-        # cuda.Context.synchronize()
         
         self.gpuarray_to_tensor(self.output_images, self.dummy_input, dtype=torch.float32, npdtype=np.float32)
         cuda.Context.synchronize()
@@ -205,12 +205,16 @@ class ResidualCarDynamics:
 
         self.bev_input = self.dummy_input.permute(2,0,1)
 
-        yaw = self.states[0,0,0,5]
-        residual_input_states = self.rotate_traj(self.states.clone(), rotation_angle= -yaw) ## remove yaw component
-        residual_corrected_states = self.dyn_model._forward(residual_input_states.squeeze(0), controls.squeeze(0), ctx_data={'rotate_crop': self.bev_input}, Evaluation=True)
-        states_new = self.rotate_traj(residual_corrected_states, rotation_angle=yaw)
-        self.states[..., 1:, :15] = states_new[..., 1:, :15].unsqueeze(0)
+        states_new = self.dyn_model._forward(self.states.squeeze(0), controls.squeeze(0), ctx_data={'rotate_crop': self.bev_input}, Evaluation=True)
         
+        self.pycuda_ctx.push()
+        state_new = self.tensor_to_gpuarray(states_new, np.float32)
+        self.forward_rollout(states_new, self.BEVmap_height, self.dt, self.K, self.T, self.NX, self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.car_l2, self.car_w2,
+                            block=(self.block_dim, 1, 1), grid=(self.grid_dim, 1))
+        self.gpuarray_to_tensor(state_new, self.states, torch.float32, np.float32)
+        cuda.Context.synchronize()
+        self.pycuda_ctx.pop()
+
         dt = time.time() - now
 
         self.dt_avg = self.dt_avg*0.8 + dt*0.2

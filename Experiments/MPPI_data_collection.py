@@ -167,26 +167,12 @@ def main(config_path=None, hal_config_path=None, args=None):
             controller = MPPI(dynamics, costs, sampling, MPPI_config, device)
             scenario_count = 0
 
-            if(model == "TerrainCNN"):
-                controller.Sampling.temperature = torch.tensor(0.05, device=device)
-            else:
-                controller.Sampling.temperature = temp_temperature
-
             for scenario in Config["scenarios"]:
                 # load the scenario waypoints:
                 WP_file = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy"
                 target_WP = np.load(WP_file)
                 start_pos = target_WP[0,:3]
                 start_quat = target_WP[0,3:]
-
-                temp_lethal_w = torch.clone(controller.Costs.lethal_w)
-                temp_roll_w = torch.clone(controller.Costs.roll_w)
-                temp_scaled_dt = torch.clone(controller.Sampling.scaled_dt)
-
-                if scenario.split('-')[0] == "race":
-                    controller.Costs.lethal_w = torch.tensor(10.0, device=device)
-                    controller.Costs.roll_w = torch.tensor(1.0, device=device) ## reduce weighting on physics costs
-                    controller.Sampling.scaled_dt = torch.tensor(Dynamics_config["dt"], device=device, dtype=dtype)
 
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
@@ -207,9 +193,11 @@ def main(config_path=None, hal_config_path=None, args=None):
                     ts = bng_interface.timestamp - last_reset_time
 
                     action = np.zeros(2)
-                    bng_interface.state_poll()
-                    timestamps.append(ts)
-                    state = np.copy(bng_interface.state)
+                    # warmup
+                    for i in range(50):
+                        bng_interface.state_poll()
+                        timestamps.append(ts)
+                        state = np.copy(bng_interface.state)
                     state[15:17] = action
                     state_data.append(state)
                     reset_data.append(True)
@@ -276,6 +264,7 @@ def main(config_path=None, hal_config_path=None, args=None):
                             timestamps.append(ts)
                             state_data.append(state)
                             reset_data.append(False)
+                            print(state[15:17])
                             # color_data.append(bng_interface.BEV_color)
                             # elev_data.append(bng_interface.BEV_heght)
                             # segmt_data.append(bng_interface.BEV_segmt)
@@ -308,9 +297,6 @@ def main(config_path=None, hal_config_path=None, args=None):
                         # elev_data = update_npy_datafile(elev_data, output_path / "bev_elev.npy")
                         # normal_data = update_npy_datafile(normal_data, output_path / "bev_normal.npy")
                 
-                controller.Costs.lethal_w = temp_lethal_w
-                controller.Costs.roll_w = temp_roll_w
-                controller.Sampling.scaled_dt = temp_scaled_dt
                 ## reset the weights
     except KeyboardInterrupt:
         pass
@@ -328,7 +314,7 @@ if __name__ == "__main__":
     # do the args thingy:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_name", type=str, default="Manual_Data_Collection_small.yaml", help="name of the config file to use")
-    parser.add_argument("--hal_config_name", type=str, default="offroad.yaml", help="name of the config file to use")
+    parser.add_argument("--hal_config_name", type=str, default="hound.yaml", help="name of the config file to use")
     parser.add_argument("--remote", type=bool, default=True, help="whether to connect to a remote beamng server")
     parser.add_argument("--host_IP", type=str, default="169.254.216.9", help="host ip address if using remote beamng")
     args = parser.parse_args()

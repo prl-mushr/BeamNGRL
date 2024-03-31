@@ -16,19 +16,19 @@ Cost_config:
 Dynamics_config:
   wheelbase: 0.33
   throttle_to_wheelspeed: 17.0
-  steering_max: 0.4
+  steering_max: 0.488
   dt: &delta_T 0.04
   D: 0.8 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
   B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
   C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
   lf: 0.15 ## length from car com to front axle
   lr: 0.15 ## length from car com to rear axle
-  Iz: 1.2 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
-  LPF_tau: 0.5
-  LPF_st: 0.5
-  LPF_th: 0.5
-  res_coeff: 0.05 ## resistance coefficient (proportional to speed)
-  drag_coeff: 0.05 # drag coefficient (proportional to speed squared)
+  Iz: 0.33 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  LPF_tau: 1.0
+  LPF_st: 1.0
+  LPF_th: 1.0
+  res_coeff: 0.0 ## resistance coefficient (proportional to speed)
+  drag_coeff: 0.0 # drag coefficient (proportional to speed squared)
   car_length: 0.33 # front to back distance of car
   car_width: 0.25 # track width of car. Measured as distance between extremes of the wheel (can be slightly off)
   cg_height: 0.125 ## height of cg, used for calculating load transfer.
@@ -46,7 +46,7 @@ Sampling_config:
 
 MPPI_config:
   ROLLOUTS: 1024
-  TIMESTEPS: &TIMESTEPS 32 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
+  TIMESTEPS: &TIMESTEPS 25 ## multiply by dynamics dt to find time horizon. Good values range between 0.8 seconds to 1.6 seconds for a small vehicle with low inertia
   BINS: 1
   u_per_command: 1  # how many control inputs do we want to use per MPPI optimization loop.
 
@@ -54,7 +54,7 @@ Map_config:
   map_size: &map_size 16 # in meters map_size x map_size
   map_res: &map_res 0.0625 ## this results in 256 x 256 pixels for the MPPI
   map_res_hitl: 0.25 ## this is the resolution at which the map is received
-  elevation_range: 4.0
+  elevation_range: 8.0
   map_name: "small_island"
   layers:
     color: 3
@@ -65,8 +65,8 @@ Map_config:
 
 ## this is where we throw all params relevant to training
 dataset:
-  # name: 'small_island_small_64'
-  name: 'hound_ros_data'
+  name: 'small_island_hound_64'
+  # name: 'hound_ros_data'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'
@@ -80,8 +80,8 @@ network:
 
   class: ParallelContextMLP ## name of the network to be used
   net_kwargs:
-    hidden_depth: 2
-    hidden_dim: 32
+    hidden_depth: 4
+    hidden_dim: 64
     batch_norm: True
     dt: *delta_T
     timesteps: *TIMESTEPS
@@ -90,14 +90,14 @@ network:
     patch_size: *patch_size
     mean_state: [0.0, 0.0, 0.0,
                  0.0, 0.0, 0.0, 
-                 4.0, 0.0, 0.0, 
+                 3.0, 0.0, 0.0, 
                  0.0, 0.0, 9.8,
                  0.0, 0.0, 0.0]
-    std_state: [8.0, 8.0, 4.0,
-                1.0, 1.0, 3.0, 
-                6.0, 3.0, 3.0, 
-                12.5, 12.5, 12.5, 
-                1.0, 1.0, 1.0]
+    std_state: [3.0, 3.0, 0.5, 
+                0.5, 0.5, 1.5,
+                3.0, 3.0, 3.0, 
+                3.0, 3.0, 3.0,
+                2.0, 2.0, 2.0]
     std_state_err: [2.0, 2.0, 0.5, 
                     0.25, 0.25, 0.25,
                     6.0, 3.0, 3.0,
@@ -113,9 +113,9 @@ network:
 loss: ResidualMSE_dV
 loss_std: [1.0,  1.0, 0.5, 
           0.05,0.05, 0.05, 
-          0.5,  0.2, 0.2, 
+          0.1,  0.1, 0.1, 
           1.0,  1.0, 1.0,
-          1.0,  1.0, 0.1]
+          0.5,  0.7, 0.1]
 loss_dt: *delta_T
 
 

@@ -77,6 +77,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
     float fl[3], fr[3], bl[3], br[3];
     float res_inv = 1.0f/BEVmap_res;
     float last_vx = 0.0f;
+    __syncthreads();
 
     for(int t = 0; t < timesteps-1; t++)
     {

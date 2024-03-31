@@ -14,16 +14,16 @@ Cost_config:
   critical_vert_spd: 0.2
 
 Dynamics_config:
-  wheelbase: 0.33
+  wheelbase: 2.6
   throttle_to_wheelspeed: 20.0
-  steering_max: 0.488
-  dt: 0.05
+  steering_max: 0.6
+  dt: 0.02
   D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
   B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
   C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
-  lf: 0.15 ## length from car com to front axle
-  lr: 0.15 ## length from car com to rear axle
-  Iz: 0.1 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  lf: 1.3 ## length from car com to front axle
+  lr: 1.3 ## length from car com to rear axle
+  Iz: 1.7 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
   LPF_tau: 0.2 ## low pass filter tau for simulating spring damper setup
   LPF_st: 1.0
   LPF_th: 1.0
@@ -74,7 +74,7 @@ vehicle:
   max_steer: 0.488
 
 models: ["slip3d_LPF_drag"]
-scenarios: ['race-0'] #, 'race-1'] #, 'WP_file_offroad']
+scenarios: ['race-2'] #, 'race-1'] #, 'WP_file_offroad']
 time_limit: [120.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
 lookahead:  [20.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
@@ -84,7 +84,7 @@ start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
 
 ## train/test:
-output_dir: "train"
+output_dir: "valid"
 
 save_data: True
 run_lockstep: True
@@ -93,7 +93,7 @@ perturb_inputs: False
 
 manual_input: True
 ## this is where we throw all params relevant to processing the data
-raw_data_dir: 'manual_hard'
+raw_data_dir: 'manual_tough'
 # Total traj len = future + past + 1 (current)
 future_traj_len: 50
 past_traj_len: 50
@@ -107,7 +107,7 @@ split:
 
 ## this is where we throw all params relevant to training
 dataset:
-  name: 'manual_hard'
+  name: 'manual_tough'
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

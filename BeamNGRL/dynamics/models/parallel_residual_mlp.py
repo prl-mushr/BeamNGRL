@@ -41,14 +41,15 @@ class ParallelContextMLP(DynamicsBase):
         self.bev_cent = int(self.crop_size/2)
         self.dt = dt
 
-        self.state_dim = 15
+        self.state_dim = 11 # dynamics only depends on: r,p,vx,vy,vz,wx,wy,wz,ax,ay,az
         self.ctrl_dim = 2
+        self.predict_dim = 12 # V, dV, w
         self.context_dim = self.crop_size ## square root of the number of pixels in the patch -- this is somewhat arbitrary but works as a good approximation.
         self.timesteps = timesteps ## TODO this should be provided during initialization
         self.normalized_input_dim = self.context_dim + self.state_dim + self.ctrl_dim
         self.input_dim = self.timesteps * self.normalized_input_dim
-        self.output_dim = self.timesteps*self.state_dim*2
-
+        self.output_dim = self.timesteps* self.predict_dim
+        self.GRAVITY = torch.tensor(9.81, dtype=self.dtype, device=self.d)
         # TODO: these should be loaded programmatically.
         if mean_state is None or std_state is None or std_state_err is None or mean_control is None or std_control is None:
             print("=====================================================================")
@@ -80,7 +81,7 @@ class ParallelContextMLP(DynamicsBase):
 
         self.kernel_size = 3
         self.stride = 1
-        self.channels = 2
+        self.channels = 4
         K_pool = 3
         S_pool = 2
         L1 = int((self.crop_size-self.kernel_size)/self.stride) + 1
@@ -118,11 +119,9 @@ class ParallelContextMLP(DynamicsBase):
         bev_input = ctx_data['rotate_crop'].clone().detach()
         vU = torch.zeros((k, t, self.state_dim + self.ctrl_dim), dtype=self.dtype, device=self.d)
 
-        vU[..., :2]  = (states_next[..., :2]   - self.mean_state[:2]  )/(self.std_state[:2] * self.time_scaling)
-        vU[..., 5:9] = (states_next[..., 5:9]  - self.mean_state[5:9] )/(self.std_state[5:9]* self.time_scaling)
-        vU[..., 2:5] = (states_next[..., 2:5]  - self.mean_state[2:5] )/ self.std_state[2:5]
-        vU[...,9:15] = (states_next[..., 9:15] - self.mean_state[9:15])/ self.std_state[9:15]
-        vU[...,15:]  = (ctrls - self.mean_control)/self.std_control
+        vU[..., :2] = (states_next[..., 3:5]  - self.mean_state[3:5] )/ self.std_state[3:5] ## rp
+        vU[..., 2:11] = (states_next[..., 6:15]  - self.mean_state[6:15] )/(self.std_state[6:15]) #v,a,w
+        vU[...,11:]  = (ctrls - self.mean_control)/self.std_control
 
         vU = vU.reshape(k*t, self.state_dim + self.ctrl_dim)
 
@@ -132,16 +131,69 @@ class ParallelContextMLP(DynamicsBase):
         now = time.time()
         context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
         vUc = torch.cat((vU, context), dim=-1).reshape(k, t * self.normalized_input_dim)
-        self.execution_dt = time.time() - now
         dV = self.main(vUc).reshape(k, t, self.output_dim//t)
 
-        gain =  torch.sigmoid(dV[..., self.state_dim:])
-        network_output = dV[..., :self.state_dim] * self.std_state_err * self.timesteps * self.dt
-        network_output[..., :2] *= self.time_scaling
-        network_output += self.mean_state
-        out = states_next[..., :self.state_dim]*(1-gain) + gain*network_output
+        # predict only dV, dW:
+        states_next[..., 6:9]   = states_next[...,[0], 6:9]   + self.dt * torch.cumsum(dV[...,0:3], dim=-2) * self.std_state[9:12] 
+        states_next[..., 12:15] = states_next[...,[0], 12:15] + self.dt * torch.cumsum(dV[...,3:6], dim=-2) * self.std_state[12:15]
+        # states_next[..., 3:5]   = self.mean_state[3:5]   + dV[..., 6:8]  * self.std_state[3:5]
+        # states_next[..., 9:12]  = states_next[...,[0],  9:12]  + dV[..., 9:12] * self.std_state[9:12]
+        self.execution_dt = time.time() - now
+        # cr = torch.cos(states_next[..., 3])
+        # sr = torch.sin(states_next[..., 3])
+        # cp = torch.cos(states_next[..., 4])
+        # sp = torch.sin(states_next[..., 4])
 
-        return out
+        # states_next[..., 9]  = dV[..., 0]*self.std_state[9]  - (states_next[..., 7]*states_next[..., 14] - states_next[..., 8]*states_next[..., 13] + sp*self.GRAVITY)
+        # states_next[..., 10] = dV[..., 1]*self.std_state[10] - (-states_next[..., 6]*states_next[..., 14] + states_next[..., 8]*states_next[..., 12] - sr*cp*self.GRAVITY)
+        # states_next[..., 11] = dV[..., 2]*self.std_state[11] - (states_next[..., 6]*states_next[..., 13] - states_next[..., 7]*states_next[..., 12] - cp*cr*self.GRAVITY)
+
+
+        # with torch.no_grad():
+        # cr = torch.cos(states_next[..., 0, 3])
+        # sr = torch.sin(states_next[..., 0, 3])
+        # cp = torch.cos(states_next[..., 0, 4])
+        # sp = torch.sin(states_next[..., 0, 4])
+        # cy = torch.cos(states_next[..., 0, 5])
+        # sy = torch.sin(states_next[..., 0, 5])
+        # for i in range(1, t):
+        #     wx = states_next[..., i, 12]
+        #     wy = states_next[..., i, 13]
+        #     wz = states_next[..., i, 14]
+        #     # states_next[..., i, 3] = states_next[..., i-1, 3] + self.dt*( wx*1 + wy*(sr*sp/cp) + wz*(sp*cr/cp) )
+        #     # states_next[..., i, 4] = states_next[..., i-1, 4] + self.dt*( wx*0 + wy*cr         + wz*(-sr)      )
+        #     states_next[..., i, 5] = states_next[..., i-1, 5] + self.dt*( wx*0 + wy*(sr/cp)    + wz*(cr/cp)    )
+
+        #     cr = torch.cos(states_next[..., i, 3])
+        #     sr = torch.sin(states_next[..., i, 3])
+        #     cp = torch.cos(states_next[..., i, 4])
+        #     sp = torch.sin(states_next[..., i, 4])
+        #     cy = torch.cos(states_next[..., i, 5])
+        #     sy = torch.sin(states_next[..., i, 5])
+
+        #     states_next[..., i, 9]  = dV[..., i, 0]*self.std_state[9]  - (states_next[..., i, 7]*states_next[..., i, 14] - states_next[..., i, 8]*states_next[..., i, 13] + sp*self.GRAVITY)
+        #     states_next[..., i, 10] = dV[..., i, 1]*self.std_state[10] - (-states_next[..., i, 6]*states_next[..., i, 14] + states_next[..., i, 8]*states_next[..., i, 12] - sr*cp*self.GRAVITY)
+        #     states_next[..., i, 11] = dV[..., i, 2]*self.std_state[11] - (states_next[..., i, 6]*states_next[..., i, 13] - states_next[..., i, 7]*states_next[..., i, 12] - cp*cr*self.GRAVITY)
+
+        #     # vx = states_next[..., i-1, 6]
+        #     # vy = states_next[..., i-1, 7]
+        #     # vz = states_next[..., i-1, 8]
+
+        #     # ## using the same rotation matrix, just do G*R where G is [0,0,9.8] and then subtract.
+        #     # ## Details in "Vehicle Models and Optimal Control on a Nonplanar Surface"
+        #     # ax = states_next[..., i, 9]  + vy*wz - vz*wy + sp*9.8
+        #     # ay = states_next[..., i, 10] - vx*wz + vz*wx - sr*cp*9.8
+        #     # az = states_next[..., i, 11] + vx*wy - vy*wx - cp*cr*9.8
+
+        #     # states_next[..., i, 6] = states_next[..., i-1, 6] + ax * self.dt;
+        #     # states_next[..., i, 7] = states_next[..., i-1, 7] + ay * self.dt;
+        #     # states_next[..., i, 8] = states_next[..., i-1, 8] + az * self.dt;
+        #     states_next[..., i, 0] = states_next[..., i-1, 0] + self.dt*( states_next[..., i, 6]*cp*cy + states_next[..., i, 7]*(sr*sp*cy - cr*sy) + states_next[..., i, 8]*(cr*sp*cy + sr*sy) )
+        #     states_next[..., i, 1] = states_next[..., i-1, 1] + self.dt*( states_next[..., i, 6]*cp*sy + states_next[..., i, 7]*(sr*sp*sy + cr*cy) + states_next[..., i, 8]*(cr*sp*sy - sr*cy) )
+        #     states_next[..., i, 2] = states_next[..., i-1, 2] + self.dt*( states_next[..., i, 6]*(-sp) + states_next[..., i, 7]*(sr*cp)            + states_next[..., i, 8]*(cr*cp)            )
+                
+        
+        return states_next
 
     def _rollout(
             self,

@@ -20,14 +20,14 @@ Map_config:
 Dynamics_config:
   wheelbase: 0.33
   throttle_to_wheelspeed: 17.0
-  steering_max: 0.488
+  steering_max: 2.11
   dt: &delta_T 0.04
   D: 0.8 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
   B: 6.8 ## for tarmac, grass: 5.0-6.8, loose gravel/dirt: 1.5-2.0
   C: 1.5 ## for tarmac, grass: 1.5-2.0, loose gravel/dirt: 1.0-1.5
   lf: 0.15 ## length from car com to front axle
   lr: 0.15 ## length from car com to rear axle
-  Iz: 0.1 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
+  Iz: 0.7 ## mass normalized moment of inertia. could have been calculated using 0.33*(car_length^2 + car_width^2)
   LPF_tau: 0.5
   LPF_st: 0.5
   LPF_th: 0.5
@@ -47,7 +47,8 @@ vehicle:
   model: "offroad"
 
 dataset:
-  name: 'hound_ros_data'
+  name: 'small_island_small_64'
+  name: "hound_ros_data"
   augment: False
   state_input_key: 'future_states'
   control_input_key: 'future_ctrls'

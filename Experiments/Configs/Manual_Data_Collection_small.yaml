@@ -15,7 +15,7 @@ Cost_config:
 
 Dynamics_config:
   wheelbase: 0.33
-  throttle_to_wheelspeed: 20.0
+  throttle_to_wheelspeed: 17.0
   steering_max: 0.488
   dt: 0.04
   D: 0.6 ## approx values: tarmac: 1.0, grass: 1.2, loose gravel: 0.6, packed dirt: 0.8
@@ -74,11 +74,11 @@ vehicle:
   max_steer: 0.488
 
 models: ["slip3d_LPF_drag"]
-scenarios: ['race-4'] #, 'race-1'] #, 'WP_file_offroad']
+scenarios: ['hard'] #, 'race-1'] #, 'WP_file_offroad']
 time_limit: [120.0] #,     50.0] #, 180.0]  # (simulated) time limit for each scenario.
 lookahead:  [20.0] #,     4.0] #, 20.0]  # lookahead on scenario by scenario basis
 
-num_iters: 2
+num_iters: 10
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0

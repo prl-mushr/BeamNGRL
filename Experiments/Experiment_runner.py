@@ -35,22 +35,22 @@ def get_dynamics(model, Config):
         print("loading TerrainCNN")
         Dynamics_config["network"] = Dynamics_config["network_baseline"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_baseline"]
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/baseline_offroad/" + Dynamics_config["model_weights"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/baseline/" + Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == "KARMA":
         print("loading KARMA")
         Dynamics_config["network"] = Dynamics_config["network_KARMA"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA"]
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_offroad/" + Dynamics_config["model_weights"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual/" + Dynamics_config["model_weights"]
         dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == "KARMA_bad_sys":
         print("loading KARMA_bad_sys") # I print this separately to make sure that the if condition was entered. # i am not stupid.
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 0.6 ## 75 % of the original D
+        Dynamics_config["D"] = 1.2 ## 150 % of the original D
         Dynamics_config["network"] = Dynamics_config["network_KARMA"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA_bad_sys"]## you modified this last night. Results of previous experiments indicate improvement, not so much
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_bad_sys/" + Dynamics_config["model_weights"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_bad_sys_test/" + Dynamics_config["model_weights"]
         dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
         Dynamics_config["D"] = temp_D ## change it back
 
@@ -69,7 +69,7 @@ def get_dynamics(model, Config):
         temp_LPF = Dynamics_config["LPF_tau"]
         temp_D = Dynamics_config["D"]
         Dynamics_config["LPF_tau"] = 0.8 ## apply a LPF with tau = 0.8
-        Dynamics_config["D"] = 0.6 ## 150 % of the original D
+        Dynamics_config["D"] = 0.4 ## 150 % of the original D
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["D"] = temp_D ## change it back
         Dynamics_config["LPF_tau"] = temp_LPF ## change it back
@@ -151,7 +151,7 @@ def main(config_path=None, hal_config_path=None, args=None):
         camera_config=hal_Config["camera"],
         lidar_config=hal_Config["lidar"],
         accel_config=hal_Config["mavros"],
-        burn_time=0.02,
+        burn_time=0.04,
         run_lockstep=Config["run_lockstep"],
     )
     bng_interface.smooth_map = True
@@ -201,7 +201,7 @@ def main(config_path=None, hal_config_path=None, args=None):
 
                 for trial in range(Config["num_iters"]):
                     trial_pos = np.copy(start_pos)
-                    trial_pos[:2] += noise_list[trial,:] # use cached noise for repeatability
+                    trial_pos[:2] += noise_list[trial,:]*0.25 # use cached noise for repeatability
                     bng_interface.reset(start_pos=trial_pos, start_quat=start_quat)
                     current_wp_index = 0  # initialize waypoint index with 0
                     goal = None
@@ -252,7 +252,7 @@ def main(config_path=None, hal_config_path=None, args=None):
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
                         # costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(255*BEV_path.cpu().numpy().astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
-                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=2, Ki=0.05, Kd=0.0, FF_gain=0.0)
+                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=4, Ki=0.05, Kd=0.0, FF_gain=0.0)
                         step_cost = controller.Costs.step_cost.cpu().numpy()
 
                         damage = False

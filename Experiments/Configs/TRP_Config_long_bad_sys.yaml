@@ -66,7 +66,7 @@ Map_config:
 ## this is where we throw all params relevant to training
 dataset:
   name: 'small_island_manual_200'
-  # name: 'small_island_hard_64'
+  # name: 'small_island_hard_200'
   # name: 'experiment_data_64'
   augment: False
   state_input_key: 'future_states'
@@ -81,8 +81,8 @@ network:
 
   class: ParallelContextMLP ## name of the network to be used
   net_kwargs:
-    hidden_depth: 2
-    hidden_dim: 32
+    hidden_depth: 4
+    hidden_dim: 64
     batch_norm: True
     dt: *delta_T
     timesteps: *TIMESTEPS
@@ -95,10 +95,10 @@ network:
                  0.0, 0.0, 9.8,
                  0.0, 0.0, 0.0]
     std_state: [64.0, 64.0, 32.0,
-                1.0, 1.0, 3.0, 
-                16.0, 6.0, 6.0, 
-                12.5, 12.5, 12.5, 
-                1.0, 1.0, 1.0]
+              1.0, 1.0, 3.0, 
+              12.5, 12.5, 12.5, 
+              12.5, 12.5, 12.5, 
+              3.0, 3.0, 3.0]
     std_state_err: [4.0, 4.0, 0.5, 
                     0.25, 0.25, 0.25,
                     4.0, 4.0, 4.0,
@@ -114,9 +114,9 @@ network:
 loss: ResidualMSE_dV
 loss_std: [1.0,  1.0, 0.5, 
           0.05,0.05, 0.05, 
-          0.5,  0.2, 0.2, 
+          0.9,  0.9, 0.9, 
           1.0,  1.0, 1.0,
-          1.0,  1.0, 0.1]
+          0.5,  0.7, 0.1]
 loss_dt: *delta_T
 
 bag_dirs: ["IL_bags_2/bags"]

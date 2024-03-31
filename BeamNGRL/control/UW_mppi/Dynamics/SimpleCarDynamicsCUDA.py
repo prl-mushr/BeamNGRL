@@ -115,5 +115,7 @@ class SimpleCarDynamics:
                 block=(self.block_dim, 1, 1), grid=(self.grid_dim, 1))
         cuda.Context.synchronize()
         self.gpuarray_to_tensor(state_, self.states, torch.float32, np.float32)
+        cuda.Context.synchronize()
+
         dt = time.time() - now
         return self.states

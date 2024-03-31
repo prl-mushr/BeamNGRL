@@ -7,6 +7,8 @@ import argparse
 from scipy.stats import mannwhitneyu, t as student_t
 from scipy.stats import norm
 
+# TODO: I should have a utils directory that takes care of these statistical functions no?
+
 def conf(data):
     # Sample size
     n = len(data)*10
@@ -47,145 +49,92 @@ def binomial_proportion_ci(success_arr, confidence_level=0.95):
     return margin_of_error
 
 def Plot_metircs(Config):
-    # create a new graph for each scenario:
+    # for each scenario, plot a graph of success rate vs time taken for each model, where we set the time limit to be the maximum time taken by any model if there is damage:
+    # the plot will be a scatter plot with the x-axis being the time taken and the y-axis being the success rate
     time_limit = Config["time_limit"]
     scenario_count = 0
+    color_palette = 'plasma'
+    original_colors = plt.get_cmap(color_palette)(range(256))
+
+    skips = 256 // len(Config["models"])
+    colors = original_colors[::skips]
 
     for scenario in Config["scenarios"]:
-        fig, axs = plt.subplots(1,2)
-        fig.set_size_inches(15, 5.5)
-        fig.suptitle(scenario)
-        axs[0].set_title("Success Rate")
-        # axs[1].set_title("Damage Rate")
-        axs[1].set_title("Time Taken")
-        # axs[3].set_title("Cost accrued normalized by maximum time allotted")
+        fig, axs = plt.subplots(1,1)
+        fig.set_size_inches(4, 3)
+        scn_type = scenario.split('-')[0]
+        
+        fig.subplots_adjust(left=0.15, right=0.99, top=0.9, bottom=0.15)
 
+        axs.set_title(scn_type.title())
         scenario_time_limit = time_limit[scenario_count]
+        wp_radius = Config["wp_radius"][scenario_count]
         scenario_count += 1
 
-        for model in Config["models"]:
-            success_rate = []
-            damage_rate = []
-            time_taken = []
-            cost_per_unit_time = []
+        # load the waypoints corresponding to this scenario:
+        waypoints = np.load(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Waypoints/" + scenario + ".npy")
+        # make the waypoints evenly spaced. The waypoints are in the form [x, y, z, q_x, q_y, q_z, q_w]. We only care about making them evenly spaced in the x-y plane:
+        waypoints = waypoints[:, :2]
+        # I want the waypoint spacing to be 1 meter. So, create a new list of waypoints where we only add the new waypoint if it is at least 1 meter away from the last one:
+        new_waypoints = [waypoints[0]]
+        for i in range(1, waypoints.shape[0]):
+            if np.linalg.norm(waypoints[i] - new_waypoints[-1]) >= 1:
+                new_waypoints.append(waypoints[i])
+        waypoints = np.array(new_waypoints)
+        # find the waypoint that is wp_radius away from the goal:
+        goal = waypoints[-1]
+        for i in range(waypoints.shape[0]):
+            if np.linalg.norm(waypoints[i] - goal) <= wp_radius:
+                break
+        print(i)
+        waypoints = waypoints[:i+1]
+        length_waypoints = waypoints.shape[0]
 
+        count = 0
+        for model in Config["models"]:
+            max_progress_list = []
+            time_taken = np.arange(0, scenario_time_limit, 0.04)
             for trial in range(Config["num_iters"]):
                 dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + model
                 filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
                 ## data has structure: state(17), goal(2), timestamp(1), success(1), damage(1)
                 data = np.load(filename)
-                ## extract the success and damage:
-                success_rate.append(data[:, -2].max().mean())
+                ## for every point in the agent's trajectory, find the closest waypoint in the list of waypoints. Do this in a vectorized manner:
+                agent_trajectory = data[:, :2]
+                # I want the maximum progress made vs timestep
+                max_prog = np.zeros(int(scenario_time_limit*25))
+                for i in range(0, int(scenario_time_limit*25)):
+                    # progress is the index of the closest waypoint to the agent's position at this timestep:
+                    if i < agent_trajectory.shape[0]:
+                        progress = (np.argmin(np.linalg.norm(waypoints - agent_trajectory[i], axis=1)))/length_waypoints
+                        # what I want to track is the maximum progress made by the agent at any timestep, so append a new progress value only if it is greater than the last one, otherwise, keep the last one:
+                        if i == 0:
+                            max_progress = progress
+                        else:
+                            max_progress = max(max_progress, progress)
+                        # the time taken is the timestamp of the last timestep:
+                    max_prog[i] = max_progress
+                max_progress_list.append(max_prog)
+            # convert progress and time taken to numpy arrays:
+            max_progress_list = np.array(max_progress_list)
+            # calculate the mean and std of max_progress_list:
+            mean_progress = np.mean(max_progress_list, axis=0)
+            # use the conf function for confidence intervals:
+            conf_progress = conf(max_progress_list)
+            # plot the mean progress vs time taken, with alpha = 0.5:
+            color = colors[count]
+            axs.plot(time_taken, mean_progress, label=model, color=color)
+            axs.fill_between(time_taken, mean_progress - conf_progress, mean_progress + conf_progress, alpha=0.2, color= color)
+            count += 1
+        axs.set_xlabel("Time Taken")
+        axs.set_ylabel("Progress Made")
+        axs.legend()
 
-                ## extract the time taken using the last timestamp:
-                roll = data[:, 3]
-                pitch = data[:, 4]
-                if roll.any() > np.pi/2 or data[:, -2].any() != 1:
-                    time_taken.append(1)
-                    if roll.any() > np.pi/2:
-                        damage_rate.append(1)
-                else:
-                    time_taken.append(data[:, -3].max().mean()/scenario_time_limit)
-                    damage_rate.append(data[:, -1].max().mean())
-                step_cost = data[:, -4]
-                cost_per_unit_time.append(np.sum(step_cost, where=~np.isnan(step_cost)))
-            ## take mean and std for all:
-            success_rate = np.array(success_rate)
-            indices = np.where(success_rate == 1)
-            damage_rate = np.array(damage_rate)
-            time_taken = np.array(time_taken)
-            cost_per_unit_time = np.array(cost_per_unit_time)
-            ## now take mean and std:
-            success_rate_mean = success_rate.mean()
-            damage_rate_mean = damage_rate.mean()
-            
-            time_taken_mean = time_taken.mean()
-            time_taken_std = conf(time_taken)
-            cost_per_unit_time_mean = np.array(cost_per_unit_time).mean()
-            cost_per_unit_time_std = conf(np.array(cost_per_unit_time))
-            success_confidence = binomial_proportion_ci(success_rate)
-            ## now plot the data:
-            ## success and damage don't need standard deviation:
-            axs[0].bar(model, success_rate_mean, yerr=success_confidence, align='center', alpha=0.5, ecolor='black', capsize=10) 
-            # axs[1].bar(model, damage_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10) 
-            ## other metrics need standard deviation:
-            axs[1].bar(model, time_taken_mean, yerr=time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
-            # axs[3].bar(model, cost_per_unit_time_mean, yerr=cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
-
-        fig.legend()
-
-        fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + scenario + ".png")
+        fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + scenario + "_test.png")
         ## close the figure:
         # plt.show()
-        plt.close(fig)
+        # plt.close(fig)
 
-    exit()
-    # # plot the average cost per unit time and success rate for all scenarios for each model:
-    # fig, axs = plt.subplots(1,3)
-    # fig.set_size_inches(25.5, 5.5)
-    # fig.suptitle("Average Success Rate and Cost per unit time for all scenarios")
-    # axs[0].set_title("Success Rate")
-    # axs[1].set_title("Cost accrued normalized by maximum time allotted")
-    # axs[2].set_title("time taken")
-    
-    # for model in Config["models"]:
-    #     avg_success_rate = []
-    #     avg_cost_per_unit_time = []
-    #     avg_time_taken = []
-    #     scenario_count = 0
-    #     for scenario in Config["scenarios"]:
-    #         scenario_time_limit = time_limit[scenario_count]
-    #         scenario_count += 1
-    #         success_rate = []
-    #         cost_per_unit_time = []
-    #         damage_rate = []
-    #         time_taken = []
-    #         for trial in range(Config["num_iters"]):
-    #             dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + model
-    #             filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
-    #             ## data has structure: state(17), goal(2), timestamp(1), success(1), damage(1)
-    #             data = np.load(filename)
-    #             ## extract the success and damage:
-    #             success_rate.append(data[:, -2].max().mean())
-
-    #             ## extract the time taken using the last timestamp:
-    #             roll = data[:, 3]
-    #             pitch = data[:, 4]
-    #             if roll.any() > np.pi/2:
-    #                 time_taken.append(1.0)
-    #                 damage_rate.append(1)
-    #             else:
-    #                 time_taken.append(data[:, -3].max().mean()/scenario_time_limit)
-    #                 damage_rate.append(data[:, -1].max().mean())
-
-    #             ay = data[:, 10]
-    #             az = data[:, 11]
-    #             az_denom = np.clip(np.fabs(az),1,25)
-    #             ct = np.sqrt(np.clip(1 - (np.square(np.sin(roll)) + np.square(np.sin(pitch))), 0.01,1) )
-    #             cost = np.clip((1/ct) - critical_SA, 0, 10) + np.clip(np.abs(ay/az_denom) - critical_RI, 0, 10) + np.clip(np.abs(az - GRAVITY) - critical_vert_acc, 0, 10.0) + 5*np.clip(np.abs(vz) - critical_vert_spd, 0, 10.0)
-    #             # cost /= scenario_time_limit
-    #             cost_per_unit_time.append(cost.sum())
-    #         avg_success_rate.append(np.array(success_rate).mean())
-    #         avg_cost_per_unit_time.append(np.array(cost_per_unit_time).mean())
-    #         avg_time_taken.append(np.array(time_taken).mean())
-    #     ## now plot the data:
-    #     avg_success_rate = np.array(avg_success_rate)
-    #     avg_cost_per_unit_time = np.array(avg_cost_per_unit_time)
-    #     # take the mean and std:
-    #     avg_success_rate_mean = avg_success_rate.mean()
-    #     avg_success_rate_std = conf(avg_success_rate)
-    #     avg_cost_per_unit_time_mean = avg_cost_per_unit_time.mean()
-    #     avg_cost_per_unit_time_std = conf(avg_cost_per_unit_time)
-    #     avg_time_taken_mean = np.array(avg_time_taken).mean()
-    #     avg_time_taken_std = conf(np.array(avg_time_taken))
-    #     ## plot the data:
-    #     axs[0].bar(model, avg_success_rate_mean, align='center', alpha=0.5, ecolor='black', capsize=10)
-    #     axs[1].bar(model, avg_cost_per_unit_time_mean, yerr=avg_cost_per_unit_time_std, align='center', alpha=0.5, ecolor='black', capsize=10)
-    #     axs[2].bar(model, avg_time_taken_mean, yerr=avg_time_taken_std, align='center', alpha=0.5, ecolor='black', capsize=10)
-
-
-    # fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + "avg_success_rate_cost_per_unit_time.png")
-    # plt.close(fig)
 
 if __name__ == "__main__":
     ## add a parser:

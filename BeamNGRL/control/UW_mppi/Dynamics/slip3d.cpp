@@ -145,7 +145,7 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
         sp = sinf(pitch);
         cr = cosf(roll);
         sr = sinf(roll);
-        ct = nan_to_num(sqrtf(1 - (sp*sp) - (sr*sr)), 0.0); // if roll and pitch are super large at the same time this can go nan.
+        // ct = nan_to_num(sqrtf(1 - (sp*sp) - (sr*sr)), 0.0); // if roll and pitch are super large at the same time this can go nan.
 
         wx = roll_rate - sp*yaw_rate;
         wy = cp*sr*yaw_rate + cr*pitch_rate;
@@ -181,15 +181,15 @@ __global__ void rollout(float* state, const float* controls, const float* BEVmap
 
         ax = Frx + Ffx * cosf(st) - Ffy * sinf(st) + sp*GRAVITY;
         // ax = clamp(ax, -max_acc, max_acc);
-        ay = Fry + Ffy * cosf(st) + Ffx * sinf(st) + sr*GRAVITY;
+        ay = Fry + Ffy * cosf(st) + Ffx * sinf(st) + sr*cp*GRAVITY;
         // ay = clamp(ay, -max_acc, max_acc);
-        az = GRAVITY*ct - vx*wy + vy*wx; // don't integrate this acceleration
+        az = GRAVITY*cr*cp - vx*wy + vy*wx; // don't integrate this acceleration
         // az = clamp(az, -max_acc, max_acc);
         alpha_z = (Ffx * sinf(st) * lf + Ffy * lf * cosf(st) - Fry * lr) / Iz;
 
-        vx += (ax + vy*wz) * dt;
+        vx += (ax + vy*wz - sp*GRAVITY) * dt;
         // vx = clamp(vx, -max_vel, max_vel);
-        vy += (ay - vx*wz) * dt;
+        vy += (ay - vx*wz - sr*cp*GRAVITY) * dt;
         // vy = clamp(vy, -max_vel, max_vel);
         wz += alpha_z * dt;
 
