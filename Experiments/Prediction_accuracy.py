@@ -58,10 +58,10 @@ def get_dynamics(model, Config):
     elif model == "KARMA_bad_sys":
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 1.2 ## 50 % of the original D
+        Dynamics_config["D"] = 0.4 ## 50 % of the original D
         Dynamics_config["network"] = Dynamics_config["network_KARMA"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA_bad_sys"]## you modified this last night. Results of previous experiments indicate improvement, not so much
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_bad_sys_test/" + Dynamics_config["model_weights"]
+        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_bad_sys/" + Dynamics_config["model_weights"]
         dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
         Dynamics_config["D"] = temp_D ## change it back
 
@@ -90,7 +90,7 @@ def get_dynamics(model, Config):
         # temporarily change the dynamics type to noslip3d
         Dynamics_config["type"] = "slip3d"
         temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 1.2 ## 50 % of the original D
+        Dynamics_config["D"] = 0.4 ## 50 % of the original D
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["D"] = temp_D ## change it back
     elif model == 'slip3d_LPF':
@@ -227,10 +227,9 @@ def evaluator(
             freq_list = np.array(freq_list)
             print("Frequency Analysis:")
             print(freq_list.mean(axis=0))
-
+            print(len(indices))
         else:
             indices = None
-        print(len(indices))
         for model in config['models']:
             count = 0
             dynamics = get_dynamics(model, config)
