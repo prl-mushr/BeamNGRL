@@ -1,5 +1,10 @@
 # BeamNGRL
 
+## Note to potential users:
+This repository is part of a bigger effort at the University of Washington towards democratizing off-road autonomy. In its current state, it is "functional", as in, the instructions provided here "should" work. 
+However, as this repository is being actively used by on-going research projects, it is possible that the functionality proposed in that work may not currently exist, and will be incorporated in a while.
+We strongly believe in open-sourcing our work so that others can build off of it, so trust that if someone promised to open-source the code related to their paper that builds on this repository, it will be open sourced in a timely fashion.
+
 ## Getting BeamNG:
 1) Apply for a BeamNG academic license [here](https://register.beamng.tech/) (use your institute email ID. They usually respond quickly)
 2) Download version BeamNG.tech version 0.26 (for now we only support 0.26, will support newer versions soon) and follow their instructions on adding the key/licenses
@@ -323,3 +328,13 @@ python Extract_map.py
 ```
 The output of this script is already available in the map folder.
 
+
+### ACKNOWLEDGEMENT:
+This repository was part of the following works. If you found this repository or its related repositories (such as BeamNGRL, hound_hardware) useful in your research, please cite the following paper.
+```
+@article{talia2023hound,
+  title={HOUND: An Open-Source, Low-cost Research Platform for High-speed Off-road Underactuated Nonholonomic Driving},
+  author={Talia, Sidharth and Schmittle, Matt and Lambert, Alexander and Spitzer, Alexander and Mavrogiannis, Christoforos and Srinivasa, Siddhartha S},
+  journal={arXiv preprint arXiv:2311.11199},
+  year={2023}
+}
