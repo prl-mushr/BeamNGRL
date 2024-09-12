@@ -345,17 +345,19 @@ west_coast_usa
 \* Credit to Shimon Keselman (<https://github.com/shimonster>)
 
 ## Additional information for map generation:
+
+
+**!!! Caution: this code is experimental and takes very long to execute, do not use !!!**
+
 Collecting map images (requires windows OS).
 ```bash
-python BEV_map_generator.py
+python Map_Extraction.py
 ```
 This script captures color, depth, segmentation images along with the position of the camera (x,y,z). The camera's Y axis is aligned with the map's North-south axis with the north being positive. The system takes photos on a grid across the map. We first take a low-resolution photo to determine terrain height at the image center, then adjust the Z height such that the terrain depth at the center of the image is always 50 meters. This allows us to get higher resolution photos (which requires low altitudes relative to terrain) without clipping mountaineous regions. 
 
 
 The images and position data will be placed in a folder called "map_data_binary_50". The following script then performs photogrammetry to extract the maps from this. Additionally, it also uses "meta_data" to give us the map that includes trails and roads (paths.png in the map folder).
-```bash
-python Extract_map.py
-```
+
 The output of this script is already available in the map folder.
 
 
