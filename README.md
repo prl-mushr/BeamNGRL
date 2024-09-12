@@ -32,10 +32,15 @@ The file structure should look something like:
 BeamNGRL
 ├── data
     ├── map_data
-        ├── elevation_map.npy
-        ├── paths.png
-        ├── color_map.png
-        └── segmt_map.png
+        ├── automation_test_track
+        ├── Cliff
+        ├── Derby
+            ├── elevation_map.npy
+            ├── paths.png
+            ├── color_map.png
+            └── segmt_map.png
+        └── ...
+            
 ```
 3) The content folder contains 3 folders: levels, vehicles, and a userfolder. The levels and vehicles folder contain "new" levels and vehicles. The userfolder contains a "mods" folder and a "vehicles" folder that contain modified versions of existing vehicles offered by the simulator. Place the zip files inside the levels and vehicles folder in the main (content) folder inside, you guessed it, the "content" folder in BeamNG.
 ```bash
@@ -71,7 +76,7 @@ put this in your bash:
 export BNG_HOME=/absolute/path/to/BeamNG/BeamNG/
 export PYTHONPATH="${PYTHONPATH}:/absolute/path/to/BeamNGRL"
 ```
-On Windows, you may need to add the above paths to your "PATH" variable.
+On Windows, you may need to add the above paths to your user environment variables.
 
 ### Connecting your Windows and Ubuntu machine via an ethernet cable ([source](https://unix.stackexchange.com/questions/251057/can-i-connect-a-ubuntu-linux-laptop-to-a-windows-10-laptop-via-ethernet-cable)):
 1) On the Windows computer: check the current IP by running ipconfig in a terminal/commandline and note the the current IP(s) to compare later
@@ -121,7 +126,7 @@ The interface spoofs the birds-eye-view elevation map, semantic map, color map, 
 ```python
     Map_config = dict()
     Map_config = {
-        "map_name": "small_island",
+        "map_name": args.map_name,
         "map_size": 64, ## this is in meters, and corresponds to the body-centric map's size. This is NOT the size of the full map you will be using.
         "map_res": 0.25, ## this is the resolution of the map in meters/pixel.
         "map_res_hitl": 0.25, ## used by BeamNG_ros for hitl with ROS
@@ -269,7 +274,7 @@ The images are robot-centric, with the X/Y axes aligned with the NE axes of the 
 ```python
     Map_config = dict()
     Map_config = {
-        "map_name": "small_island",
+        "map_name": args.map_name,
         "map_size": 64, ## this is in meters, and corresponds to the body-centric map's size. This is NOT the size of the full map you will be using.
         "map_res": 0.25, ## this is the resolution of the map in meters/pixel.
         "map_res_hitl": 0.25, ## used by BeamNG_ros for hitl with ROS
@@ -312,10 +317,35 @@ You can reset it to an arbitrary location for an arbitrary condition as follows:
 ```
 Note that we can't change the rotation of the vehicle in this method, only position.
 
+## Selecting a map for the minimal example
+To load a map of your choice for the minimal interface example, you can pass in an attribute for the name of the map you want. 
 
+```bash
+python beamng_interface_minimal.py --map_name=<map name>
+```
 
-## Additional information for map generation (WIP!!!! DO NOT USE):
-Collecting map images (requires windows OS). This is currently only configured for the small-island (off-road) map, may be updated in the future to automatically collect images for any map.
+The available maps are:
+
+```
+automation_test_track
+Cliff
+derby
+driver_training
+east_coast_usa
+gridmap_v2
+hirochi_raceway
+Industrial
+italy
+jungle_rock_island
+small_island
+Utah
+west_coast_usa
+```
+
+\* Credit to Shimon Keselman (<https://github.com/shimonster>)
+
+## Additional information for map generation:
+Collecting map images (requires windows OS).
 ```bash
 python BEV_map_generator.py
 ```

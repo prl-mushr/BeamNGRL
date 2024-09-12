@@ -12,7 +12,7 @@ def main(args):
 
     Map_config = dict()
     Map_config = {
-        "map_name": "small_island",
+        "map_name": args.map_name,
         "map_size": 64,
         "map_res": 0.25,
         "map_res_hitl": 0.25,
@@ -84,7 +84,7 @@ def main(args):
         start_quat=start_quat,  ## start quaternion -- TODO: there should be a ROS to BeamNG to ROS conversion system for reference frames.
         car_make="sunburst",  ## car make (company/manufacturer)
         map_config=Map_config,  ## Map config; this is "necessary"
-        remote=args.remote,  ## are you running the simulator remotely (on a separate computer or on the same computer but outside the docker)?
+        remote= args.remote,  ## are you running the simulator remotely (on a separate computer or on the same computer but outside the docker)?
         host_IP=args.host_IP,  ## if using a remote connection (usually the case when running sim on a separate computer)
         camera_config=camera_config,  ## currently, camera only works on windows, so you can only use this if you have the sim running remotely or you're using windows as the host
         lidar_config=lidar_config,  ## currently, lidar only works on windows, so you can only use this if the sim is running remotely or you're using a windows host
@@ -174,6 +174,12 @@ if __name__ == "__main__":
         type=str,
         default="169.254.216.9",
         help="host ip address if using remote beamng",
+    )
+    parser.add_argument(
+        "--map_name",
+        type=str,
+        default="small_island",
+        help="name of map to load"
     )
     args = parser.parse_args()
 
