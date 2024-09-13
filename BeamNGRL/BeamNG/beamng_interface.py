@@ -7,6 +7,7 @@ import traceback
 import time
 from pathlib import Path
 import os
+from sys import platform
 
 import BeamNGRL
 from BeamNGRL.utils.visualisation import Vis
@@ -15,7 +16,7 @@ from beamngpy.sensors import Lidar, Camera, Electrics, Accelerometer, Timer, Dam
 import threading
 
 ROOT_PATH = Path(BeamNGRL.__file__).parent
-DATA_PATH = ROOT_PATH.parent / 'data'
+DATA_PATH = ROOT_PATH.parent / ('BeamNGRL/data' if platform == "win32" else 'data')
 BNG_HOME = os.environ.get('BNG_HOME')
 
 
@@ -51,13 +52,13 @@ def get_beamng_default(
         map_rotate = map_config["rotate"]
 
     bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP)
+    bng.set_map_attributes(
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate, map_name=map_config["map_name"]
+    )
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
         camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config
-    )
-    bng.set_map_attributes(
-        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
@@ -98,12 +99,12 @@ def get_beamng_nobeam(
         map_rotate = map_config["rotate"]
 
     bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
+    bng.set_map_attributes(
+        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
+    )
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
-    )
-    bng.set_map_attributes(
-        map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
@@ -185,7 +186,7 @@ class beamng_interface():
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 
-        self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
+        self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], self.get_height(start_pos)),
                              rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
         self.bng.set_tod(time_of_day/2400)
 
@@ -235,13 +236,11 @@ class beamng_interface():
         self.state_poll()
         self.flipped_over = False
 
-    def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0):
-        ## TODO: map config should correspond to map name.
-        ## TODO: auto-construct map using windows camera stuff.
-        self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
-        self.color_map_full = cv2.imread(path_to_maps + '/map_data/color_map.png')
-        self.segmt_map_full = cv2.imread(path_to_maps + '/map_data/segmt_map.png')
-        self.path_map_full  = cv2.imread(path_to_maps + '/map_data/paths.png')
+    def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0, map_name="small_island"):
+        self.elevation_map_full = np.load(path_to_maps + f'/map_data/{map_name}/elevation_map.npy', allow_pickle=True)
+        self.color_map_full = cv2.imread(path_to_maps + f'/map_data/{map_name}/color_map.png')
+        self.segmt_map_full = cv2.imread(path_to_maps + f'/map_data/{map_name}/segmt_map.png')
+        self.path_map_full  = cv2.imread(path_to_maps + f'/map_data/{map_name}/paths.png')
         self.image_shape    = self.color_map_full.shape
         self.image_resolution = 0.1  # this is the original meters per pixel resolution of the image
         self.resolution     = resolution  # meters per pixel of the target map
@@ -307,6 +306,12 @@ class beamng_interface():
     def ROS2BNG_bf_pos(self, pos, base_pos):
         return  (pos[1] + base_pos[1], -pos[0] + base_pos[1], pos[2] + base_pos[2])
  
+    def get_height(self, pos):
+        elevation_img_X = np.clip(int( pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+        elevation_img_Y = np.clip(int( pos[1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+
+        return self.elevation_map_full[int( np.round(elevation_img_Y) ), int( np.round(elevation_img_X) )]
+
     def gen_BEVmap(self):
 
         self.img_X = np.clip(int( self.pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
