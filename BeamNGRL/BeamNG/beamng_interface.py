@@ -237,8 +237,6 @@ class beamng_interface():
         self.flipped_over = False
 
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0, map_name="small_island"):
-        ## TODO: map config should correspond to map name.
-        ## TODO: auto-construct map using windows camera stuff.    os.path.normpath(path_to_maps + '/map_data/elevation_map.npy')
         self.elevation_map_full = np.load(path_to_maps + f'/map_data/{map_name}/elevation_map.npy', allow_pickle=True)
         self.color_map_full = cv2.imread(path_to_maps + f'/map_data/{map_name}/color_map.png')
         self.segmt_map_full = cv2.imread(path_to_maps + f'/map_data/{map_name}/segmt_map.png')
