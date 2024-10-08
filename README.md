@@ -13,7 +13,7 @@ We strongly believe in open-sourcing our work so that others can build off of it
 Right now we only support the small_island map. We will soon add support for all maps available in BeamNG (its a WIP). 
 
 ## Installation:
-1) Download the [map folder,](https://drive.google.com/drive/folders/1T4XLVU1tnPTZpCAUkvObrbnER6I_AnQW?usp=drive_link) and the [content folder](https://drive.google.com/drive/folders/1qTb1biMKTuAfmcfRviB0IcYbDuUO4Nqt?usp=sharing).
+1) Download the [map folder,](https://drive.google.com/file/d/1FI-kss61sCfIdbAOYZlzLXI-6cmmViky/view?usp=sharing) and the [content folder](https://drive.google.com/drive/folders/1qTb1biMKTuAfmcfRviB0IcYbDuUO4Nqt?usp=sharing).
 2) If you are following the HOUND installation instructions, the install scripts will automatically pull this repository for you. You will however still need to pull this repository on your windows system.
 ```bash
 cd path/to/python_installation/
