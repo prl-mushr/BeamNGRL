@@ -22,13 +22,7 @@ BNG_HOME = os.environ.get('BNG_HOME')
 
 
 def get_beamng_default(
-        vids=None,
-        ego_vid=None,
-        traffic_vids=None,
-        car_model='offroad',
-        start_pos=None,
-        start_quat=None,
-        car_make='sunburst',
+        agents_config=None,
         beamng_path=BNG_HOME,
         map_config=None,
         path_to_maps=DATA_PATH.__str__(),
@@ -42,11 +36,8 @@ def get_beamng_default(
         run_lockstep=False,
 ):
 
-    if(start_pos is None):
-        print("please provide a start pos! I can not spawn a car in the ether!")
-        exit()
-    if(start_quat is None):
-        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
+    if(agents_config is None):
+        print("please provide a agents_config! I can not spawn a car in the ether!")
         exit()
     if(map_config is None):
         print("please provide a map_config! I can not spawn a car in the ether!")
@@ -60,8 +51,7 @@ def get_beamng_default(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate, map_name=map_config["map_name"]
     )
     bng.load_scenario(
-        scenario_name=map_config["map_name"], vids=vids, ego_vid=ego_vid, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
-        start_pos=start_pos, start_rot=start_quat,
+        scenario_name=map_config["map_name"], agents_config=agents_config,
         camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config
     )
     bng.burn_time = burn_time
@@ -72,13 +62,7 @@ def get_beamng_default(
 ## https://en.wikipedia.org/wiki/None_pizza_with_left_beef
 def get_beamng_nobeam(
         Dynamics,
-        vids=None,
-        ego_vid=None,
-        traffic_vids=None,
-        car_model='offroad',
-        start_pos=None,
-        start_quat=None,
-        car_make='sunburst',
+        agents_config=None,
         beamng_path=BNG_HOME,
         map_config=None,
         path_to_maps=DATA_PATH.__str__(),
@@ -92,11 +76,8 @@ def get_beamng_nobeam(
         run_lockstep=False,
 ):
 
-    if(start_pos is None):
-        print("please provide a start pos! I can not spawn a car in the ether!")
-        exit()
-    if(start_quat is None):
-        print("please provide a start quat! I can not spawn a car's rotation in the ether!")
+    if(agents_config is None):
+        print("please provide a agents_config! I can not spawn a car in the ether!")
         exit()
     if(map_config is None):
         print("please provide a map_config! I can not spawn a car in the ether!")
@@ -110,9 +91,7 @@ def get_beamng_nobeam(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.load_scenario(
-        scenario_name=map_config["map_name"], vids=vids, ego_vid=ego_vid, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
-        start_pos=start_pos, start_rot=start_quat,
-    )
+        scenario_name=map_config["map_name"], agents_config=agents_config)
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
     return bng
@@ -144,31 +123,32 @@ class beamng_interface_multi_agent():
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
 
-    def load_scenario(self, scenario_name='small_island', vids=["default"], ego_vid="default", traffic_vids=[], car_make='sunburst', car_model='offroad',
-                      start_pos=[np.array([-67, 336, 34.5])], start_rot=[np.array([0, 0, 0.3826834, 0.9238795])],
+    def load_scenario(self, scenario_name='small_island', agents_config=None,
                       camera_config=None, lidar_config=None, accel_config=None, vesc_config=None,
                       time_of_day=1200, hide_hud=False):
         self.scenario = Scenario(scenario_name, name="test integration")
-        self.traffic_vids = traffic_vids
+        self.traffic_vids = agents_config["traffic_vids"]
+        self.ego_vid = agents_config["ego_vid"]
+        vids = agents_config["vids"]
 
         # creates vehicles
-        num_agents = len(start_pos)
-        if num_agents != len(start_rot) or num_agents != len(vids):
-            raise IndexError("The lists defining agents (start_pos, start_rot, vids) don't have the same length. Make sure the lists have the same length and the coresponding indexes refer to the same agents")
-        if not set(traffic_vids).issubset(vids):
+        num_agents = len(agents_config["start_poses"])
+        if num_agents != len(agents_config["start_quats"]) or num_agents != len(vids) or num_agents != len(agents_config["car_makes"]) or num_agents != len(agents_config["car_models"]):
+            raise IndexError("The lists defining agents (start_poses, start_quats, vids, car_makes, car_models) don't have the same length. Make sure the lists have the same length and the coresponding indexes refer to the same agents")
+        if not set(self.traffic_vids).issubset(vids):
             raise IndexError("The traffic_vids is not a subset of all agent vids")
-        if ego_vid not in vids:
+        if self.ego_vid not in vids:
             raise IndexError("The given ego_vid is not in the list of all vids")
 
 
-        self.ego_vid = ego_vid
         for i in range(len(vids)):
-            start_pos[i][2] = self.get_height(start_pos[i])
+            agents_config["start_poses"][i][2] = self.get_height(agents_config["start_poses"][i])
             self.agents[vids[i]] = get_agent(vid=vids[i], use_beamng=self.use_beamng, remote=self.remote)
-            vehicle = self.agents[vids[i]].create_vehicle(car_make='sunburst', car_model='offroad', start_pos=start_pos[i], 
-                start_rot=start_rot[i], camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, 
+
+            vehicle = self.agents[vids[i]].create_vehicle(car_make=agents_config["car_makes"][i], car_model=agents_config["car_models"][i], start_pos=agents_config["start_poses"][i], 
+                start_rot=agents_config["start_quats"][i], camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, 
                 vesc_config=vesc_config, bng=self.bng)
-            self.scenario.add_vehicle(vehicle, pos=start_pos[i], rot_quat=start_rot[i])
+            self.scenario.add_vehicle(vehicle, pos=agents_config["start_poses"][i], rot_quat=agents_config["start_quats"][i])
 
         self.bng.set_tod(time_of_day/2400)
 
@@ -182,11 +162,9 @@ class beamng_interface_multi_agent():
         self.bng.start_scenario()
 
         for vid, agent in self.agents.items():
-            agent.load_vehicle(car_make='sunburst', car_model='offroad', start_pos=start_pos, 
-            start_rot=start_rot, camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, 
-            vesc_config=vesc_config, bng=self.bng)
+            agent.load_vehicle_sensors(camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config)
 
-        self.bng.start_traffic(self.agents[vid].vehicle for vid in traffic_vids)
+        self.bng.start_traffic(self.agents[vid].vehicle for vid in self.traffic_vids)
         self.bng.switch_vehicle(self.agents[self.ego_vid].vehicle)
 
         

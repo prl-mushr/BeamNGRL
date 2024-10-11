@@ -7,11 +7,17 @@ import argparse
 
 def main(args):
     ## given x,y location, get the correct z location so users don't have to worry too much about getting exact coordinates
-    vids = ["ego", "auto", "traffic"]
-    ego_vid = "ego"
-    traffic_vids = ["traffic"]
-    start_pos = [np.array([-86.5, 323.26, 40.5]), np.array([-92.5, 303.26, 40.5]), np.array([-97.5, 303.26, 40.5])]
-    start_quat = [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])]
+    ## make sure all the lists (vids, car_models...) are in the same order with indexes coresponding to the different agents
+    agents_config = dict()
+    agents_config = {
+        "vids": ["ego", "auto", "traffic"],
+        "ego_vid": "ego", ## vid of agent that will be controlled by player of the game/game display will focus on
+        "traffic_vids": ["traffic"],
+        "car_models": ["offroad", "offroad", "offroad"], 
+        "car_makes": ["sunburst", "sunburst", "sunburst"],  ## car make (company/manufacturer)
+        "start_poses": [np.array([-86.5, 323.26, 40.5]), np.array([-92.5, 303.26, 40.5]), np.array([-97.5, 303.26, 40.5])],   ## start position in ENU (east north up). Center of the map is usually 0,0, height is terrain dependent. TODO: use the map model to estimate terrain height.
+        "start_quats": [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])]   ## start quaternion -- TODO: there should be a ROS to BeamNG to ROS conversion system for reference frames.
+    }
 
     Map_config = dict()
     Map_config = {
@@ -82,13 +88,7 @@ def main(args):
     }
 
     beamng_interface_multi_agent = get_beamng_default(
-        vids=vids,
-        ego_vid=ego_vid,
-        traffic_vids=traffic_vids,
-        car_model="offroad",
-        start_pos=start_pos,  ## start position in ENU (east north up). Center of the map is usually 0,0, height is terrain dependent. TODO: use the map model to estimate terrain height.
-        start_quat=start_quat,  ## start quaternion -- TODO: there should be a ROS to BeamNG to ROS conversion system for reference frames.
-        car_make="sunburst",  ## car make (company/manufacturer)
+        agents_config=agents_config,
         map_config=Map_config,  ## Map config; this is "necessary"
         remote= args.remote,  ## are you running the simulator remotely (on a separate computer or on the same computer but outside the docker)?
         host_IP=args.host_IP,  ## if using a remote connection (usually the case when running sim on a separate computer)

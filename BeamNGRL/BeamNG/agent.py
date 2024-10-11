@@ -20,6 +20,8 @@ def get_agent(vid="default", use_beamng=True, remote=False):
 class agent():
     def __init__(self, vid="default", use_beamng=True, remote=False):
         self.vid = vid
+        self.car_make = None
+        self.car_model = None
 
         self.lidar_list = []
         self.lidar_fps = 10
@@ -65,10 +67,11 @@ class agent():
             start_rot=np.array([0, 0, 0.3826834, 0.9238795]), camera_config=None, lidar_config=None, 
             accel_config=None, vesc_config=None, bng=None):
         print(f"init agent {self.vid}")
-
         self.bng = bng
         self.start_pos = start_pos
         self.start_quat = start_rot
+        self.car_make = car_make
+        self.car_model = car_model
         if not self.use_beamng:
             self.state[:3] = torch.from_numpy(start_pos)
             self.state[3:6] = torch.from_numpy(self.rpy_from_quat(self.convert_beamng_to_REP103(start_rot)))
@@ -78,9 +81,7 @@ class agent():
 
         return self.vehicle
 
-    def load_vehicle(self, car_make='sunburst', car_model='offroad', start_pos=np.array([-67, 336, 34.5]), 
-            start_rot=np.array([0, 0, 0.3826834, 0.9238795]), camera_config=None, lidar_config=None, 
-            accel_config=None, vesc_config=None, bng=None):
+    def load_vehicle_sensors(self, camera_config=None, lidar_config=None, accel_config=None, vesc_config=None):
         self.electrics = Electrics()
         self.timer = Timer()
         self.damage = Damage()
