@@ -23,6 +23,7 @@ BNG_HOME = os.environ.get('BNG_HOME')
 
 def get_beamng_default(
         vids=None,
+        ego_vid=None,
         traffic_vids=None,
         car_model='offroad',
         start_pos=None,
@@ -59,7 +60,7 @@ def get_beamng_default(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate, map_name=map_config["map_name"]
     )
     bng.load_scenario(
-        scenario_name=map_config["map_name"], vids=vids, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
+        scenario_name=map_config["map_name"], vids=vids, ego_vid=ego_vid, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
         camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config
     )
@@ -72,6 +73,7 @@ def get_beamng_default(
 def get_beamng_nobeam(
         Dynamics,
         vids=None,
+        ego_vid=None,
         traffic_vids=None,
         car_model='offroad',
         start_pos=None,
@@ -108,7 +110,7 @@ def get_beamng_nobeam(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.load_scenario(
-        scenario_name=map_config["map_name"], vids=vids, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
+        scenario_name=map_config["map_name"], vids=vids, ego_vid=ego_vid, traffic_vids=traffic_vids, car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
     )
     bng.burn_time = burn_time
@@ -142,7 +144,7 @@ class beamng_interface_multi_agent():
             self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
 
-    def load_scenario(self, scenario_name='small_island', vids=["default"], traffic_vids=[], car_make='sunburst', car_model='offroad',
+    def load_scenario(self, scenario_name='small_island', vids=["default"], ego_vid="default", traffic_vids=[], car_make='sunburst', car_model='offroad',
                       start_pos=[np.array([-67, 336, 34.5])], start_rot=[np.array([0, 0, 0.3826834, 0.9238795])],
                       camera_config=None, lidar_config=None, accel_config=None, vesc_config=None,
                       time_of_day=1200, hide_hud=False):
@@ -150,7 +152,16 @@ class beamng_interface_multi_agent():
         self.traffic_vids = traffic_vids
 
         # creates vehicles
-        self.main_vid = vids[0]
+        num_agents = len(start_pos)
+        if num_agents != len(start_rot) or num_agents != len(vids):
+            raise IndexError("The lists defining agents (start_pos, start_rot, vids) don't have the same length. Make sure the lists have the same length and the coresponding indexes refer to the same agents")
+        if not set(traffic_vids).issubset(vids):
+            raise IndexError("The traffic_vids is not a subset of all agent vids")
+        if ego_vid not in vids:
+            raise IndexError("The given ego_vid is not in the list of all vids")
+
+
+        self.ego_vid = ego_vid
         for i in range(len(vids)):
             start_pos[i][2] = self.get_height(start_pos[i])
             self.agents[vids[i]] = get_agent(vid=vids[i], use_beamng=self.use_beamng, remote=self.remote)
@@ -176,7 +187,7 @@ class beamng_interface_multi_agent():
             vesc_config=vesc_config, bng=self.bng)
 
         self.bng.start_traffic(self.agents[vid].vehicle for vid in traffic_vids)
-        self.bng.switch_vehicle(self.agents[self.main_vid].vehicle)
+        self.bng.switch_vehicle(self.agents[self.ego_vid].vehicle)
 
         
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0, map_name="small_island"):
@@ -230,7 +241,7 @@ class beamng_interface_multi_agent():
         
         if(self.rotate):
             # get rotation matrix using yaw:
-            rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= self.agents[self.main_vid].rpy[2]*57.3, scale=1)
+            rotate_matrix = cv2.getRotationMatrix2D(center=self.mask_center, angle= self.agents[self.ego_vid].rpy[2]*57.3, scale=1)
             # rotate the image using cv2.warpAffine
             BEV = cv2.warpAffine(src=BEV, M=rotate_matrix, dsize=self.mask_size)
             # mask:
@@ -259,8 +270,8 @@ class beamng_interface_multi_agent():
         return self.elevation_map_full[int( np.round(elevation_img_Y) ), int( np.round(elevation_img_X) )]
 
     def gen_BEVmap(self):
-        self.img_X = np.clip(int( self.agents[self.main_vid].pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
-        self.img_Y = np.clip(int( self.agents[self.main_vid].pos[1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+        self.img_X = np.clip(int( self.agents[self.ego_vid].pos[0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+        self.img_Y = np.clip(int( self.agents[self.ego_vid].pos[1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
 
         self.Y_min = int(self.img_Y - self.map_size*self.resolution_inv)
         self.Y_max = int(self.img_Y + self.map_size*self.resolution_inv)
@@ -315,7 +326,7 @@ class beamng_interface_multi_agent():
 
         self.BEV_color[mask] = cv2.addWeighted(car_shapes, 0.7, self.BEV_color, 0.3, 0)[mask]
 
-        self.BEV_center[:2] = self.agents[self.main_vid].pos[:2]
+        self.BEV_center[:2] = self.agents[self.ego_vid].pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
         self.BEV_heght -= self.BEV_center[2]
         self.BEV_heght = np.clip(self.BEV_heght, -self.elev_map_hgt, self.elev_map_hgt)
@@ -397,9 +408,8 @@ class beamng_interface_multi_agent():
         self.dyn.set_BEV(BEV_heght, BEV_normal)
 
 
- # TODO: GET STATE FROM ONE OF THE AGENTS??? WHAT DOES THIS DO??????
     def render(self, goal):
-        vis_state = self.state.cpu().numpy()
+        vis_state = self.get_state(ego_vid).cpu().numpy()
         self.vis.setcar(pos=np.zeros(3), rpy=vis_state[3:6])
         self.vis.setgoal(goal - vis_state[:2])
         self.vis.set_terrain(self.BEV_heght, self.resolution, self.map_size)

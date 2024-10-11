@@ -6,8 +6,9 @@ import argparse
 
 
 def main(args):
-    ## TODO: given x,y location, get the correct z location so users don't have to worry too much about getting exact coordinates
+    ## given x,y location, get the correct z location so users don't have to worry too much about getting exact coordinates
     vids = ["ego", "auto", "traffic"]
+    ego_vid = "ego"
     traffic_vids = ["traffic"]
     start_pos = [np.array([-86.5, 323.26, 40.5]), np.array([-92.5, 303.26, 40.5]), np.array([-97.5, 303.26, 40.5])]
     start_quat = [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])]
@@ -82,6 +83,7 @@ def main(args):
 
     beamng_interface_multi_agent = get_beamng_default(
         vids=vids,
+        ego_vid=ego_vid,
         traffic_vids=traffic_vids,
         car_model="offroad",
         start_pos=start_pos,  ## start position in ENU (east north up). Center of the map is usually 0,0, height is terrain dependent. TODO: use the map model to estimate terrain height.
@@ -103,7 +105,6 @@ def main(args):
         try:
             beamng_interface_multi_agent.handle_timing()
 
-            # ==== TODO: WAY TO QUERY STATE OF CARS ===
             # state is np.hstack((pos, rpy, vel, A, G, st, th/br)) ## note that velocity is in the body-frame
             # state information follows ROS REP103 standards (so basically ROS standards): world refernce frame for (x,y,z) is east-north-up(ENU). Body frame ref is front-left-up(FLU)
             state_controlled = beamng_interface_multi_agent.get_state("ego")
@@ -176,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--remote",
         type=bool,
-        default=False,
+        default=True,
         help="whether to connect to a remote beamng server",
     )
     parser.add_argument(
