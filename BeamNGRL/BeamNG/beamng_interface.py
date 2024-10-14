@@ -193,7 +193,7 @@ class beamng_interface():
 
         self.vehicle = Vehicle('ego_vehicle', model=car_make, partConfig='vehicles/'+ car_make + '/' + car_model + '.pc')
 
-        self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], start_pos[2]),
+        self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], self.get_height(start_pos)),
                              rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
         
         # adds traffic vehicles to scenerio
