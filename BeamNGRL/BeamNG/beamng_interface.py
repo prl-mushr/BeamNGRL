@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 import os
 from sys import platform
+from sys import platform, exit
 
 import BeamNGRL
 from BeamNGRL.utils.visualisation import Vis
@@ -36,6 +37,7 @@ def get_beamng_default(
         vesc_config=None,
         burn_time=0.02,
         run_lockstep=False,
+        traffic_config=None
 ):
 
     if(start_pos is None):
@@ -51,14 +53,15 @@ def get_beamng_default(
     if "rotate" in map_config:
         map_rotate = map_config["rotate"]
 
-    bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP)
+    bng = beamng_interface(BeamNG_path=beamng_path, remote=remote, host_IP=host_IP, enable_traffic=traffic_config["enable"])
     bng.set_map_attributes(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate, map_name=map_config["map_name"]
     )
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
-        camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config
+        camera_config=camera_config, lidar_config=lidar_config, accel_config=accel_config, vesc_config=vesc_config,
+        traffic_config=traffic_config
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
@@ -83,6 +86,7 @@ def get_beamng_nobeam(
         vesc_config=None,
         burn_time=0.02,
         run_lockstep=False,
+        traffic_config=None
 ):
 
     if(start_pos is None):
@@ -98,13 +102,13 @@ def get_beamng_nobeam(
     if "rotate" in map_config:
         map_rotate = map_config["rotate"]
 
-    bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
+    bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics, enable_traffic=traffic_config["enable"])
     bng.set_map_attributes(
         map_size=map_config["map_size"], resolution=map_config["map_res"], elevation_range=map_config["elevation_range"], path_to_maps=path_to_maps, rotate=map_rotate
     )
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
-        start_pos=start_pos, start_rot=start_quat,
+        start_pos=start_pos, start_rot=start_quat, traffic_config=traffic_config
     )
     bng.burn_time = burn_time
     bng.set_lockstep(run_lockstep)
@@ -112,7 +116,7 @@ def get_beamng_nobeam(
 
 
 class beamng_interface():
-    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None, shell_mode=False, HITL_mode=False, async_mode=False):
+    def __init__(self, BeamNG_path=BNG_HOME, host='localhost', port=64256, use_beamng=True, dyn=None, remote=False, host_IP=None, shell_mode=False, HITL_mode=False, async_mode=False, enable_traffic=False):
         self.lockstep   = False
         self.lidar_list = []
         self.lidar_fps = 10
@@ -155,6 +159,9 @@ class beamng_interface():
         self.use_sgmt = False
         self.steering_max = 260.0
 
+        self.traffic_vehicles = {}
+        self.traffic = enable_traffic
+
         self.use_beamng = use_beamng
         if self.use_beamng:
             if remote==True and host_IP is not None:
@@ -174,8 +181,8 @@ class beamng_interface():
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='offroad',
                       start_pos=np.array([-67, 336, 34.5]), start_rot=np.array([0, 0, 0.3826834, 0.9238795]),
                       camera_config=None, lidar_config=None, accel_config=None, vesc_config=None,
-                      time_of_day=1200, hide_hud=False):
-        self.start_pos = start_pos
+                      time_of_day=1200, hide_hud=False, traffic_config=None):
+        self.start_pos = (start_pos[0], start_pos[1], self.get_height(start_pos))
         self.start_quat = start_rot
         if not self.use_beamng:
             self.state[:3] = torch.from_numpy(start_pos)
@@ -188,6 +195,22 @@ class beamng_interface():
 
         self.scenario.add_vehicle(self.vehicle, pos=(start_pos[0], start_pos[1], self.get_height(start_pos)),
                              rot_quat=(start_rot[0], start_rot[1], start_rot[2], start_rot[3]))
+        
+        # adds traffic vehicles to scenerio
+        if self.traffic:
+            num_traffic = len(traffic_config["start_poses"])
+            if num_traffic != len(traffic_config["start_quats"]) or num_traffic != len(traffic_config["car_models"]) or num_traffic != len(traffic_config["car_makes"] or num_traffic != len(traffic_config["vids"])): 
+                raise IndexError("The lists defining traffic cars (start_poses, start_quats, car_makes, car_models) in traffic_config don't have the same length. Make sure the lists have the same length and the coresponding indexes refer to the same traffic vehicle")
+        
+            for i in range(len(traffic_config["start_poses"])):
+                vid = traffic_config["vids"][i]
+                print(vid)
+                traffic_start_pos = traffic_config["start_poses"][i]
+                traffic_start_quat = traffic_config["start_quats"][i]
+                self.traffic_vehicles[vid] = Vehicle(vid, model=traffic_config["car_makes"][i], partConfig='vehicles/'+ traffic_config["car_makes"][i] + '/' + traffic_config["car_models"][i] + '.pc')
+                self.scenario.add_vehicle(self.traffic_vehicles[vid], pos=(traffic_start_pos[0], traffic_start_pos[1], self.get_height(traffic_start_pos)),
+                    rot_quat=(traffic_start_quat[0], traffic_start_quat[1], traffic_start_quat[2], traffic_start_quat[3]))
+
         self.bng.set_tod(time_of_day/2400)
 
         self.bng.set_deterministic()
@@ -204,6 +227,20 @@ class beamng_interface():
         self.vehicle.attach_sensor('damage', self.damage)
         self.bng.load_scenario(self.scenario)
         self.bng.start_scenario()
+
+        # adds sensors to traffic cars
+        if self.traffic:
+            self.traffic_electrics = {}
+            self.traffic_timer = {}
+            self.traffic_damage = {}
+            for vid, v in self.traffic_vehicles.items():
+                self.traffic_electrics[vid] = Electrics()
+                self.traffic_timer[vid] = Timer()
+                self.traffic_damage[vid] = Damage()
+
+                v.attach_sensor('electrics', self.traffic_electrics[vid])
+                v.attach_sensor('timer', self.traffic_timer[vid])
+                v.attach_sensor('damage', self.traffic_damage[vid])
 
         if accel_config == None:
             base_pos = (0,0,0.8)
@@ -235,6 +272,11 @@ class beamng_interface():
 
         self.state_poll()
         self.flipped_over = False
+
+        # starts traffic and switches to driver vehicle
+        if self.traffic:
+            self.bng.start_traffic(list(self.traffic_vehicles.values()))
+            self.bng.switch_vehicle(self.vehicle)
 
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0, map_name="small_island"):
         self.elevation_map_full = np.load(path_to_maps + f'/map_data/{map_name}/elevation_map.npy', allow_pickle=True)
@@ -268,6 +310,12 @@ class beamng_interface():
         self.inpaint_mask = np.zeros_like(self.elevation_map_full, dtype=np.uint8)
         index = np.where(self.elevation_map_full == 0)
         self.inpaint_mask[index] = 255
+
+        # creates marker image
+        self.marker_width = int(self.map_size*self.resolution_inv/8)
+        self.overlay_image = np.zeros([self.marker_width, self.marker_width, 3])
+        cv2.rectangle(self.overlay_image, (int(self.marker_width / 3), 0), (int(self.marker_width * 2 / 3), self.marker_width), (255, 255, 255), -1) 
+        cv2.circle(self.overlay_image, (int(self.marker_width / 2), int(self.marker_width / 4)), int(self.marker_width / 4), (255, 255, 255), -1)
 
     def get_map_bf_no_rp(self, map_img, gen_mask=False, inpaint_mask = None):
         ch = len(map_img.shape)
@@ -330,6 +378,59 @@ class beamng_interface():
         self.BEV_segmt = self.get_map_bf_no_rp(self.segmt_map_full, inpaint_mask=local_inpaint)
         self.BEV_path  = self.get_map_bf_no_rp(self.path_map_full)
 
+        # car overlay on map
+        marker_size = int(self.map_size*self.resolution_inv/16)
+        car_shapes = np.zeros_like(self.BEV_color, np.uint8)
+        car_shapes = np.pad(car_shapes, ((marker_size, marker_size), (marker_size, marker_size), (0, 0)), 'edge')
+
+        if self.traffic:
+            self.img_X_traffic = {} 
+            self.img_Y_traffic = {}
+
+            self.Y_min_traffic = {}
+            self.Y_max_traffic = {}
+
+            self.X_min_traffic = {}
+            self.X_max_traffic = {}
+            for vid, v in self.traffic_vehicles.items():
+                if (vid in self.traffic_pos ):
+                    self.img_X_traffic[vid] = np.clip(int( self.traffic_pos[vid][0]*self.resolution_inv + self.image_shape[0]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+                    self.img_Y_traffic[vid] = np.clip(int( self.traffic_pos[vid][1]*self.resolution_inv + self.image_shape[1]//2), self.map_size*self.resolution_inv, self.image_shape[0] - 1 - self.map_size*self.resolution_inv)
+
+                    self.Y_min_traffic[vid] = int(self.img_Y_traffic[vid] - self.Y_min - marker_size) + marker_size
+                    self.Y_max_traffic[vid] = int(self.img_Y_traffic[vid] - self.Y_min + marker_size) + marker_size
+
+                    self.X_min_traffic[vid] = int(self.img_X_traffic[vid] - self.X_min - marker_size) + marker_size
+                    self.X_max_traffic[vid] = int(self.img_X_traffic[vid] - self.X_min + marker_size) + marker_size
+
+                    self.traffic_marker_rotation = - self.traffic_rpy[vid][2] * 180 / np.pi + 90
+
+                    image_center = tuple(np.array(self.overlay_image.shape[1::-1]) / 2)
+                    rot_mat = cv2.getRotationMatrix2D(image_center, int(self.traffic_marker_rotation), 1.0)
+                    result = cv2.warpAffine(self.overlay_image, rot_mat, self.overlay_image.shape[1::-1], flags=cv2.INTER_LINEAR)
+
+                    car_shapes[self.Y_min_traffic[vid]:self.Y_max_traffic[vid], self.X_min_traffic[vid]:self.X_max_traffic[vid]] = result
+
+        # adds marker for controlled car
+        self.Y_min_marker = int(self.img_Y - self.Y_min - self.map_size*self.resolution_inv/16) + marker_size
+        self.Y_max_marker = int(self.img_Y - self.Y_min + self.map_size*self.resolution_inv/16) + marker_size
+
+        self.X_min_marker = int(self.img_X - self.X_min - self.map_size*self.resolution_inv/16) + marker_size
+        self.X_max_marker = int(self.img_X - self.X_min + self.map_size*self.resolution_inv/16) + marker_size
+
+        self.marker_rotation = - self.rpy[2] * 180 / np.pi + 90
+
+        image_center = tuple(np.array(self.overlay_image.shape[1::-1]) / 2)
+        rot_mat = cv2.getRotationMatrix2D(image_center, int(self.marker_rotation), 1.0)
+        result = cv2.warpAffine(self.overlay_image, rot_mat, self.overlay_image.shape[1::-1], flags=cv2.INTER_LINEAR)
+
+        car_shapes[self.Y_min_marker:self.Y_max_marker, self.X_min_marker:self.X_max_marker] = result
+
+        # applies mask
+        car_shapes = car_shapes[marker_size:-marker_size, marker_size:-marker_size]
+        mask = car_shapes.astype(bool)
+
+        self.BEV_color[mask] = cv2.addWeighted(car_shapes, 0.7, self.BEV_color, 0.3, 0)[mask]
 
         self.BEV_center[:2] = self.pos[:2]
         self.BEV_center[2] = self.BEV_heght[self.map_size_px[0], self.map_size_px[1]]
@@ -512,6 +613,11 @@ class beamng_interface():
                 self.last_quat = self.convert_beamng_to_REP103(self.vehicle.state['rotation'])
                 self.timestamp = self.vehicle.sensors['timer']['time']
                 print("beautiful day, __init__?") ## being cheeky are we?
+
+                # polls traffic vehicles sensors
+                if self.traffic:
+                    for vid, v in self.traffic_vehicles.items():
+                        v.poll_sensors()
             else:
                 self.handle_timing()
                 self.Accelerometer_poll()
@@ -540,6 +646,36 @@ class beamng_interface():
                 brake = float(self.vehicle.sensors['electrics']['brake'])
                 self.thbr = throttle - brake
                 self.state = np.hstack((self.pos, self.rpy, self.vel, self.A, self.G, self.steering, self.thbr))
+                
+                # gets values for traffic sensors
+                if self.traffic:
+                    self.traffic_timestamp = {}
+                    self.traffic_dt = {}
+                    self.traffic_timestamp = {}
+                    self.traffic_broken = {}
+                    self.traffic_pos = {}
+                    self.traffic_vel = {}
+                    self.traffic_quat = {}
+                    self.traffic_rpy = {}
+                    self.traffic_Tnb = {}
+                    self.traffic_Tbn = {}
+                    self.traffic_vel_wf = {}
+                    self.traffic_vel = {}
+                    for vid, v in self.traffic_vehicles.items():
+                        v.poll_sensors() # Polls the data of all sensors attached to the vehicle
+                        if ((v.state["pos"][0] - self.pos[0]) ** 2 < self.map_size ** 2 and (v.state["pos"][1] - self.pos[1]) ** 2 < self.map_size ** 2):
+                            self.traffic_timestamp[vid] = v.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
+                            self.traffic_dt[vid] = max(v.sensors['timer']['time'] - self.traffic_timestamp[vid], 0.02)
+                            self.traffic_timestamp[vid] = v.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
+                            self.traffic_broken[vid] = v.sensors['damage']['part_damage'] ## this is useful for reward functions
+                            self.traffic_pos[vid] = np.copy(v.state['pos'])
+                            self.traffic_vel[vid] = np.copy(v.state['vel'])
+                            self.traffic_quat[vid] = self.convert_beamng_to_REP103(np.copy(v.state['rotation']))
+                            self.traffic_rpy[vid] = self.rpy_from_quat(self.traffic_quat[vid])
+                            self.traffic_Tnb[vid], self.traffic_Tbn[vid] = self.calc_Transform(self.traffic_quat[vid])
+                            self.traffic_vel_wf[vid] = np.copy(self.traffic_vel[vid])
+                            self.traffic_vel[vid] = np.matmul(self.traffic_Tnb[vid], self.traffic_vel[vid])
+
                 self.gen_BEVmap()
                 if(abs(self.rpy[0]) > np.pi/2 or abs(self.rpy[1]) > np.pi/2):
                     self.flipped_over = True

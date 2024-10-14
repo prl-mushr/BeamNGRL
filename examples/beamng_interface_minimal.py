@@ -6,7 +6,7 @@ import argparse
 
 
 def main(args):
-    ## TODO: given x,y location, get the correct z location so users don't have to worry too much about getting exact coordinates
+    ## given x,y location, automatically gets the correct z location so users don't have to worry too much about getting exact coordinates
     start_pos = np.array([-86.5, 322.26, 35.5])
     start_quat = np.array([0, 0, 0, 1])
 
@@ -20,6 +20,16 @@ def main(args):
         "layers": {"color": 3, "elevation": 1, "semantics": 3, "costmap": 1},
         "topic_name": "/grid_map_occlusion_inpainting/all_grid_map",
         "rotate": False,
+    }
+
+    traffic_config = dict()
+    traffic_config = {
+        "enable": args.enable_traffic,
+        "vids": ["traffic_1", "traffic_2", "traffic_3"],
+        "start_poses": [np.array([-88, 315.26, 40.5]), np.array([-94, 310.26, 40.5]), np.array([-99, 305.26, 40.5])], ## list of starting positions for traffic
+        "start_quats": [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])],  ## list of start rotations for traffic, the index of rotations is matched to the same index in positions
+        "car_models": ["drift", "drift", "drift"],  ## list of traffic car models in the same order as poses and quats
+        "car_makes": ["sunburst", "sunburst", "sunburst"],  ## list of traffic car makes in the same order as poses and quats
     }
 
     camera_config = dict()
@@ -91,6 +101,7 @@ def main(args):
         accel_config=IMU_config,  ## IMU config. if left blank, a default config is used.
         burn_time=0.02,  ## step or dt time
         run_lockstep=False,  ## whether the simulator waits for control input to move forward in time. Set to true to have a gym "step" like functionality
+        traffic_config=traffic_config  ## config info for game-controlled traffic
     )
 
     # bng_interface.set_lockstep(True) ## this is how you can change lockstepping modes during execution
@@ -104,7 +115,10 @@ def main(args):
             pos = state[
                 :3
             ]  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
-            print(pos)
+            if args.enable_traffic:
+                print(f"car: {pos} | traffic: {bng_interface.traffic_pos}")
+            else:
+                print(pos)
             ## if you just want position, you can also do pos = bng_interface.pos
             if camera_config["enable"]:
                 color = bng_interface.color
@@ -180,6 +194,12 @@ if __name__ == "__main__":
         type=str,
         default="small_island",
         help="name of map to load"
+    )
+    parser.add_argument(
+        "--enable_traffic",
+        type=bool,
+        default=False,
+        help="whether to spawn traffic vehicles controlled by defualt BeamNG traffic controller"
     )
     args = parser.parse_args()
 
