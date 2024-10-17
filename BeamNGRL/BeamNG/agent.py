@@ -28,9 +28,9 @@ class agent():
         self.new_lidar = False
         self.last_lidar_time = 0
         self.camera_list = []
-        self.camera_fps = 30
+        self.camera_fps = {}
         self.new_cam = False
-        self.last_cam_time = 0
+        self.last_cam_time = {}
         self.cam_segmt = False
         self.state_init = False
         self.A = np.array([0,0,9.81])
@@ -39,10 +39,10 @@ class agent():
         self.last_vel_wf= np.zeros(3)
         self.quat       = np.array([1,0,0,0])
         self.Tnb, self.Tbn = self.calc_Transform(self.quat)
-        self.depth      = None
+        self.depth      = {}
         self.pos        = None
-        self.color      = None
-        self.segmt      = None
+        self.color      = {}
+        self.segmt      = {}
         self.lidar_pts  = None
         self.Gravity    = np.array([0,0,9.81])
         self.state      = None
@@ -102,12 +102,16 @@ class agent():
             
         if self.camera_config is not None and self.camera_config["enable"]:
             self.camera = True
-            self.camera_fps = self.camera_config["fps"]
-            cam_pos = self.ROS2BNG_bf_pos(self.camera_config["pos"], base_pos)
             self.use_sgmt = self.camera_config["annotation"]
-            self.attach_camera(name='camera', pos=cam_pos, update_frequency=self.camera_fps, dir=self.camera_config["dir"], up=self.camera_config["up"], 
-                               field_of_view_y=self.camera_config["fov"], resolution=(self.camera_config["width"],self.camera_config["height"]),
-                               annotation=self.use_sgmt)
+
+            for i in range(len(self.camera_config["cameras"])):
+                camera_info = self.camera_config["cameras"][i]
+                self.camera_fps[i] = camera_info["fps"]
+                cam_pos = self.ROS2BNG_bf_pos(camera_info["pos"], base_pos)
+
+                self.attach_camera(name=f'camera_{i}', pos=cam_pos, update_frequency=self.camera_fps, dir=camera_info["dir"], up=camera_info["up"],
+                                   field_of_view_y=camera_info["fov"], resolution=(camera_info["width"],camera_info["height"]),
+                                   annotation=self.use_sgmt)
 
         if self.lidar_config is not None and self.lidar_config["enable"]:
             self.lidar = True
@@ -205,10 +209,10 @@ class agent():
         try:
             camera_readings = self.camera_list[index].poll()
             color = camera_readings['colour']
-            self.color = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
-            self.depth = camera_readings['depth']
+            self.color[index] = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
+            self.depth[index] = camera_readings['depth']
             if self.use_sgmt:
-                self.segmt = camera_readings['annotation']
+                self.segmt[index] = camera_readings['annotation']
         except Exception as e:
             print(traceback.format_exc())
 
@@ -285,9 +289,10 @@ class agent():
                     self.flipped_over = True
 
                 if self.camera:
-                    if self.timestamp - self.last_cam_time > 1/self.camera_fps:
-                        self.camera_poll(0)
-                        self.last_cam_time = self.timestamp
+                    for i in range(len(self.camera_config["cameras"])):
+                        if i not in self.last_cam_time or self.timestamp - self.last_cam_time[i] > 1/self.camera_fps[i]:
+                            self.camera_poll(i)
+                            self.last_cam_time[i] = self.timestamp
                 if self.lidar:
                     if self.timestamp - self.last_lidar_time > 1/self.lidar_fps:
                         self.lidar_poll(0)

@@ -37,23 +37,25 @@ def main(args):
     IMU_config = dict()
     camera_config = {
         "enable": False,
-        "width": 640,
-        "height": 480,
-        "fps": 30,
-        "fov": 87.0,
-        "pos": [0.15, 0.047, 0.02],
-        "dir": [0, -1, 0],
-        "up": [0, 0, 1],
-        "rot": [0, 0, 0, 1],
-        "color_optical_frame": "camera_color_optical_frame",
-        "depth_optical_frame": "camera_depth_optical_frame",
-        "depth_frame": "camera_depth_frame",
-        "camera_color_topic": "/camera/color/image_raw",
-        "camera_depth_topic": "/camera/depth/image_rect_raw",
-        "camera_color_info_topic": "/camera/color/camera_info",
-        "camera_depth_info_topic": "/camera/depth/camera_info",
-        "monitor_topic": "/camera/depth/image_rect_raw",
         "annotation": False,
+        "cameras": [{
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "fov": 87.0,
+            "pos": [0.15, 0.047, 0.02],
+            "dir": [0, -1, 0],
+            "up": [0, 0, 1],
+            "rot": [0, 0, 0, 1],
+            "color_optical_frame": "camera_color_optical_frame",
+            "depth_optical_frame": "camera_depth_optical_frame",
+            "depth_frame": "camera_depth_frame",
+            "camera_color_topic": "/camera/color/image_raw",
+            "camera_depth_topic": "/camera/depth/image_rect_raw",
+            "camera_color_info_topic": "/camera/color/camera_info",
+            "camera_depth_info_topic": "/camera/depth/camera_info",
+            "monitor_topic": "/camera/depth/image_rect_raw",
+        }]
     }
 
     lidar_config = {
