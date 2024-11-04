@@ -180,6 +180,7 @@ def generate_dataset(args):
             bev_elev_seq = load_bev_map('bev_elev.npy', sequence_path)
             bev_normal_seq = load_bev_map('bev_normal.npy', sequence_path)
             reset_seq = load_reset_data('reset.npy', sequence_path)
+            center = load_cent_data('bev_cent.npy', sequence_path)
 
             # Define data elements for processing
             job_args = []
@@ -200,7 +201,8 @@ def generate_dataset(args):
                     # Skip frame if idxs are out of range
                     continue
                 # Base w.r.t world coord.
-                base_frame = states_seq[keyframe_idx, :6]
+                # base_frame = states_seq[keyframe_idx, :6]
+                base_frame = center[keyframe_idx, :3]
 
                 traj_ts = timestamps[data_idxs]
                 traj_controls = controls_seq[data_idxs]

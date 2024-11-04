@@ -83,6 +83,9 @@ def load_reset_data(file_name: str, file_path: os.PathLike) -> np.ndarray:
     reset = np.load(file_path / file_name, allow_pickle=True)
     return reset
 
+def load_cent_data(file_name: str, file_path: os.PathLike) -> np.ndarray:
+    cent = np.load(file_path / file_name, allow_pickle=True)
+    return cent
 
 def project_traj_to_map(
         posns: np.ndarray, grid_size: int, resolution: float, mode: str = 'default',

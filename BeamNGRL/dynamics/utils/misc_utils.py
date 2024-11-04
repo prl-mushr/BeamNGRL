@@ -56,8 +56,9 @@ def crop_rotate_batch(input_array, out_H, out_W, center, angle):
 	centers = gpuarray.to_gpu(center.clone().cpu().numpy().astype(np.int32))
 	block_size = (32, 32, 1)
 	grid_size = ((out_W + block_size[0] - 1) // block_size[0], (out_H + block_size[1] - 1) // block_size[1], N)
+	cuda.Context.synchronize()
 	cuda_kernel(input_images, output_images, angles, centers, np.int32(in_H), np.int32(in_W), np.int32(out_H), np.int32(out_W), np.int32(N), block=block_size, grid=grid_size)
 	output_images = torch.from_numpy(output_images.get()).permute(2,0,1).to(torch.device('cuda'))
-	
+	cuda.Context.synchronize()
 	pycuda_ctx.pop()
 	return output_images

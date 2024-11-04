@@ -6,6 +6,8 @@ import os
 import argparse
 from scipy.stats import mannwhitneyu, t as student_t
 from scipy.stats import norm
+from scipy import signal
+
 
 # TODO: I should have a utils directory that takes care of these statistical functions no?
 
@@ -58,11 +60,25 @@ def Plot_metircs(Config):
 
     skips = 256 // len(Config["models"])
     colors = original_colors[::skips]
+    reset_list = {}
+    for model in Config["models"]:
+        reset_list[model] = 0
 
     for scenario in Config["scenarios"]:
         fig, axs = plt.subplots(1,1)
         fig.set_size_inches(4, 3)
-        scn_type = scenario.split('-')[0]
+        if scenario == "ditch-3":
+            scn_type = 'ditch'
+        elif scenario == "hill-2":
+            scn_type = "hill"
+        elif scenario == "hill-1":
+            scn_type = "hill+ditch"
+        elif scenario == "race-4":
+            scn_type = "simple_trail"
+        elif scenario == "race-2":
+            scn_type = "mountain_trail"
+        else:
+            scn_type = scenario
         
         fig.subplots_adjust(left=0.15, right=0.99, top=0.9, bottom=0.15)
 
@@ -86,14 +102,15 @@ def Plot_metircs(Config):
         for i in range(waypoints.shape[0]):
             if np.linalg.norm(waypoints[i] - goal) <= wp_radius:
                 break
-        print(i)
         waypoints = waypoints[:i+1]
         length_waypoints = waypoints.shape[0]
+        start_finish_dist = np.linalg.norm(waypoints[0,:3] - waypoints[-1, :3])
 
         count = 0
         for model in Config["models"]:
             max_progress_list = []
             time_taken = np.arange(0, scenario_time_limit, 0.04)
+            reset_avg = 0
             for trial in range(Config["num_iters"]):
                 dir_name = str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Control/" + model
                 filename = dir_name + "/{}-trial-{}.npy".format(scenario, str(trial))
@@ -101,6 +118,41 @@ def Plot_metircs(Config):
                 data = np.load(filename)
                 ## for every point in the agent's trajectory, find the closest waypoint in the list of waypoints. Do this in a vectorized manner:
                 agent_trajectory = data[:, :2]
+                
+                b, a = signal.butter(1, 0.1, btype='low', analog=False)
+                # for i in range(9,15,1):
+                # data[:,11] = signal.filtfilt(b,a, data[:,11])                
+                roll = data[..., 3]
+                pitch = data[..., 4]
+                yaw = data[..., 5]
+                vx = data[...,6]
+                vy = data[...,7]
+                vz = data[...,8]
+                ax = data[...,9]
+                ay = data[...,10]
+                az = data[...,11]
+                wx = data[...,12]
+                wy = data[...,13]
+                wz = data[...,14]
+                reset = np.array(data[..., -3], dtype=np.int32)
+                reset = np.diff(reset)
+                reset_avg += len(np.where(reset>0)[0])/Config["num_iters"]
+
+                ct = np.cos(roll)*np.cos(pitch)
+                Cost_config = Config["Cost_config"]
+                critical_RI = Cost_config["critical_RI"]
+                critical_SA = Cost_config["critical_SA"]
+                critical_vert_acc = Cost_config["critical_vert_acc"]
+                critical_vert_spd = Cost_config["critical_vert_spd"]
+                GRAVITY = 9.8
+                # normalize vertical acceleration const. violation.
+                constraints = (np.clip((1/ct) - 2*critical_SA, 0, 1) 
+                    + np.clip(np.abs(az - GRAVITY*ct) - 3*critical_vert_acc, 0, 10.0)
+                    + np.clip(np.abs(vz) - 2*critical_vert_spd, 0, 1.0)
+                    + np.clip(np.abs(ay/az) - critical_RI, 0, 1) 
+                    + np.clip(np.arctan(vy/vx) - 0.5*critical_RI, 0, 1)
+                    )
+                constraint_violated = 0
                 # I want the maximum progress made vs timestep
                 max_prog = np.zeros(int(scenario_time_limit*25))
                 for i in range(0, int(scenario_time_limit*25)):
@@ -108,13 +160,17 @@ def Plot_metircs(Config):
                     if i < agent_trajectory.shape[0]:
                         progress = (np.argmin(np.linalg.norm(waypoints - agent_trajectory[i], axis=1)))/length_waypoints
                         # what I want to track is the maximum progress made by the agent at any timestep, so append a new progress value only if it is greater than the last one, otherwise, keep the last one:
+                        if constraints[i] > 10:
+                            constraint_violated += 0.04
                         if i == 0:
                             max_progress = progress
                         else:
-                            max_progress = max(max_progress, progress)
+                            if constraint_violated < 1:
+                                max_progress = max(max_progress, progress)
                         # the time taken is the timestamp of the last timestep:
                     max_prog[i] = max_progress
                 max_progress_list.append(max_prog)
+
             # convert progress and time taken to numpy arrays:
             max_progress_list = np.array(max_progress_list)
             # calculate the mean and std of max_progress_list:
@@ -125,7 +181,9 @@ def Plot_metircs(Config):
             color = colors[count]
             axs.plot(time_taken, mean_progress, label=model, color=color)
             axs.fill_between(time_taken, mean_progress - conf_progress, mean_progress + conf_progress, alpha=0.2, color= color)
+            reset_list[model] += reset_avg/(len(Config["scenarios"])*start_finish_dist)
             count += 1
+
         axs.set_xlabel("Time Taken")
         axs.set_ylabel("Progress Made")
         axs.legend()
@@ -134,6 +192,7 @@ def Plot_metircs(Config):
         ## close the figure:
         # plt.show()
         # plt.close(fig)
+    print(reset_list)
 
 
 if __name__ == "__main__":

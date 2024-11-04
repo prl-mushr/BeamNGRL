@@ -31,29 +31,12 @@ def get_dynamics(model, Config):
     Dynamics_config = Config["Dynamics_config"]
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
-    if model == 'TerrainCNN':
-        print("loading TerrainCNN")
+    if model == 'baseline' or model == 'baseline-RT':
+        print("loading baseline")
         Dynamics_config["network"] = Dynamics_config["network_baseline"]
         Dynamics_config["model_weights"] = Dynamics_config["model_weights_baseline"]
         model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/baseline/" + Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
-    elif model == "KARMA":
-        print("loading KARMA")
-        Dynamics_config["network"] = Dynamics_config["network_KARMA"]
-        Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA"]
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual/" + Dynamics_config["model_weights"]
-        dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
-    elif model == "KARMA_bad_sys":
-        print("loading KARMA_bad_sys") # I print this separately to make sure that the if condition was entered. # i am not stupid.
-        Dynamics_config["type"] = "slip3d"
-        temp_D = Dynamics_config["D"]
-        Dynamics_config["D"] = 1.2 ## 150 % of the original D
-        Dynamics_config["network"] = Dynamics_config["network_KARMA"]
-        Dynamics_config["model_weights"] = Dynamics_config["model_weights_KARMA_bad_sys"]## you modified this last night. Results of previous experiments indicate improvement, not so much
-        model_weights_path = str(Path(os.getcwd()).parent.absolute()) + "/logs/residual_bad_sys_test/" + Dynamics_config["model_weights"]
-        dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
-        Dynamics_config["D"] = temp_D ## change it back
-
     elif model == 'slip3d':
         print("loading slip3d")
         Dynamics_config["type"] = "slip3d" ## just making sure 
@@ -63,37 +46,6 @@ def get_dynamics(model, Config):
         Dynamics_config["type"] = "noslip3d"
         dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
         Dynamics_config["type"] = "slip3d"
-    elif model == 'slip3d_bad_sys':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        temp_D = Dynamics_config["D"]
-        Dynamics_config["LPF_tau"] = 0.8 ## apply a LPF with tau = 0.8
-        Dynamics_config["D"] = 0.4 ## 150 % of the original D
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["D"] = temp_D ## change it back
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-
-    elif model == 'slip3d_LPF':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.06 ## apply a LPF with tau = 0.2
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-    elif model == 'slip3d_LPF_drag':
-        # temporarily change the dynamics type to noslip3d
-        Dynamics_config["type"] = "slip3d"
-        temp_LPF = Dynamics_config["LPF_tau"]
-        Dynamics_config["LPF_tau"] = 0.07 ## apply a LPF with tau = 0.2
-        temp_drag = Dynamics_config["drag_coeff"]
-        temp_res = Dynamics_config["res_coeff"]
-        Dynamics_config["drag_coeff"] = 0.03
-        Dynamics_config["res_coeff"] = 0.03
-        dynamics = SimpleCarDynamics(Dynamics_config, Map_config, MPPI_config)
-        Dynamics_config["LPF_tau"] = temp_LPF ## change it back
-        Dynamics_config["drag_coeff"] = temp_drag
-        Dynamics_config["res_coeff"] = temp_res
     else:
         raise ValueError('Unknown model type')
     return dynamics
@@ -129,11 +81,11 @@ def main(config_path=None, hal_config_path=None, args=None):
         if not os.path.isfile(WP_file):
             raise ValueError("Waypoint file for scenario {} does not exist".format(scenario))
     for models in Config["models"]:
-        if models not in ["TerrainCNN", "slip3d", "noslip3d", 'slip3d_LPF', 'slip3d_bad_sys', 'slip3d_LPF_drag', 'KARMA', 'KARMA_bad_sys']:
+        if models not in ["baseline", "slip3d", "noslip3d"]:
             raise ValueError("Model {} not supported".format(models))
-    if Config["models"].count("TerrainCNN") > 0:
+    if Config["models"].count("baseline") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
-            raise ValueError("Model weights for TerrainCNN do not exist")
+            raise ValueError("Model weights for baseline do not exist")
 
     if not Config["save_data"]:
         print("WARNING: Data will not be saved!")
@@ -190,16 +142,13 @@ def main(config_path=None, hal_config_path=None, args=None):
                 start_pos = target_WP[0,:3]
                 start_quat = target_WP[0,3:]
 
-                temp_lethal_w = torch.clone(controller.Costs.lethal_w)
-                temp_roll_w = torch.clone(controller.Costs.roll_w)
-                temp_scaled_dt = torch.clone(controller.Sampling.scaled_dt)
-
                 time_limit = Config["time_limit"][scenario_count]
                 lookahead = Config["lookahead"][scenario_count]
                 wp_radius = Config["wp_radius"][scenario_count]
                 scenario_count += 1
 
                 for trial in range(Config["num_iters"]):
+                    ## RESET ENVIRONMENT
                     trial_pos = np.copy(start_pos)
                     trial_pos[:2] += noise_list[trial,:]*0.25 # use cached noise for repeatability
                     bng_interface.reset(start_pos=trial_pos, start_quat=start_quat)
@@ -217,7 +166,8 @@ def main(config_path=None, hal_config_path=None, args=None):
                     print("Experiment: {}/{}".format(experiment_count, total_experiments)) #, end='\r')
                     skip_save = False
                     bng_interface.state_poll()
-
+                    cooldown_timer = 0
+                    controller_reset = False
 
                     while ts < time_limit:
                         now = time.time()
@@ -228,17 +178,21 @@ def main(config_path=None, hal_config_path=None, args=None):
                         timestamps.append(ts)
                         state_data.append(state)
                         reset_data.append(False)
-                        ## append extra data to these lists
+                        
+
+                        ## GETTING DATA FROM SIMULATOR
                         pos = np.copy(state[:2])  # example of how to get car position in world frame. All data points except for dt are 3 dimensional.
                         goal, success, current_wp_index = update_goal(goal, pos, target_WP, current_wp_index, lookahead, wp_radius=wp_radius)
                         ## get robot_centric BEV (not rotated into robot frame)
                         BEV_heght = torch.from_numpy(bng_interface.BEV_heght).to(device=device, dtype=dtype)
                         BEV_normal = torch.from_numpy(bng_interface.BEV_normal).to(device=device, dtype=dtype)
-                        if scenario.split('-')[0] == "race":
+                        if scenario.split('-')[0] == "race": # special case where we are trail-following.
                             BEV_path = torch.from_numpy(bng_interface.BEV_path).to(device=device, dtype=dtype)/255.0
                             BEV_path += torch.from_numpy(bng_interface.BEV_lethal).to(device=device, dtype=dtype)
                         else:
                             BEV_path = torch.from_numpy(bng_interface.BEV_lethal).to(device=device, dtype=dtype)
+
+                        # SETTING INPUTS TO POLICY:
                         controller.Dynamics.set_BEV(BEV_heght, BEV_normal)
                         controller.Costs.set_BEV(BEV_heght, BEV_normal, BEV_path)
                         controller.Costs.set_goal(torch.from_numpy(np.copy(goal) - np.copy(pos)).to(device=device, dtype=dtype))  # you can also do this asynchronously
@@ -246,15 +200,37 @@ def main(config_path=None, hal_config_path=None, args=None):
                         state_to_ctrl = np.copy(state)
                         state_to_ctrl[:3] = np.zeros(3) # this is for the MPPI: technically this should be state[:3] -= BEV_center
                         # we use our previous control output as input for next cycle!
+
                         state_to_ctrl[15:17] = action ## adhoc wheelspeed.
-                        now = time.time()
+                        now = time.perf_counter()
                         action = np.array(controller.forward(torch.from_numpy(state_to_ctrl).to(device=device, dtype=dtype)).cpu().numpy(),dtype=np.float64)[0]
+                        delta_t = time.perf_counter() - now
+                        # CLAMPING ACTIONS FOR SAFETY
                         action[1] = np.clip(action[1], Sampling_config["min_thr"], Sampling_config["max_thr"])
+                        
+                        ## Reset behavior: What should the system do if all the trajectories are lethal?
+                        controller_reset = False
+                        if controller.Costs.bad_physics: # violation of physics constraints.
+                            if state[6] > 0.5:
+                                controller.reset()
+                                action = np.zeros(2)
+                                cooldown_timer = int(0.5/bng_interface.burn_time)
+                                controller_reset = True
+                        if cooldown_timer > 0:
+                            action = np.zeros(2)
+                            cooldown_timer -= 1
+
+                        ## SEND ACTION TO SIMULATOR
+                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=4, Ki=0.05, Kd=0.0, FF_gain=0.0)
+
+
+                        ## VISUALIZATION:
+                        # TODO: this should use a flag of some sort to switch visualizations
                         # costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(((BEV_heght.cpu().numpy() + 4)*255/8).astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
                         costmap_vis(controller.Dynamics.states.cpu().numpy(), pos, np.copy(goal), cv2.applyColorMap(255*BEV_path.cpu().numpy().astype(np.uint8), cv2.COLORMAP_JET), 1 / map_res)
-                        bng_interface.send_ctrl(action, speed_ctrl=True, speed_max = Dynamics_config["throttle_to_wheelspeed"], Kp=4, Ki=0.05, Kd=0.0, FF_gain=0.0)
                         step_cost = controller.Costs.step_cost.cpu().numpy()
 
+                        ## SUCCESS/FAILURE CHECKS and data recording
                         damage = False
                         if(type(bng_interface.broken) == dict ):
                             count = 0
@@ -263,19 +239,10 @@ def main(config_path=None, hal_config_path=None, args=None):
                                     count += 1
                             damage = count > 1
 
-                        result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), step_cost, np.copy(ts), success, damage) ))
+                        result_states.append(np.hstack ( ( np.copy(state), np.copy(goal), controller_reset, np.copy(ts), success, damage) ))
                         
                         if success or bng_interface.flipped_over or np.linalg.norm(pos - goal) > Map_config["map_size"]/2:
                             break ## break the for loop
-
-                        if torch.any(torch.isnan(controller.Dynamics.states)):
-                            print("naans on the run!")
-                            trial -= 1
-                            experiment_count -= 1
-                            skip_save = True
-                            break
-                        delta_T = time.time() - now
-                        # print(bng_interface.burn_time*1e3, delta_T*1e3)
 
                     if skip_save:
                         continue
@@ -292,14 +259,7 @@ def main(config_path=None, hal_config_path=None, args=None):
 
                     if(Config["save_data"]):
                         np.save(filename, result_states)
-                        # timestamps = update_npy_datafile(timestamps, output_path / "timestamps.npy")
-                        # state_data = update_npy_datafile(state_data, output_path / "state.npy")
-                        # reset_data = update_npy_datafile(reset_data, output_path / "reset.npy")
-                
-                controller.Costs.lethal_w = temp_lethal_w
-                controller.Costs.roll_w = temp_roll_w
-                controller.Sampling.scaled_dt = temp_scaled_dt
-                ## reset the weights
+
     except KeyboardInterrupt:
         pass
     except Exception as e:

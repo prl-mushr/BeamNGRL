@@ -47,9 +47,10 @@ def evaluator(
         params = []
 
         if 1:
-            dynamics.traj_num_static = 16
-            dynamics.traj_num_dyn = 16
-            dynamics.static_decay_rate = 1.0
+            dynamics.traj_num_static = 60
+            dynamics.traj_num_dyn = 60
+            dynamics.static_decay_rate = 0.9
+            dynamics.ice_D = 0.4
 
             for j in range(20):
                 if j%2 == 0:

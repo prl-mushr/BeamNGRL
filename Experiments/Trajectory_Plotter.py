@@ -6,17 +6,19 @@ import argparse
 import os
 import sys
 
-waypoints = np.load('Waypoints/race-1.npy')
+waypoints = np.load('Waypoints/ditch-0.npy')
 
 def Plot_trajectory(waypoints):
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    idx = np.min(np.where(waypoints[:,2] > 65)[0])
-    ax.plot(waypoints[:idx,0], waypoints[:idx,1], waypoints[:idx,2], label='Trajectory')
-    np.save('Waypoints/race-2.npy', waypoints[:idx,:])
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
+    # fig = plt.figure()
+    # ax = fig.gca(projection='3d')
+    # ax.plot(waypoints[:idx,0], waypoints[:idx,1], waypoints[:idx,2], label='Trajectory')
+    diff = waypoints - waypoints[0]
+    waypoints = waypoints[0] + 1.2*diff
+    np.save('Waypoints/ditch-4.npy', waypoints)
+    exit()
+    # ax.set_xlabel('x')
+    # ax.set_ylabel('y')
+    # ax.set_zlabel('z')
     plt.show()
 
 Plot_trajectory(waypoints)

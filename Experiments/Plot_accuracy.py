@@ -12,10 +12,14 @@ from scipy.stats import mannwhitneyu, t as student_t
 from matplotlib import rc
 from scipy.stats import mannwhitneyu
 
-# rc('font', family='Times New Roman', size=16)
-
 
 def conf(data):
+    '''
+    Calculate the confidence interval for the data
+    :param data: the data to calculate the confidence interval for
+    :return: the confidence interval
+    Code/math adopted from: https://rowannicholls.github.io/python/statistics/confidence_intervals.html
+    '''
     # Sample size
     n = len(data)
     s = np.std(data, ddof=1)  # Use ddof=1 to get the sample standard deviation
@@ -47,15 +51,15 @@ def create_error_plot(errors, timesteps, model, ax, plot="conf", max_err = None,
         mean /= max_mean[-1]
         std /= max_mean[-1]
     if color is not None and linestyle is not None:
-        ax.plot(np.arange(0, timesteps), mean, label=model, color=color, linestyle=linestyle)
+        ax.plot(np.arange(0, timesteps)*0.08, mean, label=model, color=color, linestyle=linestyle)
     else:
         ax.plot(np.arange(0, timesteps), mean, label=model)
-    ax.fill_between(np.arange(0, timesteps), mean - std, mean + std, alpha=0.2, color=color)
+    ax.fill_between(np.arange(0, timesteps)*0.08, mean - std, mean + std, alpha=0.2, color=color)
 
 
 def plot_accuracy(config):
     pos  = slice(0, 3)
-    rpy  = slice(3, 6)
+    rpy  = slice(3, 5)
     yaw  = slice(5, 6)
     vel  = slice(6, 9)
     drpy = slice(12, 15)
@@ -65,52 +69,35 @@ def plot_accuracy(config):
     skip = int(config["Dynamics_config"]["dt"]/0.02)
 
     fig = plt.figure()
-    fig.suptitle(
-        "Error vs Timestep on {} dataset with dt {} seconds".format(
-            config["dataset"]["name"], config["Dynamics_config"]["dt"]
-        )
-    )
-    # create 4 subplots for each of the error types
-    # ax1 = fig.add_subplot(2, 3, 1)
-    # ax1.set_title("Position (x,y,z) m")
-    # ax1.xaxis.set_label_text("Timesteps")
-    # ax2 = fig.add_subplot(2, 3, 2)
-    # ax2.set_title("Roll-Pitch-Yaw radians")
-    # ax2.xaxis.set_label_text("Timesteps")
-    # ax3 = fig.add_subplot(2, 3, 3)
-    # ax3.set_title("Velocity (x,y,z) m/s")
-    # ax3.xaxis.set_label_text("Timesteps")
-    # ax4 = fig.add_subplot(2, 3, 4)
-    # ax4.set_title("Roll-Pitch-Yaw rate rad/s")
-    # ax4.xaxis.set_label_text("Timesteps")
-    # ax5 = fig.add_subplot(2, 3, 5)
-    # ax5.set_title("Acceleration (x,y,z) m/s/s")
-    # ax5.xaxis.set_label_text("Timesteps")
-    fig.suptitle(
-        "Error vs Timestep with dt={} seconds".format(
-            config["Dynamics_config"]["dt"]
-        )
-    )
-    fig.set_size_inches(20, 5)
-    fig.subplots_adjust(left=0.02, right=0.98, top=0.9, bottom=0.1)  # Adjust the values as needed
-    ax1 = fig.add_subplot(1, 3, 1)
-    ax1.set_title("Position")
-    ax1.yaxis.set_label_text("error in m")
-    ax1.xaxis.set_label_text("Timesteps")
-    # ax3 = fig.add_subplot(1, 4, 2)
-    # ax3.set_title("Velocity")
-    # ax3.yaxis.set_label_text("errors in m/s")
-    # ax3.xaxis.set_label_text("Timesteps")
-    ax4 = fig.add_subplot(1, 3, 2)
-    ax4.set_title("Orientation rate")
-    ax4.yaxis.set_label_text("errors in rad/s")
-    ax4.xaxis.set_label_text("Timesteps")
-    ax5 = fig.add_subplot(1, 3, 3)
-    ax5.set_title("Acceleration")
-    ax5.yaxis.set_label_text("errors in m/s/s")
-    ax5.xaxis.set_label_text("Timesteps")
+
+    rc('font', family='Times New Roman', size=10)
+    fig.set_size_inches(10, 3)
+    fig.subplots_adjust(left=0.05, right=0.98, top=0.8, bottom=0.15)  # Adjust the values as needed
+    ax1 = fig.add_subplot(1, 5, 1)
+    ax1.set_title("Position Error")
+    ax1.yaxis.set_label_text("Error in m")
+    ax1.xaxis.set_label_text("Time (s)")
+    # plt.xticks(fontsize=12)
+    # plt.yticks(fontsize=12)
+    ax2 = fig.add_subplot(1, 5, 2)
+    ax2.set_title("Rotation Rate Error")
+    ax2.yaxis.set_label_text("Error in rad/s")
+    ax2.xaxis.set_label_text("Time (s)")
+    ax3 = fig.add_subplot(1, 5, 3)
+    ax3.set_title("Velocity")
+    ax3.yaxis.set_label_text("errors in m/s")
+    ax3.xaxis.set_label_text("Timesteps")
+    ax4 = fig.add_subplot(1, 5, 4)
+    ax4.set_title("Tilt Error")
+    ax4.yaxis.set_label_text("Error in rad")
+    ax4.xaxis.set_label_text("Time (s)")
+    ax5 = fig.add_subplot(1, 5, 5)
+    ax5.set_title("Acceleration Error")
+    ax5.yaxis.set_label_text("Errors in m/s/s")
+    ax5.xaxis.set_label_text("Time (s)")
+    # plt.xticks(fontsize=12)
+    # plt.yticks(fontsize=12)
     timesteps = config["MPPI_config"]["TIMESTEPS"]
-    rc('font', family='Times New Roman', size=8)
 
     ablation = config["ablation"]
     color_palette = 'inferno'
@@ -132,32 +119,21 @@ def plot_accuracy(config):
         if errors.shape[1] > config["MPPI_config"]["TIMESTEPS"]:
             skip = errors.shape[1]//config["MPPI_config"]["TIMESTEPS"]
             errors = errors[:,::skip,:]
-        if model == "TerrainCNN":
-            model = "Learned_baseline"
         
         color = colors[count]
         linestyle = '-'
 
-        create_error_plot(errors[:, :timesteps, pos], timesteps, model, ax1, plot="conf", color=color, linestyle=linestyle) #, max_err =  max_error[..., pos])
-        # create_error_plot(errors[:, :timesteps, vel],timesteps, model, ax3, plot="conf", color=color, linestyle=linestyle) #, max_err =  max_error[..., vel],)
-        ## need to warp the yaw errors between -pi and pi. yaw error is on position 5
+        create_error_plot(errors[:, :timesteps, pos], timesteps, model, ax1, plot="conf", color=color, linestyle=linestyle)
         errors[:, :timesteps, yaw] = np.arctan2(
             np.sin(errors[:, :timesteps, yaw]), np.cos(errors[:, :timesteps, yaw])
         )
-        # create_error_plot(errors[:, :timesteps, rpy],  timesteps, model, ax2, plot="conf", color=color, linestyle=linestyle) #, max_err = max_error[..., rpy])
-        create_error_plot(errors[:, :timesteps, drpy], timesteps, model, ax4, plot="conf", color=color, linestyle=linestyle) #, max_err =  max_error[..., drpy])
-        create_error_plot(errors[:, :timesteps, acc], timesteps, model, ax5, plot="conf", color=color, linestyle=linestyle) #, max_err =  max_error[..., acc])
+        create_error_plot(errors[:, :timesteps, drpy], timesteps, model, ax2, plot="conf", color=color, linestyle=linestyle)
+        create_error_plot(errors[:, :timesteps, vel], timesteps, model, ax3, plot="conf", color=color, linestyle=linestyle)
+        create_error_plot(errors[:, :timesteps, rpy], timesteps, model, ax4, plot="conf", color=color, linestyle=linestyle) 
+        create_error_plot(errors[:, :timesteps, acc], timesteps, model, ax5, plot="conf", color=color, linestyle=linestyle)
         count += 1
-        # print("model: ", model)
-        # std_state = config["std_state"]
-        # MSE_mean = (np.linalg.norm(errors[...,:]/std_state[:], axis = -1)).max()
-        # print("MSE: ", MSE_mean)
 
-    ax1.legend()
-    # ax2.legend()
-    # ax3.legend()
-    ax4.legend()
-    ax5.legend()
+    plt.legend(loc='upper center', bbox_to_anchor=(-0.8,1.3), ncol=len(config["models"]), fontsize=10)
     plt.show()
     ## save the figure in the results/accuracy folder:
     fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + config["dataset"]["name"] + "_" + str(config["MPPI_config"]["TIMESTEPS"]) + ".png")
@@ -165,7 +141,7 @@ def plot_accuracy(config):
 
 def plot_accuracy_final(config):
     pos  = slice(0, 3)
-    rpy  = slice(3, 6)
+    rpy  = slice(3, 5)
     yaw  = slice(5, 6)
     vel  = slice(6, 9)
     drpy = slice(12, 15)
@@ -174,19 +150,16 @@ def plot_accuracy_final(config):
 
     skip = int(config["Dynamics_config"]["dt"]/0.02)
 
-    # in this function, I want to plot a bar-graph of the errors for each model for each attribute (position, velocity, orientation, orientation rate, acceleration)
-    # I want to have the option to switch between final error and mean error. Also want the confidence interval
-    fig = plt.figure()
-    fig.suptitle(
-        "Normalised Errors for different attributes".format()
-    )
-    fig.set_size_inches(12, 4)
-    #spacing :
-    fig.subplots_adjust(left=0.06, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
-    # all errors in one graph. I basically want to plot a bar graph for each attribute, for each model (same graph). 
-    # I will have 1 plot, with 5 bars for each model. Each bar will represent the error for a specific attribute
-    ax1 = fig.add_subplot(1, 1, 1)
-    ax1.yaxis.set_label_text("Normalised Error")
+    normalize = True
+    num_models = len(config["models"])
+    plt.figure().set_size_inches(2*num_models, 3)
+    plt.subplots_adjust(left=0.07, right=0.99, top=0.9, bottom=0.1)  # Adjust the values as needed
+    if normalize:
+        plt.title("Normalized Errors for Each Model over a 2 second horizon")
+        plt.ylabel("Average Normalised Error")
+    else:
+        plt.title("Absolute Errors for Each Model")
+        plt.ylabel("Absolute Error")
     timesteps = config["MPPI_config"]["TIMESTEPS"]
     rc('font', family='Times New Roman', size=10)
 
@@ -207,13 +180,18 @@ def plot_accuracy_final(config):
         + "noslip3d"
     )
     max_error = np.load(data + "/{}.npy".format(config["dataset"]["name"]))
-    max_pos = np.linalg.norm(max_error[..., pos], axis=2).mean()
-    max_rpy = np.linalg.norm(max_error[..., rpy], axis=2).mean()
-    max_vel = np.linalg.norm(max_error[..., vel], axis=2).mean()
-    max_drpy = np.linalg.norm(max_error[..., drpy], axis=2).mean()
-    max_acc = np.linalg.norm(max_error[..., acc], axis=2).mean()
-    max_error = np.array([max_pos, max_rpy, max_vel, max_drpy, max_acc])
-
+    max_error[:, :timesteps, yaw] = np.arctan2(
+            np.sin(max_error[:, :timesteps, yaw]), np.cos(max_error[:, :timesteps, yaw])
+        )
+    max_pos = np.mean(np.linalg.norm(max_error[..., pos], axis=-1),axis=-1).mean()
+    max_rpy = np.mean(np.linalg.norm(max_error[..., rpy], axis=-1),axis=-1).mean()
+    max_vel = np.mean(np.linalg.norm(max_error[..., vel], axis=-1),axis=-1).mean()
+    max_acc = np.mean(np.linalg.norm(max_error[..., acc], axis=-1),axis=-1).mean()
+    print(max_pos)
+    if normalize:
+        max_error = np.array([max_pos, max_rpy, max_vel, max_acc])
+    else:
+        max_error = np.array([1, 1, 1, 1])
     for model in config["models"]:
         data = (
             str(Path(os.getcwd()).parent.absolute())
@@ -224,278 +202,27 @@ def plot_accuracy_final(config):
         if errors.shape[1] > config["MPPI_config"]["TIMESTEPS"]:
             skip = errors.shape[1]//config["MPPI_config"]["TIMESTEPS"]
             errors = errors[:,::skip,:]
-        if model == "TerrainCNN":
+        if model == "baseline":
             model = "Learned_baseline"
-        
-        # color = colors[count]
-        # linestyle = '-'
-
-        errors[:, :timesteps, yaw] = np.arctan2(
-            np.sin(errors[:, :timesteps, yaw]), np.cos(errors[:, :timesteps, yaw])
-        )
-        pos_error = np.linalg.norm(errors[:, :timesteps, pos], axis=2)/max_error[0]
-        rpy_error = np.linalg.norm(errors[:, :timesteps, rpy], axis=2)/max_error[1]
-        vel_error = np.linalg.norm(errors[:, :timesteps, vel], axis=2)/max_error[2]
-        drpy_error = np.linalg.norm(errors[:, :timesteps, drpy], axis=2)/max_error[3]
-        acc_error = np.linalg.norm(errors[:, :timesteps, acc], axis=2)/max_error[4]
-        # now plot the errors for each attribute for this model
-        bar_positions = np.arange(5) + count*bar_width
-        # confidence interval:
-        ax1.errorbar(bar_positions, [np.mean(pos_error), np.mean(rpy_error), np.mean(vel_error), np.mean(drpy_error), np.mean(acc_error)],
-                            yerr=[conf(pos_error), conf(rpy_error), conf(vel_error), conf(drpy_error), conf(acc_error)], fmt='o', color='black')
-        # also mean:
-        ax1.bar(bar_positions, [np.mean(pos_error), np.mean(rpy_error), np.mean(vel_error), np.mean(drpy_error), np.mean(acc_error)], bar_width, label=model, color=colors[count])
+        if model[:5] == "KARMA":
+            model = "Method" + model[5:]
+ 
+        pos_error = np.mean(np.linalg.norm(errors[:, :timesteps, pos], axis=-1), axis=-1)/max_error[0]
+        rpy_error = np.mean(np.linalg.norm(errors[:, :timesteps, rpy], axis=-1), axis=-1)/max_error[1]
+        vel_error = np.mean(np.linalg.norm(errors[:, :timesteps, vel], axis=-1), axis=-1)/max_error[2]
+        acc_error = np.mean(np.linalg.norm(errors[:, :timesteps, acc], axis=-1), axis=-1)/max_error[3]
+        bar_positions = np.arange(4) + count*bar_width
+        plt.bar(bar_positions, np.array([np.mean(pos_error), np.mean(rpy_error), np.mean(vel_error), np.mean(acc_error)]), bar_width, label=model, color=colors[count])
+        plt.errorbar(bar_positions, np.array([np.mean(pos_error), np.mean(rpy_error), np.mean(vel_error), np.mean(acc_error)]), yerr=np.array([conf(pos_error), conf(rpy_error), conf(vel_error), conf(acc_error)]), fmt='none', capsize=5)
         count += 1
-    ax1.legend()
-    ax1.set_xticks(np.arange(5) + bar_width*(count-1)/2)
-    ax1.set_xticklabels(["Position", "Orientation", "Velocity", "Orientation rate", "Acceleration"])
+    plt.ylim(0, 1.2)
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5,1.0), ncol=len(config["models"]))
+    if normalize:
+        plt.xticks(np.arange(4) + bar_width*(count-1)/2, ["Position Error", "Tilt Error", "Velocity Error", "Acceleration Error"])
+    else:
+        plt.xticks(np.arange(4) + bar_width*(count-1)/2, ["Position Error (m)", "Tilt Error (rad)", "Velocity Error (m/s)", "Acceleration Error (m/s^2)"])
+    plt.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + config["dataset"]["name"] + "_final" + ".png")
     plt.show()
-    ## save the figure in the results/accuracy folder:
-    fig.savefig(str(Path(os.getcwd()).parent.absolute()) + "/Experiments/Results/Accuracy/" + config["dataset"]["name"] + "_final" + ".png")
-
-    pos_error_list = []
-    rpy_error_list = []
-    vel_error_list = []
-    drpy_error_list = []
-    acc_error_list = []
-
-    count = 0
-    for model in ["KARMA", "slip3d", "KARMA_bad_sys", "slip3d_bad_sys", "KARMA_noslip", "noslip3d"]:
-        data = (
-            str(Path(os.getcwd()).parent.absolute())
-            + "/Experiments/Results/Accuracy/"
-            + model
-        )
-        errors = np.load(data + "/{}.npy".format(config["dataset"]["name"]))
-        if errors.shape[1] > config["MPPI_config"]["TIMESTEPS"]:
-            skip = errors.shape[1]//config["MPPI_config"]["TIMESTEPS"]
-            errors = errors[:,::skip,:]
-        if model == "TerrainCNN":
-            model = "Learned_baseline"
-        
-        errors[:, :timesteps, yaw] = np.arctan2(
-            np.sin(errors[:, :timesteps, yaw]), np.cos(errors[:, :timesteps, yaw])
-        )
-        pos_error_list.append(np.mean(np.linalg.norm(errors[:, :timesteps, pos], axis=2)/max_error[0], axis=1))
-        rpy_error_list.append(np.mean(np.linalg.norm(errors[:, :timesteps, rpy], axis=2)/max_error[1], axis=1))
-        vel_error_list.append(np.mean(np.linalg.norm(errors[:, :timesteps, vel], axis=2)/max_error[2], axis=1))
-        drpy_error_list.append(np.mean(np.linalg.norm(errors[:, :timesteps, drpy], axis=2)/max_error[3], axis=1))
-        acc_error_list.append(np.mean(np.linalg.norm(errors[:, :timesteps, acc], axis=2)/max_error[4], axis=1))
-
-        count += 1
-    
-    # Perform p-test for position error
-    print("Position Error:")
-    # KARMA vs slip3d
-
-    stat, p = mannwhitneyu(pos_error_list[0], pos_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(pos_error_list[0], pos_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(rpy_error_list[0], rpy_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(rpy_error_list[0], rpy_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(rpy_error_list[2], rpy_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(rpy_error_list[3], rpy_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for velocity error
-    print("Velocity Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(vel_error_list[2], vel_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(vel_error_list[3], vel_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for drpy error
-    print("DRPY Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(drpy_error_list[2], drpy_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(drpy_error_list[3], drpy_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for acceleration error
-    print("Acceleration Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(acc_error_list[2], acc_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(acc_error_list[3], acc_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
- # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(pos_error_list[0], pos_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(pos_error_list[2], pos_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(pos_error_list[3], pos_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for rpy error
-    print("RPY Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(rpy_error_list[0], rpy_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(rpy_error_list[0], rpy_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(rpy_error_list[0], rpy_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(rpy_error_list[2], rpy_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(rpy_error_list[3], rpy_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for velocity error
-    print("Velocity Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(vel_error_list[0], vel_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(vel_error_list[2], vel_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(vel_error_list[3], vel_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for drpy error
-    print("DRPY Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(drpy_error_list[0], drpy_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(drpy_error_list[2], drpy_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(drpy_error_list[3], drpy_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
-    # Perform p-test for acceleration error
-    print("Acceleration Error:")
-    # KARMA vs slip3d
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[1])
-    print(f"KARMA vs slip3d: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_bad_sys
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[2])
-    print(f"KARMA vs KARMA_bad_sys: p-value = {p:.3f}")
-
-    # KARMA vs KARMA_noslip
-    stat, p = mannwhitneyu(acc_error_list[0], acc_error_list[3])
-    print(f"KARMA vs KARMA_noslip: p-value = {p:.3f}")
-
-    # KARMA_bad_sys vs slip3d_bad_sys
-    stat, p = mannwhitneyu(acc_error_list[2], acc_error_list[4])
-    print(f"KARMA_bad_sys vs slip3d_bad_sys: p-value = {p:.3f}")
-
-    # KARMA_noslip vs noslip3d
-    stat, p = mannwhitneyu(acc_error_list[3], acc_error_list[5])
-    print(f"KARMA_noslip vs noslip3d: p-value = {p:.3f}")
-
-    print("=====")
-
 
 
 if __name__ == "__main__":
@@ -522,4 +249,4 @@ if __name__ == "__main__":
         ).read(),
         Loader=yaml.SafeLoader,
     )
-    plot_accuracy_final(config)
+    plot_accuracy(config)

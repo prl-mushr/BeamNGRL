@@ -22,6 +22,7 @@ def get_datasets(
     state_input_key: str = None,
     control_input_key: str = None,
     ctx_input_keys: List = None,
+    sampler = None,
 ):
 
     # get dataset stats
@@ -169,9 +170,6 @@ class DynamicsDataset(Dataset):
         ret['future_times'] = future_ts
         ret['future_states'] = future_states
         ret['future_ctrls'] = future_ctrls
-
-        # ret['full_input_states'] = np.concatenate((past_states, state[None], future_states), axis=0)
-        # ret['full_input_ctrls'] = np.concatenate((past_ctrls, control[None], future_ctrls), axis=0)
 
         ret.update(bev_input_dict)
 

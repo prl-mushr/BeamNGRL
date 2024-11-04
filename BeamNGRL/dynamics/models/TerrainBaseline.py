@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
-from torchvision.transforms.functional import rotate
+import torch.nn.utils.spectral_norm as spnorm
+from torch.utils.cpp_extension import load
 from BeamNGRL.dynamics.models.base import DynamicsBase
 from typing import Dict
-from BeamNGRL.dynamics.utils.network_utils import get_feat_index_tn
-from BeamNGRL.dynamics.utils.network_utils import get_state_features, get_ctrl_features
 import time
-from BeamNGRL.dynamics.utils.misc_utils import * ## uncomment on eval
-import cv2
+# from BeamNGRL.dynamics.utils.misc_utils import * ## uncomment on eval
+import numpy as np
 import time
+import sys
+import os
+
 
 class SequentialContextMLP(DynamicsBase):
 
@@ -28,6 +30,7 @@ class SequentialContextMLP(DynamicsBase):
             std_state_err=None,
             mean_control=None,
             std_control=None,
+            spectral_norm=False,
             **kwargs,
     ):
 
@@ -36,6 +39,63 @@ class SequentialContextMLP(DynamicsBase):
         self.dtype = torch.float
         self.d = torch.device('cuda')
 
+        if mean_state is None or std_state is None or mean_control is None or std_control is None:
+            print("=====================================================================")
+            print("Please define the mean, std, std_err of the state in the config file.")
+            print("=====================================================================")
+            exit()
+        
+        self.NX = np.int32(17)
+        self.NC = np.int32(2)
+
+        self.mean_state = torch.zeros(self.NX, dtype=self.dtype, device =self.d)
+        self.std_state = torch.zeros(self.NX, dtype=self.dtype, device =self.d)
+        self.mean_state[:self.NX-self.NC] = torch.tensor(mean_state).to(self.d)
+        self.std_state[:self.NX-self.NC] = torch.tensor(std_state).to(self.d)
+        self.mean_state[self.NX-self.NC:] = torch.tensor(mean_control).to(self.d)
+        self.std_state[self.NX-self.NC:] = torch.tensor(std_control).to(self.d)
+        self.std_bev = torch.tensor(patch_size/2).to(self.d) ## expect the height in the crop patch to change around the center by at most patch_size/2, corresponding to a 45 degrees
+
+        self.K = np.int32(1)
+        self.T = np.int32(1)
+        self.M = np.int32(1)
+        ## pulled these values from: A Hybrid Hierarchical Rally Driver Model for Autonomous Vehicle Agile Maneuvering on Loose Surfaces
+        self.car_l2 = np.float32(wheelbase/2)
+        self.car_w2 = np.float32(trackwidth/2)
+
+        self.BEVmap_size = torch.tensor(BEVmap_size, dtype=self.dtype, device=self.d)
+        self.BEVmap_res = torch.tensor(BEVmap_res, dtype=self.dtype, device=self.d)
+        self.BEVmap_size_px = (self.BEVmap_size/self.BEVmap_res).clone().detach().to(device=self.d, dtype=torch.int32)
+
+        self.patch_size = patch_size
+        self.patch_size_px = int(self.patch_size/self.BEVmap_res)
+
+        self.BEVmap_height = torch.zeros((self.BEVmap_size_px, self.BEVmap_size_px), dtype=self.dtype, device=self.d)
+        self.BEVmap_normal = torch.zeros((3, self.BEVmap_size_px, self.BEVmap_size_px), dtype=self.dtype, device=self.d) # this is a placeholder for now.
+
+        folder_name = 'BeamNGRL'
+
+        # Check each directory in sys.path for the folder
+        for path in sys.path:
+            folder_path = os.path.join(path, folder_name)
+            if os.path.exists(folder_path):
+                break
+        else:
+            print("Did you forget to add BeamNGRL to your PYTHONPATH?")
+
+        cpp_path = '{}/control/UW_mppi/Dynamics/analytical_bicycle.cpp'.format(folder_path)
+        cuda_path = '{}/control/UW_mppi/Dynamics/analytical_bicycle.cu'.format(folder_path)
+        # Compile and load the extension
+
+        self.kernel = load(
+            name="analytical_bicycle",
+            sources=[cpp_path, cuda_path],
+            verbose=False,
+        )
+        self.preprocess = self.kernel.rollout_preprocess
+
+        # ================= DEFINE NETWORKS============================
+        self.spectral_norm = spectral_norm
         self.state_dim = 10 ## vx, vy, vz, wx, wy, wz, cr, sr, cp, sp, st, th
         self.ctrl_dim = 2
         self.context_dim = 12
@@ -43,56 +103,12 @@ class SequentialContextMLP(DynamicsBase):
         self.output_dim = 6 ## dvx/dt, dvy/dt, dvz/dt, dwx/dt, dwy/dt, dwz/dt
         self.dt = dt
 
-        if mean_state is None or std_state is None or std_state_err is None or mean_control is None or std_control is None:
-            print("=====================================================================")
-            print("Please define the mean, std, std_err of the state in the config file.")
-            print("=====================================================================")
-            exit()
-
-        self.mean_state = torch.tensor(mean_state).to(self.d)
-        self.std_state = torch.tensor(std_state).to(self.d)
-        self.std_state_err = torch.Tensor(std_state_err).to(self.d)
-        ## std_state err is the denormalization we will use for residuals
-        self.mean_control = torch.tensor(mean_control).to(self.d)
-        self.std_control = torch.tensor(std_control).to(self.d)
-        self.std_bev = torch.tensor(patch_size/2).to(self.d) ## expect the height in the crop patch to change around the center by at most patch_size/2, corresponding to a 45 degrees
-
-        self.BEVmap_size = torch.tensor(BEVmap_size, dtype=self.dtype, device=self.d)
-        self.BEVmap_res = torch.tensor(BEVmap_res, dtype=self.dtype, device=self.d)
-        ## TODO: import map size and res from training data and throw error during forward pass if the numbers don't square tf up (in training, check on every pass, on inference just check outside for loop)
-
-        self.BEVmap_size_px = torch.tensor((self.BEVmap_size/self.BEVmap_res), device=self.d, dtype=torch.int32)
-        self.delta = torch.tensor(0.5*patch_size/self.BEVmap_res, device=self.d, dtype=torch.long)
-        self.wheelbase = torch.tensor(wheelbase/self.BEVmap_res, device=self.d, dtype=torch.long)
-        self.trackwidth = torch.tensor(trackwidth/self.BEVmap_res, device=self.d, dtype=torch.long)
-        self.flx = self.delta + self.wheelbase//2 # mid plus half of wheelbase
-        self.fly = self.delta + self.trackwidth//2 # mid minus half of trackwidth
-        self.brx = self.delta - self.wheelbase//2 # mid minus half of wheelbase
-        self.bry = self.delta - self.trackwidth//2 # mid plus half of trackwidth
-        self.frx = self.flx
-        self.fry = self.bry
-        self.blx = self.brx
-        self.bly = self.fly
-
-        self.cr_mean = torch.cos(self.mean_state[3])
-        self.sr_mean = torch.sin(self.mean_state[3])
-        self.cr_std = torch.cos(self.std_state[3])
-        self.sr_std = torch.sin(self.std_state[3])
-        self.cp_mean = torch.cos(self.mean_state[4])
-        self.sp_mean = torch.sin(self.mean_state[4])
-        self.cp_std = torch.cos(self.std_state[4])
-        self.sp_std = torch.sin(self.std_state[4])
-
-        self.GRAVITY = torch.tensor(9.81, dtype=self.dtype, device=self.d)
-
-        # ================= DEFINE NETWORKS============================
-
         self.kernel_size = 3
         self.stride = 1
         self.channels = 2
         K_pool = 3
         S_pool = 2
-        L1 = int((self.delta*2 - self.kernel_size)/self.stride) + 1
+        L1 = int((self.patch_size_px - self.kernel_size)/self.stride) + 1
         L2 = int( (L1 - K_pool)/S_pool) + 1
         output_size = int( (L2 - self.kernel_size)/self.stride) + 1
         conv1 = nn.Conv2d(1, self.channels, kernel_size=self.kernel_size, stride=self.stride)
@@ -109,17 +125,29 @@ class SequentialContextMLP(DynamicsBase):
         cnn_layers += [ fc1, nn.Tanh() ]
         cnn_layers += [ fc2 ]
         self.CNN = nn.Sequential(*cnn_layers)
-        self.CNN = nn.Sequential(*cnn_layers)
 
-        fc_layers = [
-            nn.Linear(self.input_dim, hidden_dim),
-            nn.Tanh(),
-        ]
-        for _ in range(hidden_depth):
-            fc_layers += [nn.Linear(hidden_dim, hidden_dim)]
+        if self.spectral_norm:
+            fc_layers = [
+                nn.Linear(self.input_dim, hidden_dim),
+                nn.Tanh(),
+            ]
+            for _ in range(hidden_depth):
+                fc_layers += [spnorm(nn.Linear(hidden_dim, hidden_dim))]
+                fc_layers += [nn.Tanh()]
+            fc_layers += [spnorm(nn.Linear(hidden_dim, self.output_dim))]
             fc_layers += [nn.Tanh()]
-        fc_layers += [nn.Linear(hidden_dim, self.output_dim)]
-        fc_layers += [nn.Tanh()]
+        
+        else:
+            fc_layers = [
+                nn.Linear(self.input_dim, hidden_dim),
+                nn.Tanh(),
+            ]
+            for _ in range(hidden_depth):
+                fc_layers += [nn.Linear(hidden_dim, hidden_dim)]
+                fc_layers += [nn.Tanh()]
+            fc_layers += [nn.Linear(hidden_dim, self.output_dim)]
+            fc_layers += [nn.Tanh()]
+
 
         self.main = nn.Sequential(*fc_layers)
 
@@ -132,103 +160,47 @@ class SequentialContextMLP(DynamicsBase):
             count=0,
             dt=0.1
     ):
+        states = states.clone().detach()
+        ctrls = controls.clone().detach()
+
+        states = torch.cat((states, ctrls), dim=-1) # hotfix babyy
+
         n = states.shape[-1]
         n_c = controls.shape[-1]
         t = states.shape[-2]
-        k = states.shape[-3]
-
-        states_next = states.clone().detach()
-        ctrls = controls.clone().detach()
-
-        '''
-        context data contains BEV hght map --
-        I get k bevs of shape k x 1 x bevshape x bevshape
-        we don't rotate the image, but we do provide the yaw angle of the vehicle I assume relative to the start?
-        '''
-        bev = ctx_data['bev_elev']
-        if evaluation:
-            bev_input = torch.zeros((k, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
-            center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            angle = states_next[..., 5]
-            bev_input = crop_rotate_batch(bev, self.delta.item()*2, self.delta.item()*2, center, angle) ## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
-            fl = torch.zeros(k, dtype=self.dtype, device=self.d)
-            fr = torch.zeros(k, dtype=self.dtype, device=self.d)
-            bl = torch.zeros(k, dtype=self.dtype, device=self.d)
-            br = torch.zeros(k, dtype=self.dtype, device=self.d)
-            fl = bev_input[ :, self.fly, self.flx]
-            fr = bev_input[ :, self.fry, self.frx]
-            bl = bev_input[ :, self.bly, self.blx]
-            br = bev_input[ :, self.bry, self.brx]
-            bev_input -= bev_input[..., self.delta.item(), self.delta.item()].clone().unsqueeze(-1).unsqueeze(-1)
-        else:
-            bev_input = torch.zeros((k, t, self.delta*2, self.delta*2), dtype=self.dtype, device=self.d) ## a lot of compute time is wasted producing this "empty" array every "timestep"
-            center = torch.clamp( ((states_next[..., :2] + self.BEVmap_size*0.5) / self.BEVmap_res).to(dtype=torch.long, device=self.d), 0 + self.delta, self.BEVmap_size_px - 1 - self.delta)
-            angle = states_next[..., 5] ## the map rotates in the opposite direction to the car!
-            fl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
-            fr = torch.zeros((k,t), dtype=self.dtype, device=self.d)
-            bl = torch.zeros((k,t), dtype=self.dtype, device=self.d)
-            br = torch.zeros((k,t), dtype=self.dtype, device=self.d)
-            for i in range(k):
-                bev_input[i,...] = crop_rotate_batch(bev[i,...], self.delta.item()*2, self.delta.item()*2, center[i,...], angle[i,...])## the order of center coordinates is x,y as opposed to that used in manual cropping which is y,x
-                fl[i, :] = bev_input[i, :, self.fly, self.flx]
-                fr[i, :] = bev_input[i, :, self.fry, self.frx]
-                bl[i, :] = bev_input[i, :, self.bly, self.blx]
-                br[i, :] = bev_input[i, :, self.bry, self.brx]
-            bev_input -= bev_input[..., self.delta.item(), self.delta.item()].clone().unsqueeze(-1).unsqueeze(-1)
-
-        roll = (torch.atan( ((fl + bl) - (fr + br))/(2*self.trackwidth*self.BEVmap_res))).reshape((k*t))
-        pitch = (torch.atan( ((bl + br) - (fl + fr))/(2*self.wheelbase*self.BEVmap_res))).reshape((k*t))
-
-        states_next = states_next.reshape((k*t, n))
-        ctrls = ctrls.reshape((k*t, n_c))
+        batchsize = states.shape[-3]
         
-        vU = torch.zeros((k*t, self.state_dim + self.ctrl_dim), dtype=self.dtype, device=self.d)
-        
-        vU[..., 0:3] = (states_next[..., 6:9] - self.mean_state[6:9])/self.std_state[6:9]  # vels
-        vU[..., 3:6] = (states_next[..., 12:15] - self.mean_state[12:15])/self.std_state[12:15]  # rates
-        # terrain derived roll/pitch
-        cr = torch.cos(roll)
-        sr = torch.sin(roll)
-        cp = torch.cos(pitch)
-        sp = torch.sin(pitch)
-        cy = torch.cos(states_next[..., 5])
-        sy = torch.sin(states_next[..., 5])
-        ct = torch.sqrt(torch.clamp(1 - sp**2 - sr**2,1e-2,1))
-        
-        vU[..., 6] = (cr - self.cr_mean)/self.cr_std
-        vU[..., 7] = (sr - self.sr_mean)/self.sr_std
-        vU[..., 8] = (cp - self.cp_mean)/self.cp_std
-        vU[..., 9] = (sp - self.sp_mean)/self.sp_std
-        vU[..., 10:12] = (ctrls - self.mean_control)/self.std_control # controls
+        self.BEVmap_height = ctx_data['bev_elev']
+        self.NX = np.int32(n)
+        self.NC = np.int32(n_c)
 
-        bev_input = bev_input.reshape((k*t, self.delta*2, self.delta*2))/self.std_bev
+        self.K = np.int32(t) # we flatten the time-series data and treat each time-step as IID for single-step prediction training.
+        # this technically gives us a batchsize = t, rather than a batchsize of "1". 
+        self.bev_context = torch.zeros((batchsize, self.K, self.patch_size_px, self.patch_size_px), dtype=self.dtype, device=self.d)
+        self.sa = torch.zeros(batchsize, self.K, 12, dtype=self.dtype, device=self.d)
+        # Set grid and block dimensions
+        self.block_dim = 8 #min(MPPI_config["ROLLOUTS"], 1024) # use 32 for jetson, use 1024 for RTX GPUs
+        self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
-        context = self.CNN(bev_input.unsqueeze(0).transpose(0,1))
+        for i in range(batchsize):
+            self.preprocess(states[i, ...].unsqueeze(1), ctrls[i, ...].unsqueeze(1), self.sa[i, ...], self.bev_context[i, ...], np.int32(0), 
+                        self.BEVmap_height[i, ...].squeeze(0), self.BEVmap_normal,
+                        self.BEVmap_size_px, self.BEVmap_res, self.BEVmap_size, self.K, self.T, 
+                        self.NX, self.NC, self.car_l2, self.car_w2, self.std_state, self.mean_state, self.patch_size,
+                        self.block_dim, self.grid_dim)
 
-        vUc = torch.cat((vU, context), dim=-1)
-        dV = self.main(vUc)
+        bev_context = self.bev_context.reshape((batchsize * t, self.patch_size_px, self.patch_size_px))
+        sa = self.sa.reshape((batchsize * t, 12))
+        context = self.CNN(bev_context.unsqueeze(0).transpose(0,1))
+        sac = torch.cat((sa, context), dim=-1)
+        Ddot_q = self.main(sac)
 
-        states_next[..., 6:9] = states_next[..., 6:9] + dV[..., 0:3]* self.std_state[9:12] * self.dt
+        Ddot_q = Ddot_q.reshape((batchsize, t, self.output_dim))
 
-        states_next[..., 12:15] = states_next[..., 12:15] + dV[..., 3:6]* self.std_state[12:15] * self.dt
+        states[..., 6:9] = states[..., 6:9] + Ddot_q[..., 0:3]* self.std_state[9:12] * self.dt
+        states[..., 12:15] = states[..., 12:15] + Ddot_q[..., 3:6]* self.std_state[12:15] * self.dt
 
-        with torch.no_grad():
-            # this is just to remove non inertial forces (so that we get what the IMU would tell us)
-            states_next[..., 9]  = dV[..., 0]*self.std_state[9]  - (states_next[..., 7]*states_next[..., 14] - states_next[..., 8]*states_next[..., 13] + sp*self.GRAVITY)
-            states_next[..., 10] = dV[..., 1]*self.std_state[10] - (-states_next[..., 6]*states_next[..., 14] + states_next[..., 8]*states_next[..., 12] - sr*cp*self.GRAVITY)
-            states_next[..., 11] = dV[..., 2]*self.std_state[11] - (states_next[..., 6]*states_next[..., 13] - states_next[..., 7]*states_next[..., 12] - cp*cr*self.GRAVITY)
-
-            states_next[..., 3] = roll
-            states_next[..., 4] = pitch
-            states_next[..., 5] = states_next[..., 5] + self.dt*( states_next[..., 12]*0    + states_next[..., 13]*(sr/cp)           + states_next[..., 14]*(cr/cp)           )
-
-            states_next[..., 0] = states_next[..., 0] + self.dt*( states_next[..., 6]*cp*cy + states_next[..., 7]*(sr*sp*cy - cr*sy) + states_next[..., 8]*(cr*sp*cy + sr*sy) )
-            states_next[..., 1] = states_next[..., 1] + self.dt*( states_next[..., 6]*cp*sy + states_next[..., 7]*(sr*sp*sy + cr*cy) + states_next[..., 8]*(cr*sp*sy - sr*cy) )
-            states_next[..., 2] = states_next[..., 2] + self.dt*( states_next[..., 6]*(-sp) + states_next[..., 7]*(sr*cp)            + states_next[..., 8]*(cr*cp)            )
-
-        states_next = states_next.reshape((k,t,n))
-
-        return states_next
+        return states[..., : self.NX - self.NC] # because we're only expecting 15 back...
 
     def _rollout(
             self,
@@ -283,5 +255,4 @@ class SequentialContextMLP(DynamicsBase):
         z = z.squeeze(-1)
 
         return torch.stack((x, y, z, roll, pitch, yaw, vx, vy, vz, ax, ay, az, wx, wy, wz, steer, throttle), dim=-1)
-    
     

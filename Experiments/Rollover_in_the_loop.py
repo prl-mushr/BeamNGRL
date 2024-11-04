@@ -15,8 +15,6 @@ import argparse
 import cv2
 import math as m
 
-# torch.manual_seed(0)
-
 def update_npy_datafile(buffer: List, filepath):
     buff_arr = np.array(buffer)
     if filepath.is_file():
@@ -33,7 +31,7 @@ def get_dynamics(model, Config):
     Dynamics_config = Config["Dynamics_config"]
     MPPI_config = Config["MPPI_config"]
     Map_config = Config["Map_config"]
-    if model == 'TerrainCNN':
+    if model == 'baseline':
         model_weights_path = LOGS_PATH / "small_island" / Dynamics_config["model_weights"]
         dynamics = SimpleCarNetworkDyn(Dynamics_config, Map_config, MPPI_config, model_weights_path=model_weights_path)
     elif model == 'slip3d' or model == 'slip3d_rp':
@@ -121,11 +119,11 @@ def main(config_path=None, hal_config_path=None, args=None):
         if not os.path.isfile(WP_file):
             raise ValueError("Waypoint file for scenario {} does not exist".format(scenario))
     for models in Config["models"]:
-        if models not in ["TerrainCNN", "slip3d", "noslip3d","slip3d_rp"]:
+        if models not in ["baseline", "slip3d", "noslip3d","slip3d_rp"]:
             raise ValueError("Model {} not supported".format(models))
-    if Config["models"].count("TerrainCNN") > 0:
+    if Config["models"].count("baseline") > 0:
         if not os.path.isfile(LOGS_PATH / "small_island" / Dynamics_config["model_weights"]):
-            raise ValueError("Model weights for TerrainCNN do not exist")
+            raise ValueError("Model weights for baseline do not exist")
 
     if(Config["save_data"] != True):
         print("data will not be saved!")

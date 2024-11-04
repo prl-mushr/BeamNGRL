@@ -10,30 +10,8 @@ import yaml
 from BeamNGRL import *
 from typing import Dict
 from utils.vis_utils import visualize_rollouts, get_rollouts
-from BeamNGRL.control.UW_mppi.Dynamics.ResidualCarDynamics import ResidualCarDynamics
 import traceback
-
-def get_dynamics(Config):
-    Dynamics_config = Config["Dynamics_config"]
-    MPPI_config = Config["MPPI_config"]
-    Map_config = Config["Map_config"]
-    dynamics = ResidualCarDynamics(Dynamics_config, Map_config, MPPI_config, model_weights_path=None)
-    return dynamics
-
-def rotate_traj(states):
-    theta = -states[..., 0, 5]
-    X = states[..., 0]
-    Y = states[..., 1]
-    yaw = states[..., 5]
-    ct = torch.cos(theta)
-    st = torch.sin(theta)
-    x = torch.matmul(ct, X) - torch.matmul(st, Y)
-    y = torch.matmul(st, X) + torch.matmul(ct, Y)
-    yaw += theta.unsqueeze(-1).repeat(1,states.shape[-2])
-    states[..., 0] = x
-    states[..., 1] = y
-    states[..., 5] = yaw
-    return states
+import random
 
 def train(
         network,
@@ -62,7 +40,11 @@ def train(
     skip = 1
     if config["TRP"]:
         dynamics = get_dynamics(config)
-    skip = int(config["Dynamics_config"]["dt"]/0.02)
+    try:
+        skip = int(config["Dynamics_config"]["dt"]/config["dataset_dt"])
+    except: # fail silently for now
+        print("USING DATASET DT OF 0.02 SECONDS MF!!!")
+        skip = int(config["Dynamics_config"]["dt"]/0.02)
 
     try:
         if args.start_from != -1:
@@ -70,6 +52,7 @@ def train(
         else:
             start = 1
 
+        subsample_probability = 1/2
         for epoch in range(start, args.n_epochs + 1):
             # if epoch > 1: # run valid. without training first
             if epoch > 0:
@@ -77,51 +60,24 @@ def train(
                 train_average_loss = []
 
                 for i, (states_tn, controls_tn, ctx_tn_dict) in enumerate(tqdm(train_loader)):
-
                     # Set device
+                    if random.random() > subsample_probability:
+                        continue
                     states_tn = states_tn.to(**tn_args)[:,::skip,:]
                     controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                     ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
+
                     optimizer.zero_grad()
 
-                    if config["TRP"]:
-                        with torch.no_grad(): # the network is outside of this block.
-                            ## this will only work with batch size of 1 for now.
-                            BEV_heght = ctx_tn_dict["bev_elev"].squeeze(1)
-                            BEV_normal = ctx_tn_dict["bev_normal"].squeeze(1)
-
-                            states = torch.zeros(1,states_tn.shape[0], states_tn.shape[1], 17).to(**tn_args)
-                            states[0,:,0,:15] = states_tn[:,0,:].clone().detach()
-                            controls = controls_tn.clone().detach().unsqueeze(0)
-                            predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal)
-                            if torch.any(torch.isnan(predict_states)):
-                                predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal, print_something="fixing nans")
-                            states_input = predict_states[...,:15].squeeze(0)
-                            states_input = rotate_traj(states_input)
-                            ctx_data={'rotate_crop': dynamics.bev_input_train}
-                        if torch.any(torch.isnan(predict_states)):
-                            # print("can't fix nan")
-                            continue
-
-                        pred = network(
-                            states_input,
-                            controls_tn,
-                            ctx_data,
-                        )
-                        targets = rotate_traj(states_tn)
-
-                    else:
-                        pred = network(
-                            states_tn,
-                            controls_tn,
-                            ctx_tn_dict,
-                        )
-                        targets = states_tn
+                    pred = network(
+                        states_tn,
+                        controls_tn,
+                        ctx_tn_dict,
+                    )
+                    targets = states_tn
 
                     loss = loss_func(pred, targets, conf = config) #, step=skip)
-                    if loss.isnan():
-                        # print("naan loss")
-                        continue
+
                     loss.backward()
                     optimizer.step()
 
@@ -133,11 +89,6 @@ def train(
                     writer.add_scalar('Train/gradient', grad_mag,
                         len(train_loader) * epoch + i)
 
-                    if i % args.log_interval == 0 and not config["TRP"]:
-                        batch_idx = 0
-                        state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
-                        visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
-                                           batch_idx=batch_idx, mode='Train', writer=writer)
 
                 train_average_loss = np.asarray(train_average_loss).mean()
                 writer.add_scalar('Train/Loss', train_average_loss, epoch)
@@ -162,52 +113,19 @@ def train(
                         states_tn = states_tn.to(**tn_args)[:,::skip,:]
                         controls_tn = controls_tn.to(**tn_args)[:,::skip,:]
                         ctx_tn_dict = {k: tn.to(**tn_args) for k, tn in ctx_tn_dict.items()}
-                        if config["TRP"]:
-                            with torch.no_grad():
-                                ## this will only work with batch size of 1 for now.
-                                BEV_heght = ctx_tn_dict["bev_elev"].squeeze(1)
-                                BEV_normal = ctx_tn_dict["bev_normal"].squeeze(1)
 
-                                states = torch.zeros(1,states_tn.shape[0], states_tn.shape[1], 17).to(**tn_args)
-                                states[0,:,0,:15] = states_tn[:,0,:].clone().detach()
-                                controls = controls_tn.clone().detach().unsqueeze(0)
-                                predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal)
-                                if torch.any(torch.isnan(predict_states)):
-                                    predict_states = dynamics.forward_train(states, controls, BEV_heght, BEV_normal, print_something="fixing nans")
-                                ctx_data={'rotate_crop': dynamics.bev_input_train}
-                                states_input = predict_states[...,:15].squeeze(0)
-                                states_input = rotate_traj(states_input)
-
-                            if torch.any(torch.isnan(predict_states)):
-                                # print("can't fix nan")
-                                continue
-                            pred = network(
-                                states_input,
-                                controls_tn,
-                                ctx_data,
-                            )
-                            targets = rotate_traj(states_tn)
-
-
-                        else:
-                            pred = network(
-                                states_tn,
-                                controls_tn,
-                                ctx_tn_dict,
-                            )
-                            targets = states_tn
+                        pred = network(
+                            states_tn,
+                            controls_tn,
+                            ctx_tn_dict,
+                        )
+                        targets = states_tn
                         # targets = network.process_targets(states_tn)
                         test_batch_loss = loss_func(pred, targets, conf=config) #, step=skip)
 
                     test_avg_loss.append(test_batch_loss.cpu().numpy())
                     writer.add_scalar('Valid/batchLoss', test_batch_loss,
                         len(valid_loader) * epoch + i)
-
-                    if i % args.log_interval == 0 and not config["TRP"]:
-                        batch_idx = 0
-                        state_rollouts = get_rollouts(controls_tn, ctx_tn_dict, network, batch_idx=batch_idx)
-                        visualize_rollouts(states_tn, state_rollouts, ctx_tn_dict, len(train_loader) * epoch + i,
-                                           batch_idx=batch_idx, mode='Valid', writer=writer)
 
                 test_loss = np.asarray(test_avg_loss).mean()
                 writer.add_scalar('Valid/Loss', test_loss, epoch)
@@ -242,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument('--scheduler', action='store_true', help='use scheduler (cosine annealing)')
     parser.add_argument('--log_interval', type=int, required=False, default=10, help='model grad/weights log interval')
     parser.add_argument('--finetune', type=str, required=False, default = None, help='pretrained weights to finetune from')
-    parser.add_argument('--shuffle', type=bool, required=False, default=True, help='shuffle data')
+    parser.add_argument('--shuffle', type=bool, required=False, default=False, help='shuffle data')
     parser.add_argument('--batchsize', type=int, required=False, default=1, help='training batch size')
     parser.add_argument('--start_from', type=int, required=False, default=-1, help='epoch to start from')
     parser.add_argument('--valid_interval', type=int, required=False, default=1, help='model grad/weights log interval')
@@ -262,7 +180,12 @@ if __name__ == "__main__":
     # Load experiment config
     config_path = str(ROOT_PATH.parent) + "/Experiments/Configs/" + '{}.yaml'.format(args.config)
     config = yaml.load(open(config_path).read(), Loader=yaml.SafeLoader)
-
+    # override the map config using the specification provided by the dataset config.
+    dataset_config = yaml.load(open( "/root/catkin_ws/src/BeamNGRL/data/datasets/" + config["dataset"]["name"] + "/config.yaml" ).read(), Loader=yaml.SafeLoader)
+    config["Map_config"] = dataset_config["Map_config"] # copy from dataset config
+    config["network"]["net_kwargs"]["BEVmap_size"] = config["Map_config"]["map_size"]
+    config["network"]["net_kwargs"]["BEVmap_res"] = config["Map_config"]["map_res"]
+    config["network"]["net_kwargs"]["patch_size"] = config["Dynamics_config"]["patch_size"]
     # Dataloaders
     train_loader, valid_loader, stats, data_cfg = get_dataloaders(args, config)
 

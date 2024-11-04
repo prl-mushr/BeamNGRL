@@ -34,7 +34,11 @@ def visualize_bev_traj(state, future_traj, past_traj, bev_map, resolution):
     past_traj = to_np(past_traj)
     bev_map = to_np(bev_map)
 
-    height, width, n_channels = bev_map.shape
+    try:
+        height, width, n_channels = bev_map.shape
+    except:
+        height, width = bev_map.shape
+        n_channels = 1
     if n_channels == 3:
         bev_img = bev_map.astype(np.uint8)
     elif n_channels == 1:

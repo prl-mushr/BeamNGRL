@@ -66,7 +66,7 @@ def evaluator(
         print("Velocity errors: ", velocity_errors)
         # normalize errors by their standard deviations
         normalized_position_errors = position_errors / std[:3].mean()
-        normalized_acceleration_errors = acceleration_errors / std[9:12].mean()
+        normalized_acceleration_errors = acceleration_errors / std[6:9].mean()
         normalized_velocity_errors = velocity_errors / std[6:9].mean()
         normalized_weights = normalized_position_errors + normalized_acceleration_errors
         loss_weights = 1/normalized_weights

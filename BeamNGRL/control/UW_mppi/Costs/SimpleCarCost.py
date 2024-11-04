@@ -46,6 +46,9 @@ class SimpleCarCost(torch.nn.Module):
 
         self.car_w2 = torch.tensor(Cost_config["car_bb_width"]/2, dtype=self.dtype, device=self.d)
         self.car_l2 = torch.tensor(Cost_config["car_bb_length"]/2, dtype=self.dtype, device=self.d)
+        self.step_cost = torch.tensor(0,dtype=self.dtype, device=self.d)
+        # self.roll_cost = torch.tensor(0,dtype=self.dtype, device=self.d)
+        self.bad_physics = False
 
     @torch.jit.export
     def set_BEV(self, BEVmap_height, BEVmap_normal, BEV_path):
@@ -70,21 +73,21 @@ class SimpleCarCost(torch.nn.Module):
 
     def forward(self, state, controls):
         # unpack all values we can remove the stuff we don't need later
-        x = state[..., 0] 
-        y = state[..., 1]
-        z = state[..., 2]
-        roll = state[..., 3]
-        pitch = state[..., 4]
-        yaw = state[..., 5]
-        vx = state[...,6]
-        vy = state[...,7]
-        vz = state[...,8]
-        ax = state[...,9]
-        ay = state[...,10]
-        az = state[...,11]
-        wx = state[...,12]
-        wy = state[...,13]
-        wz = state[...,14]
+        x = state[...,1:, 0] 
+        y = state[...,1:, 1]
+        z = state[...,1:, 2]
+        roll = state[...,1:, 3]
+        pitch = state[...,1:, 4]
+        yaw = state[...,1:, 5]
+        vx = state[...,1:,6]
+        vy = state[...,1:,7]
+        vz = state[...,1:,8]
+        ax = state[...,1:,9]
+        ay = state[...,1:,10]
+        az = state[...,1:,11]
+        wx = state[...,1:,12]
+        wy = state[...,1:,13]
+        wz = state[...,1:,14]
         
         normalizer = 1/torch.tensor(float(state.shape[-2]), device = self.d, dtype = self.dtype)
         
@@ -119,25 +122,38 @@ class SimpleCarCost(torch.nn.Module):
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[fly_px, flx_px,0]))
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[fry_px, frx_px,0]))
         state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bly_px, blx_px,0]))
-        state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bry_px, brx_px,0]))
-        state_cost = state_cost + self.stop_w*torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) - (self.critical_SA)), 0, 10) ## lethal costs go here.
+        state_cost = torch.max(state_cost, torch.square(self.BEVmap_path[bry_px, brx_px,0])) + self.stop_w*torch.clamp( ( (1/self.BEVmap_normal[img_Y, img_X, 2]) - self.critical_SA), 0, 10)
 
         vel_cost = torch.clamp((vx - self.speed_target),0, 100)
 
         ct = torch.cos(pitch) * torch.cos(roll)
 
-        roll_cost = (torch.clamp((1/ct) - self.critical_SA, 0, 10) + torch.clamp(torch.abs(az - self.GRAVITY*ct) - self.critical_vert_acc, 0, 100.0)
+        roll_cost = (torch.clamp( ( (1/ct) - self.critical_SA), 0, 10) 
+                    + torch.clamp(torch.abs(az - self.GRAVITY*ct) - self.critical_vert_acc, 0, 100.0)
                     + torch.clamp(torch.abs(vz) - self.critical_vert_spd, 0, 10.0)
-                    + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) + torch.clamp(torch.atan(vy/vx) - 0.1*self.critical_RI, 0, 10)
+                    + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) 
+                    + torch.clamp(torch.abs(torch.atan(vy/vx)) - 0.1*self.critical_RI, 0, 10)
                     )
+        # vert_acc = torch.clamp(torch.abs(az[0,0,0] - self.GRAVITY*ct[0,0,0]) - self.critical_vert_acc, 0, 100.0)
+        # if vert_acc>0:
+        #     print(vert_acc)
+        bad_physics = (torch.clamp( ( (1/ct) - 2*self.critical_SA), 0, 10) 
+                            + torch.clamp(torch.abs(az - self.GRAVITY*ct) - 3*self.critical_vert_acc, 0, 100.0)
+                            + torch.clamp(torch.abs(vz) - 2*self.critical_vert_spd, 0, 10.0)
+                            + torch.clamp(torch.abs(ay/az) - self.critical_RI, 0, 10) 
+                            + torch.clamp(torch.abs(torch.atan(vy/vx)) - 0.5*self.critical_RI, 0, 10)
+                            )
+        self.bad_physics = min(bad_physics[0,...].sum(dim=1)).item() > 1
+
 
         wp_vec = self.goal_state.unsqueeze(dim=0) - state[:,:,-1,:2]
         heading_vec = torch.stack([torch.cos(yaw[..., -1]), torch.sin(yaw[..., -1])], dim=-1)
         terminal_cost = torch.linalg.norm(wp_vec, dim=-1)
         wp_vec /= terminal_cost.unsqueeze(-1)
-        heading_cost = 1 / torch.clamp(torch.sum(wp_vec * heading_vec, dim=-1), 0.1, 1)
+        # heading_cost = 1 / torch.clamp(torch.sum(wp_vec * heading_vec, dim=-1), 0.1, 1)
+        heading_cost = torch.arccos(torch.sum(wp_vec * heading_vec, dim=-1))
 
-        running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w * vel_cost )
+        running_cost = normalizer *( self.lethal_w * state_cost + self.roll_w * roll_cost + self.speed_w*vel_cost)
         cost_to_go = self.goal_w * terminal_cost + self.heading_w * heading_cost
 
         # this is for debugging/experimental purposes only, not needed in practice.

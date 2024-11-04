@@ -2,21 +2,21 @@ Cost_config:
   goal_w: 1.0 ## weight on the terminal goal cost
   speed_w: 1.0 ## weight with which target speed will be tracked
   roll_w: 30.0 ## weight on roll index but also controls for lateral acceleration limits.. something to think about is how longitudenal accel affects accel limits..
-  lethal_w: 40.0 # weight on lethal stuff. Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
-  heading_w: 0.1
-  stop_w: 0.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
+  lethal_w: 40.0 # misnomer: this is the weight on semantic costs (rocks and such). Note that this is applied to a piecewise function which is :  1/cos(surface angle) for SA < thresh and 1000 for SA > thresh
+  heading_w: 1.0
+  stop_w: 10.0 ## weight on actually lethal things like people, trees, rocks and so on. Set to 1000.0 and query the min(Sampling.total_cost) > 1000.0 to know if all trajs are bad
   speed_target: 10.0 ## speed limit # TODO: change speed_target: to speed_limit:, this is misleading
   critical_SA: 2.0 # 0.5 is the critical slope angle 1/cos(angle) is used for state cost evaluation
   critical_RI: 1.0 #limiting ratio of lateral to vertical acceleration
   car_bb_width: 2.0
   car_bb_length: 3.0
   critical_vert_acc: 3.0
-  critical_vert_spd: 0.3
+  critical_vert_spd: 0.5
 Sampling_config:
   control_dim: 2
   noise_0: 1.0
   noise_1: 1.0
-  scaled_dt: 0.1 ## this is dt * bandwidth of the physical actuators (in what units?)
+  scaled_dt: 0.2 ## this is dt * bandwidth of the physical actuators (in what units?)
   temperature: 1.0 ## the terrain CNN requires a temperature of 0.05 so may have to change this when we run Terrain CNN?
   max_thr: 0.8
   min_thr: 0.0
@@ -145,21 +145,20 @@ Dynamics_config:
       mean_control: [0.0, 0.5]
       std_control: [0.5, 0.5]
 
-  model_weights_KARMA: "best_90.pth"
-  model_weights_KARMA_bad_sys: "best_94.pth"
-  model_weights_KARMA_noslip: "best_88.pth"
+  model_weights_KARMA: "best_100.pth"
+  model_weights_KARMA_bad_sys: "best_95.pth"
+  model_weights_KARMA_noslip: "best_99.pth"
 
-models: ['noslip3d', 'slip3d', 'KARMA_bad_sys', 'KARMA','TerrainCNN']
-# models: ['KARMA_bad_sys']
-scenarios: ['ditch-3','hill-1', 'race-2']
-time_limit: [30.0,  30.0, 30.0]  # (simulated) time limit for each scenario.
-lookahead:  [15.0,  15.0, 15.0]  # lookahead on scenario by scenario basis
+models: ['noslip3d', 'KARMA_noslip' ,'slip3d', 'KARMA_bad_sys', 'KARMA','baseline'] #, 'baseline-RT']
+# models: ['slip3d']
+models: ['noslip3d', 'slip3d', 'baseline', 'baseline-RT']
+# models: ['KARMA_noslip', 'KARMA_bad_sys', 'KARMA']
+scenarios: ['hill-1', 'hill-2', 'race-2']
+time_limit: [30.0,  30.0, 30.0, 30.0]  # (simulated) time limit for each scenario.
+lookahead:  [10.0,  15.0, 15.0, 15.0]  # lookahead on scenario by scenario basis
 wp_radius: [10.0, 10.0, 10.0, 10.0]
-# scenarios: ['hill-1']
-# time_limit: [30.0]  # (simulated) time limit for each scenario.
-# lookahead:  [10.0]  # lookahead on scenario by scenario basis
-# wp_radius: [10.0]
-num_iters: 30 # 10 x 9 x 30 x 5
+
+num_iters: 20 # 10 x 9 x 30 x 5
 start_pos: [-67, 336, 34.5]
 start_quat: [0, 0, 0.3826834, 0.9238795]
 start_pose_noise: 1.0
