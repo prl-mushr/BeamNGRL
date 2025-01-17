@@ -689,6 +689,8 @@ class beamng_interface():
                         if i not in self.last_cam_time or self.timestamp - self.last_cam_time[i] > 1/self.camera_fps[i]:
                             self.camera_poll(i)
                             self.last_cam_time[i] = self.timestamp
+                    print(self.last_cam_time)
+                    print(self.camera_fps)
                 if self.lidar:
                     if self.timestamp - self.last_lidar_time > 1/self.lidar_fps:
                         self.lidar_poll(0)

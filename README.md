@@ -111,7 +111,7 @@ python3 beamng_interface_minimal.py
 ```
 
 ### Minimal example explained
-You need to provide a start pos/quat for the vehicle. This would require knowing the exact height where the car needs to be placed. If you place the car at the wrong "height" it will either drop from the sky or drop below the map. This is something I'm working on fixing, such that in the future the correct Z height is extracted from the BEV map itself.
+You need to provide a start pos/quat for the vehicle. The height that the car spawns will be automatically read from the elevation BEV, so inputting the wrong value won't cause the car to drop from the air or spawn below the map.
 ```python
     start_pos = np.array([-86.5, 322.26, 35.5]) ## start pose of the vehicle
     start_quat = np.array([0, 0, 0, 1])
@@ -135,7 +135,18 @@ The interface spoofs the birds-eye-view elevation map, semantic map, color map, 
         "topic_name": "/grid_map_occlusion_inpainting/all_grid_map" ## used by BeamNG_ROS
     }
 ```
-
+Traffic automatically controlled by BeamNG can be added by populating the traffic config dictionary. Make sure all the lists in the config are the same length; each index corresponds to the same traffic vehicle in all the lists. The traffic works best when spawned onto roads, but traffic can also navigate to roads when spawned off the road. Just like with the ego car, spawn height of traffic will always snap to the ground by reading the map elevation data for the input X and Y coordinates in the BEV. 
+```python
+    traffic_config = dict()
+    traffic_config = {
+        "enable": args.enable_traffic,
+        "vids": ["traffic_1", "traffic_2", "traffic_3"],
+        "start_poses": [np.array([-88, 315.26, 40.5]), np.array([-94, 310.26, 40.5]), np.array([-99, 305.26, 40.5])], ## list of starting positions for traffic
+        "start_quats": [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])],  ## list of start rotations for traffic, the index of rotations is matched to the same index in positions
+        "car_models": ["drift", "drift", "drift"],  ## list of traffic car models in the same order as poses and quats
+        "car_makes": ["sunburst", "sunburst", "sunburst"],  ## list of traffic car makes in the same order as poses and quats
+    }
+```
 Sensor configuration. Currently, the camera and lidar are only supported on the windows system. If you run the simulator on the same system as your main code, expect the overall execution to be slow (BeamNG is CPU dependent for all the physics calculations).
 The sensor configurations here are defined as dictionaries, but as you will see in other implementations, we usually load them from a yaml file (recommended)
 ```python
@@ -143,24 +154,26 @@ The sensor configurations here are defined as dictionaries, but as you will see 
     lidar_config = dict()
     IMU_config = dict()
     camera_config = {
-        "enable": False, ## do you want the camera or not.
-        "width": 640,
-        "height": 480,
-        "fps": 30,
-        "fov": 87.0,
-        "pos": [0.15, 0.047, 0.02],
-        "dir": [0, -1, 0],
-        "up": [0, 0, 1],
-        "rot": [0, 0, 0, 1],
-        "color_optical_frame": "camera_color_optical_frame",
-        "depth_optical_frame": "camera_depth_optical_frame",
-        "depth_frame": "camera_depth_frame",
-        "camera_color_topic": "/camera/color/image_raw",
-        "camera_depth_topic": "/camera/depth/image_rect_raw",
-        "camera_color_info_topic": "/camera/color/camera_info",
-        "camera_depth_info_topic": "/camera/depth/camera_info",
-        "monitor_topic": "/camera/depth/image_rect_raw",
-        "annotation": False
+        "enable": False,
+        "annotation": False,
+        "cameras": [{
+            "width": 640,
+            "height": 480,
+            "fps": 30,
+            "fov": 87.0,
+            "pos": [0.15, 0.047, 0.02],
+            "dir": [0, -1, 0],
+            "up": [0, 0, 1],
+            "rot": [0, 0, 0, 1],
+            "color_optical_frame": "camera_color_optical_frame",
+            "depth_optical_frame": "camera_depth_optical_frame",
+            "depth_frame": "camera_depth_frame",
+            "camera_color_topic": "/camera/color/image_raw",
+            "camera_depth_topic": "/camera/depth/image_rect_raw",
+            "camera_color_info_topic": "/camera/color/camera_info",
+            "camera_depth_info_topic": "/camera/depth/camera_info",
+            "monitor_topic": "/camera/depth/image_rect_raw",
+        }]
     }
 
     lidar_config = {
@@ -338,6 +351,220 @@ west_coast_usa
 ```
 
 \* Credit to Shimon Keselman (<https://github.com/shimonster>)
+
+## Running multi-agent simulations
+Multi-agent simulations are run through a different interface with BeamNG than the single-agent simulations. The multi-agent interface instantiates a separate class for each agent. This allows for simpler control and sensing for individual agents. The single-agent simulation has one single class for interfacing with BeamNG and ego vehicle control/sensing.
+### Executing multi-agent minimal example:
+Run the following commands:
+```bash
+cd ~/BeamNGRL/examples
+python3 beamng_interface_multi_agent_minimal.py
+```
+By default, this should boot up the BeamNG simulator and load a scenario with three agents:
+1. Ego vehicle that you can control
+2. Vehicle that's fed inputs through code to spin in circles
+3. Traffic vehicle controlled automatically by BeamNG
+### Multi-agent minimal example explained
+You need to configure the vehicle ID (vid), car model, car make, start pos, and start quaternion for each agent. The attributes with the same list indexes correspond to the same agents. You also need to specify the vehicle that you want to be able to control manually and the game will focus on (`ego_vid`). You can also specify vehicles to act as traffic controlled by BeamNG (`traffic_vids`).
+```python
+    agents_config = dict()
+    agents_config = {
+        "vids": ["ego", "auto", "traffic"],
+        "ego_vid": "ego", ## vid of agent that will be controlled by player of the game/game display will focus on
+        "traffic_vids": ["traffic"],
+        "car_models": ["offroad", "offroad", "offroad"], 
+        "car_makes": ["sunburst", "sunburst", "sunburst"],  ## car make (company/manufacturer)
+        "start_poses": [np.array([-86.5, 323.26, 40.5]), np.array([-92.5, 303.26, 40.5]), np.array([-97.5, 303.26, 40.5])],   ## start position in ENU (east north up). Center of the map is usually 0,0, height is terrain dependent. TODO: use the map model to estimate terrain height.
+        "start_quats": [np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1]), np.array([0, 0, 0, 1])]   ## start quaternion -- TODO: there should be a ROS to BeamNG to ROS conversion system for reference frames.
+    }
+```
+The map config is the same as in the single-agent interface, look above for details.
+The sensor config is also same as the single-agent interface (the same sensor setup is used for all agents).
+
+Launching simulator with config for multiple agents instead of just one.
+```python
+    beamng_interface_multi_agent = get_beamng_default(
+        agents_config=agents_config,
+        map_config=Map_config,  ## Map config; this is "necessary"
+        remote= args.remote,  ## are you running the simulator remotely (on a separate computer or on the same computer but outside the docker)?
+        host_IP=args.host_IP,  ## if using a remote connection (usually the case when running sim on a separate computer)
+        camera_config=camera_config,  ## currently, camera only works on windows, so you can only use this if you have the sim running remotely or you're using windows as the host
+        lidar_config=lidar_config,  ## currently, lidar only works on windows, so you can only use this if the sim is running remotely or you're using a windows host
+        accel_config=IMU_config,  ## IMU config. if left blank, a default config is used.
+        burn_time=0.02,  ## step or dt time
+        run_lockstep=False,  ## whether the simulator waits for control input to move forward in time. Set to true to have a gym "step" like functionality
+    )
+```
+Gets state for vehicle with input vehicle ID (check info on `state_poll` method above for more details; `get_state` runs `state_poll` for the agent with the given VID). 
+```python
+    state_controlled = beamng_interface_multi_agent.get_state("ego")
+```
+You can also query individual states after polling the state with `get_state`:
+```python
+state = beamng_interface_multi_agent.get_state("<vid>") ## this basically updates the internal states
+quat = beamng_interface_multi_agent.agents["<vid>"].quat  ## orientation quaternion if you wanted that
+pos = beamng_interface_multi_agent.agents["<vid>"].pos # world frame position
+vel = beamng_interface_multi_agent.agents["<vid>"].vel ## body frame velocity vector
+vel_wf = beamng_interface_multi_agent.agents["<vid>"].vel_wf  ## world frame velocity
+accel = beamng_interface_multi_agent.agents["<vid>"].A # body frame acceleration (x,y,z)
+gyration = beamng_interface_multi_agent.agents["<vid>"].G # body frame rotation
+```
+Controlling agents through code. You can input a dictionary with VIDs and numpy arrays for controls (between -1.0 and 1.0). `action[0]` is steering (left is positive following ROS REP103 convention); `action[1]` is throttle/brake/reverse.
+```python
+    action = np.ones(
+        2, dtype=np.float64
+    )  # has to be numpy array. The inputs are always between (-1.0, 1.0) (for both throttle and steering)
+    beamng_interface_multi_agent.send_ctrl({"auto": action})
+```
+Resets ego car to initial spawn point when vehicle is flipped over. You can pass in a list of VIDs to reset multiple agents.
+```python
+    if(abs(rpy_controlled[0]) > np.pi/2 or abs(rpy_controlled[1]) > np.pi/2):
+        beamng_interface_multi_agent.reset(["ego"])
+```
+## Multi-camera agents
+To run a multi-camera agent example, run
+```bash
+cd ~/BeamNGRL/examples
+python3 beamng_interface_multi_cam_minimal.py
+```
+The BeamNG simulator should boot up and there should be 3 camera windows by default.
+
+This is the code that displays the camera feeds.
+```python
+if camera_config["enable"]:
+    color = bng_interface.color
+    depth = bng_interface.depth
+    for i in range(len(color)):
+        # cv2.imshow(
+        #     f"depth_cam_{i}",
+        #     depth[i],
+        # )
+        cv2.imshow(
+            f"color_cam_{i}",
+            color[i],
+        )
+```
+### Adding multiple cameras in python code
+To add multiple cameras to an agent, add multiple dictionaries with camera settings to the `"cameras"` entry of `camera_config`.
+```python
+    camera_config = dict()
+    camera_config = {
+        "enable": False,
+        "annotation": False,
+        "cameras": [{
+              "width": 640,  # Default width
+              "height": 480,  # Default height
+              "fps": 30,  # Default frames per second
+              "fov": 87.0, # default fov of d400 series
+              "pos": [1.5, 0.5, 1], ## use (0.15, 0.047, 0.02) for D455, (0.15, 0.025, 0.02) for d435
+              "dir": [1, 0, 0],
+              "up": [0, 0, 1],
+              "rot": [0, 0, 0, 1], ## technically, the up and forward dir should be derivable from this, however, I need to talk to the BnG devs to figure out the conversion from REP103 to BnG
+              "color_optical_frame": "camera_color_optical_frame",
+              "depth_optical_frame": "camera_depth_optical_frame",
+              "depth_frame": "camera_depth_frame",
+              "camera_color_topic": "/camera/color/image_raw",
+              "camera_depth_topic": "/camera/depth/image_rect_raw",
+              "camera_color_info_topic": "/camera/color/camera_info",
+              "camera_depth_info_topic": "/camera/depth/camera_info",
+              "monitor_topic": "/camera/depth/image_rect_raw" ## this is the topic HAL uses for monitoring purposes
+            },
+            {
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+                "fov": 87.0,
+                "pos": [0.15, 0.047, 0.02],
+                "dir": [0, -1, 0],
+                "up": [0, 0, 1],
+                "rot": [0, 0, 0, 1],
+                "color_optical_frame": "camera_color_optical_frame",
+                "depth_optical_frame": "camera_depth_optical_frame",
+                "depth_frame": "camera_depth_frame",
+                "camera_color_topic": "/camera/color/image_raw",
+                "camera_depth_topic": "/camera/depth/image_rect_raw",
+                "camera_color_info_topic": "/camera/color/camera_info",
+                "camera_depth_info_topic": "/camera/depth/camera_info",
+                "monitor_topic": "/camera/depth/image_rect_raw",
+            }
+        ]
+    }
+```
+### Adding multiple cameras in a seperate YAML file (as in *beamng_interface_multi_cam_minimal.py*)
+You can also add multiple cameras in a separate YAML file then import the camera config from the YAML. This is used in the example `beamng_interface_multi_cam_minimal.py`
+```python
+    camera_config = dict()
+    with open("../Configs/offroad_multicam.yaml") as stream:
+        try:
+            camera_config = yaml.safe_load(stream)["camera"]
+        except yaml.YAMLError as exc:
+            print(exc)
+```
+BeamNGRL/Configs/offroad_multicam.yaml
+```yaml
+camera:
+  enable: True
+  annotation: False
+  cameras: [
+    {
+      width: 640,  # Default width
+      height: 480,  # Default height
+      fps: 30,  # Default frames per second
+      fov: 87.0, # default fov of d400 series
+      pos: [2, 0, 1], ## use (0.15, 0.047, 0.02) for D455, (0.15, 0.025, 0.02) for d435
+      dir: [0, -1, 0],
+      up: [0, 0, 1],
+      rot: [0, 0, 0, 1], ## technically, the up and forward dir should be derivable from this, however, I need to talk to the BnG devs to figure out the conversion from REP103 to BnG
+      color_optical_frame: "camera_color_optical_frame",
+      depth_optical_frame: "camera_depth_optical_frame",
+      depth_frame: "camera_depth_frame",
+      camera_color_topic: "/camera/color/image_raw",
+      camera_depth_topic: "/camera/depth/image_rect_raw",
+      camera_color_info_topic: "/camera/color/camera_info",
+      camera_depth_info_topic: "/camera/depth/camera_info",
+      monitor_topic: "/camera/depth/image_rect_raw" ## this is the topic HAL uses for monitoring purposes
+    },
+    {
+      width: 640,  # Default width
+      height: 480,  # Default height
+      fps: 30,  # Default frames per second
+      fov: 87.0, # default fov of d400 series
+      pos: [1.5, 0.5, 1], ## use (0.15, 0.047, 0.02) for D455, (0.15, 0.025, 0.02) for d435
+      dir: [1, 0, 0],
+      up: [0, 0, 1],
+      rot: [0, 0, 0, 1], ## technically, the up and forward dir should be derivable from this, however, I need to talk to the BnG devs to figure out the conversion from REP103 to BnG
+      color_optical_frame: "camera_color_optical_frame",
+      depth_optical_frame: "camera_depth_optical_frame",
+      depth_frame: "camera_depth_frame",
+      camera_color_topic: "/camera/color/image_raw",
+      camera_depth_topic: "/camera/depth/image_rect_raw",
+      camera_color_info_topic: "/camera/color/camera_info",
+      camera_depth_info_topic: "/camera/depth/camera_info",
+      monitor_topic: "/camera/depth/image_rect_raw" ## this is the topic HAL uses for monitoring purposes
+    },
+    {
+      width: 640,  # Default width
+      height: 480,  # Default height
+      fps: 30,  # Default frames per second
+      fov: 87.0, # default fov of d400 series
+      pos: [1.5, -0.5, 1], ## use (0.15, 0.047, 0.02) for D455, (0.15, 0.025, 0.02) for d435
+      dir: [-1, 0, 0],
+      up: [0, 0, 1],
+      rot: [0, 0, 0, 1], ## technically, the up and forward dir should be derivable from this, however, I need to talk to the BnG devs to figure out the conversion from REP103 to BnG
+      color_optical_frame: "camera_color_optical_frame",
+      depth_optical_frame: "camera_depth_optical_frame",
+      depth_frame: "camera_depth_frame",
+      camera_color_topic: "/camera/color/image_raw",
+      camera_depth_topic: "/camera/depth/image_rect_raw",
+      camera_color_info_topic: "/camera/color/camera_info",
+      camera_depth_info_topic: "/camera/depth/camera_info",
+      monitor_topic: "/camera/depth/image_rect_raw" ## this is the topic HAL uses for monitoring purposes
+    }
+  ]
+ ...
+```
+
+### *WIP: converting URDFs to YAML so you can import robot camera configurations from a URDF*
 
 ## Additional information for map generation:
 

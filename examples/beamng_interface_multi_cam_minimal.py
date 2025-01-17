@@ -172,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--remote",
         type=bool,
-        default=True,
+        default=False,
         help="whether to connect to a remote beamng server",
     )
     parser.add_argument(
