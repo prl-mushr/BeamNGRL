@@ -67,7 +67,7 @@ def get_beamng_default(
 ## this is the equivalent of None pizza with left beef joke. Yes I'd like one beamng simulator without the beamng simulator.
 ## https://en.wikipedia.org/wiki/None_pizza_with_left_beef
 def get_beamng_nobeam(
-        Dynamics,
+        Dynamics=None,
         car_model='offroad',
         start_pos=None,
         start_quat=None,
@@ -98,7 +98,7 @@ def get_beamng_nobeam(
     if "rotate" in map_config:
         map_rotate = map_config["rotate"]
 
-    bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics)
+    bng = beamng_interface(BeamNG_path=beamng_path, use_beamng=False, dyn=Dynamics, shell_mode=True)
     bng.load_scenario(
         scenario_name=map_config["map_name"], car_make=car_make, car_model=car_model,
         start_pos=start_pos, start_rot=start_quat,
@@ -171,7 +171,11 @@ class beamng_interface():
                 self.bng.open()
         elif shell_mode:
             self.dyn = dyn
-            self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
+            if dyn is None:
+                print("Uhhhh bro where is the dynamics model?")
+                self.state = torch.zeros(17, dtype=torch.float32, device='cpu')
+            else:
+                self.state = torch.zeros(17, dtype=dyn.dtype, device=dyn.d)
             self.vis = Vis()
 
     def load_scenario(self, scenario_name='small_island', car_make='sunburst', car_model='offroad',
@@ -244,10 +248,10 @@ class beamng_interface():
     def set_map_attributes(self, map_size = 16, resolution = 0.25, path_to_maps=DATA_PATH.__str__(), rotate=False, elevation_range=2.0):
         ## TODO: map config should correspond to map name.
         ## TODO: auto-construct map using windows camera stuff.
-        self.elevation_map_full = np.load(path_to_maps + '/map_data/elevation_map.npy', allow_pickle=True)
-        self.color_map_full = cv2.imread(path_to_maps + '/map_data/color_map.png')
-        self.segmt_map_full = cv2.imread(path_to_maps + '/map_data/segmt_map.png')
-        self.path_map_full  = cv2.imread(path_to_maps + '/map_data/paths.png')
+        self.elevation_map_full = np.load(path_to_maps + '/map_data_old/elevation_map.npy', allow_pickle=True)
+        self.color_map_full = cv2.imread(path_to_maps + '/map_data_old/color_map.png')
+        self.segmt_map_full = cv2.imread(path_to_maps + '/map_data_old/segmt_map.png')
+        self.path_map_full  = cv2.imread(path_to_maps + '/map_data_old/paths.png')
         self.image_shape    = self.color_map_full.shape
         self.image_resolution = 0.1  # this is the original meters per pixel resolution of the image
         self.resolution     = resolution  # meters per pixel of the target map
@@ -340,7 +344,11 @@ class beamng_interface():
         self.BEV_heght = np.clip(self.BEV_heght, -self.elev_map_hgt, self.elev_map_hgt)
         self.BEV_heght = np.nan_to_num(self.BEV_heght, copy=False, nan=0.0, posinf=self.elev_map_hgt, neginf=-self.elev_map_hgt)
         self.BEV_normal = self.compute_surface_normals()
-
+        
+        self.BEV_heght = self.get_map_bf_no_rp(self.elevation_map_full, inpaint_mask=local_inpaint, smooth_map=False) # smoothen the map
+        self.BEV_heght -= self.BEV_center[2]
+        self.BEV_heght = np.clip(self.BEV_heght, -self.elev_map_hgt, self.elev_map_hgt)
+        self.BEV_heght = np.nan_to_num(self.BEV_heght, copy=False, nan=0.0, posinf=self.elev_map_hgt, neginf=-self.elev_map_hgt)
 
     def compute_surface_normals(self):
         # Compute the gradient of the elevation map using the Sobel operator
@@ -386,6 +394,17 @@ class beamng_interface():
         new = Quaternion([0,np.sqrt(2)/2,np.sqrt(2)/2,0])*rot
         rot = Quaternion(-new[1], -new[3], -new[0], -new[2])
         return rot
+
+    def convert_REP103_to_beamng(self, rot):
+        # Step 3 inverse: undo component permutation and negation
+        new = Quaternion([-rot[2], -rot[0], -rot[3], -rot[1]])
+        # Step 2 inverse: multiply on the left by inverse of [0, √2/2, √2/2, 0]
+        inv_q = Quaternion([0, np.sqrt(2)/2, np.sqrt(2)/2, 0]).inverse
+        new = inv_q * new
+        # Step 1 inverse: undo initial permutation and negation
+        beamng_rot = np.array([-new[1], -new[2], new[0], -new[3]])
+
+        return beamng_rot
 
     def calc_Transform(self, quat):
         q00 = quat[0]**2;
@@ -521,8 +540,7 @@ class beamng_interface():
             else:
                 self.Accelerometer_poll()
                 self.vehicle.poll_sensors() # Polls the data of all sensors attached to the vehicle
-                self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
-                self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.02)
+                self.dt = max(self.vehicle.sensors['timer']['time'] - self.timestamp, 0.01)
                 self.timestamp = self.vehicle.sensors['timer']['time'] ## time in seconds since the start of the simulation -- does not care about resets
                 self.broken = self.vehicle.sensors['damage']['part_damage'] ## this is useful for reward functions
                 self.pos = np.copy(self.vehicle.state['pos'])

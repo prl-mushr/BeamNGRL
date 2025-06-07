@@ -131,7 +131,7 @@ def main(args):
             cv2.imshow('color', BEV)
             BEV = cv2.resize(BEV_heght, (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('height', BEV)
-            BEV = cv2.resize(BEV_normal[:,:,1], (500,500), interpolation= cv2.INTER_AREA)
+            BEV = cv2.resize(BEV_segmt[:,:,:], (500,500), interpolation= cv2.INTER_AREA)
             cv2.imshow('segment', BEV)
             cv2.waitKey(1)
             ## you can now "encapsulate the BEV and state into whatever form of "observation" you want.

@@ -46,7 +46,7 @@ class MPPI(torch.nn.Module):
         self.Sampling.reset()
         self.U = torch.zeros((self.T, self.Sampling.nu), dtype=self.dtype).to(self.d)
 
-    def forward(self, state):
+    def forward(self, state, num_iters = 1):
         """
         :param: state
         :returns: best actions
@@ -54,7 +54,8 @@ class MPPI(torch.nn.Module):
         ## shift command 1 time step
         self.U = torch.roll(self.U, self.u_per_command, dims=0)
         self.U[-self.u_per_command : , :] = self.U[-self.u_per_command,:] # repeat last control
-        controls = self.optimize(state)
+        for i in range(num_iters):
+            controls = self.optimize(state)
         return controls[:self.u_per_command]
 
     def optimize(self, _state):

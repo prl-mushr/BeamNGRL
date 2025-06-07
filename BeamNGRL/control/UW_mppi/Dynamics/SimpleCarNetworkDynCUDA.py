@@ -54,7 +54,7 @@ class SimpleCarNetworkDyn:
         # Set grid and block dimensions
         # The number of parallel threads in total will be block_dim x grid_dim, 
         # so pick block dim such that grid dim is a nice round number
-        self.block_dim = 32
+        self.block_dim = min(self.K, 32)
         self.grid_dim = int(np.ceil(self.K / self.block_dim))
 
         self.BEVmap_height = torch.zeros((self.BEVmap_size_px, self.BEVmap_size_px), dtype=self.dtype, device=self.d)

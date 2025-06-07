@@ -20,7 +20,6 @@ def update_goal(goal, pos, target_WP, current_wp_index, lookahead, step_size=1, 
             if current_wp_index == len(target_WP) - 1 and d < wp_radius:
                 terminate = True
                 break
-        
         return target_WP[current_wp_index, :2], terminate, current_wp_index  ## new goal
 
 def find_closest_index(pos, target_WP):
